@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Flico · Design System v1.0</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+    body { min-width: 1060px; }
+    .gallery-header { height: 90px; display:flex; align-items:center; justify-content:space-between; padding: 0 60px; background:white; border-bottom:1px solid var(--fl-border); }
+    .gallery-header img { width:142px; display:block; }
+    .main { width:min(1250px, calc(100% - 90px)); margin: 48px auto 100px; }
+    .eyebrow { font-size: 11px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--fl-brand); margin-bottom:7px; }
+    h1{font-size:38px;line-height:1.2;letter-spacing:-.03em;margin:0 0 9px} h2{font-size:22px;letter-spacing:-.025em;margin:0 0 8px} h3{font-size:16px;margin:0 0 9px} p{color:var(--fl-text-secondary);margin:0;line-height:1.65}
+    .intro { margin-bottom:36px; } .section{margin: 36px 0 0; padding-top:30px; border-top:1px solid var(--fl-border);} .section-title{margin-bottom:20px;}
+    .swatches{display:grid;grid-template-columns:repeat(6, 1fr);gap:14px}.swatch{background:#fff;border:1px solid var(--fl-border);border-radius:14px;padding:10px}.swatch .chip{height:64px;border-radius:9px;border:1px solid #dfe7e2}.swatch b{display:block;margin-top:8px;font-size:12px}.swatch small{color:#647773}
+    .sample2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.cardbtn{position:relative}.cardbtn .ico{width:44px;height:44px;display:grid;place-items:center;background:var(--fl-brand-pale);border-radius:15px;font-size:22px;color:var(--fl-brand);margin-bottom:14px}.cardbtn h3{font-size:20px}.cardbtn .arrow{position:absolute;right:30px;bottom:22px;font-size:20px;color:var(--fl-brand)}
+    .nodes{display:flex;flex-wrap:wrap;gap:18px;align-items:center}.nodecol{display:flex;flex-direction:column;align-items:center;gap:9px}.nodecol small{color:var(--fl-text-muted)}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.surface{background:#fff;border:1px solid var(--fl-border);border-radius:16px;padding:22px}.flex2{display:grid;grid-template-columns:1fr 1fr;gap:22px}.vertical{display:flex;flex-direction:column;gap:12px}.tiny{font-size:12px;color:var(--fl-text-muted)}
+    .label{font-size:12px;color:var(--fl-text-secondary);font-weight:650;margin-bottom:5px;display:block}.step-input{max-width:300px}
+    .previewcanvas {height:260px;border:1px solid var(--fl-border);border-radius:16px;position:relative;display:flex;align-items:center;justify-content:center;gap:22px;margin-top:18px}
+    .arrowline{color:var(--fl-edge);font-size:23px}
+    .semilabel{font-size:11px;color:var(--fl-text-secondary);font-weight:600}
+    .foot{margin-top:35px;color:var(--fl-text-muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <header class="gallery-header">
+    <img src="assets/flico-logo-reference-crop.png" alt="Flico approved logo" />
+    <div class="tiny">DESIGN SYSTEM 1.0 &nbsp; · &nbsp; LIGHT / DESKTOP MVP</div>
+  </header>
+  <main class="main">
+    <div class="intro"><div class="eyebrow">Flico visual language</div><h1>A better way to work.</h1><p>Reusable components and exact tokens derived from the three approved screens. Static review sheet — not an application.</p></div>
+    <section class="section"><div class="section-title"><h2>Color foundation</h2><p>Warm neutrals, charcoal text and restrained accessible teal.</p></div>
+      <div class="swatches">
+        <div class="swatch"><div class="chip" style="background:#FCFBF8"></div><b>Page</b><small>#FCFBF8</small></div>
+        <div class="swatch"><div class="chip" style="background:#FFFFFF"></div><b>Surface</b><small>#FFFFFF</small></div>
+        <div class="swatch"><div class="chip" style="background:#202D2C"></div><b>Charcoal</b><small>#202D2C</small></div>
+        <div class="swatch"><div class="chip" style="background:#536B62"></div><b>Secondary text</b><small>#536B62</small></div>
+        <div class="swatch"><div class="chip" style="background:#087E71"></div><b>Accessible teal</b><small>#087E71</small></div>
+        <div class="swatch"><div class="chip" style="background:linear-gradient(112deg,#58D4B5,#29B7A2,#098E86)"></div><b>Brand gradient</b><small>Decorative only</small></div>
+      </div>
+    </section>
+    <section class="section"><div class="section-title"><h2>Two equal starting points</h2><p>Quiet, centered dashboard cards: neither creation method should be visually preferred.</p></div>
+      <div class="sample2">
+        <article class="fl-card fl-create-card cardbtn"><div class="ico" style="color:#536B62;background:#EEF2F0">▤</div><h3>Build manually</h3><p>Start with a blank canvas and map your workflow step by step.</p><span class="arrow" aria-hidden="true">→</span></article>
+        <article class="fl-card fl-create-card cardbtn"><div class="ico">✧</div><h3>Create with AI</h3><p>Describe your workflow and let Flico create a draft for you.</p><span class="arrow" aria-hidden="true">→</span></article>
+      </div>
+    </section>
+    <section class="section"><div class="section-title"><h2>Actions and form controls</h2><p>Clear hierarchy and visible labels. Use gradients on a small number of primary AI actions only.</p></div>
+      <div class="flex2">
+        <div class="surface vertical"><div class="row"><button class="fl-btn fl-btn-primary">Analyze workflow</button><button class="fl-btn">Ask Flico</button><button class="fl-icon-btn" aria-label="More options">•••</button></div><div class="row"><button class="fl-btn fl-btn-gradient">✧ Generate draft</button><button class="fl-btn" disabled style="opacity:.55;cursor:not-allowed">Disabled</button></div><p class="tiny">No movement on hover. Clear 2px focus ring for keyboard users.</p></div>
+        <div class="surface"><label class="label" for="stepName">Step name</label><input class="fl-input step-input" id="stepName" value="Verify order details"/><div style="height:15px"></div><div class="row"><span class="fl-badge">Analyzed</span><span class="fl-badge" data-status="draft">Draft</span><span class="fl-badge" data-status="pending">Pending</span><span class="fl-badge" data-status="rejected">Rejected</span></div></div>
+      </div>
+    </section>
+    <section class="section"><div class="section-title"><h2>Workflow nodes</h2><p>Compact, organic silhouettes. Node type color conveys structure; change overlays convey proposed edits.</p></div>
+      <div class="nodes">
+        <div class="nodecol"><div class="fl-node" data-type="start"><span class="fl-node-icon">●</span><span class="fl-node-label">Start</span></div><small>Start</small></div>
+        <div class="nodecol"><div class="fl-node" data-type="action"><span class="fl-node-icon">□</span><span class="fl-node-label">Receive order</span></div><small>Action</small></div>
+        <div class="nodecol"><div class="fl-node" data-type="decision"><span class="fl-node-icon">◇</span><span class="fl-node-label">Item in stock?</span></div><small>Decision</small></div>
+        <div class="nodecol"><div class="fl-node" data-type="approval"><span class="fl-node-icon">✓</span><span class="fl-node-label">Approve payment</span></div><small>Approval</small></div>
+        <div class="nodecol"><div class="fl-node" data-type="wait"><span class="fl-node-icon">◷</span><span class="fl-node-label">Wait for reply</span></div><small>Wait</small></div>
+        <div class="nodecol"><div class="fl-node" data-type="exception"><span class="fl-node-icon">!</span><span class="fl-node-label">Payment failed</span></div><small>Exception + dashed edge</small></div>
+      </div>
+      <div class="previewcanvas fl-canvas" aria-label="Illustrative workflow graph with proposed change highlights">
+        <div class="nodecol"><span class="fl-badge">+ Added</span><div class="fl-node" data-type="action" data-diff="added"><span class="fl-node-icon">✦</span><span class="fl-node-label">Auto-check stock</span></div></div>
+        <span class="arrowline">→</span>
+        <div class="nodecol"><span class="fl-badge" data-status="pending" style="background:#FFF0D8">↗ Updated</span><div class="fl-node" data-type="approval" data-diff="modified"><span class="fl-node-icon">✓</span><span class="fl-node-label">Approve payment</span></div></div>
+        <span class="arrowline">→</span>
+        <div class="nodecol"><span class="fl-badge" data-status="error">− Removed</span><div class="fl-node" data-type="action" data-diff="removed"><span class="fl-node-icon">−</span><span class="fl-node-label">Duplicate stock check</span></div></div>
+      </div>
+    </section>
+    <section class="section"><div class="section-title"><h2>Contextual details + recommendations</h2><p>The editor uses a small floating popover, while analysis provides progressive-disclosure cards.</p></div>
+      <div class="flex2">
+        <div class="fl-popover" style="width:340px"><h3>Edit step</h3><label class="label" for="name2">Step name</label><input class="fl-input" id="name2" value="Receive order"/><div style="height:12px"></div><label class="label" for="team">Owner / team</label><input class="fl-input" id="team" placeholder="Optional"/><div style="height:12px"></div><label class="label" for="duration">Duration</label><input class="fl-input" id="duration" placeholder="Optional"/><p class="tiny" style="margin-top:12px;color:var(--fl-brand)">✧ Ask Flico about this step →</p></div>
+        <div class="vertical"><article class="fl-recommendation" data-active="true"><h3>Automate stock verification <span class="fl-badge" data-status="pending" style="float:right">Pending</span></h3><p>Repeated manual stock checks can delay order confirmation. Evaluate a lookup to an authoritative inventory source.</p><div class="row" style="margin-top:12px"><span class="semilabel">QUICK WIN</span><span class="tiny">Requires integration verification</span></div></article><article class="fl-recommendation"><h3>Clarify approval conditions</h3><p>Define when approval is required and who owns the decision.</p><div class="row" style="margin-top:12px"><span class="semilabel">STRATEGIC</span><span class="fl-badge">Accepted</span></div></article></div>
+      </div>
+    </section>
+    <p class="foot">Illustrative component gallery. The attached screenshot references and full specification remain authoritative for screen composition, data behavior and UX acceptance criteria.</p>
+  </main>
+</body>
+</html>

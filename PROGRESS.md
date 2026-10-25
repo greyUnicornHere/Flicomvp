@@ -29,7 +29,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Known issues / limitations
 
-- **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. A transparent production logo is needed from the brand source (see DECISIONS.md). No favicon yet, for the same reason.
+- **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
 - **Feedback** is not in the account menu yet (it arrives with the feedback feature in Milestone 5).
 - Real SMTP delivery is implemented but **not yet tested** against a live provider.
 - E2E has run in Chromium only. Edge needs a machine with Edge installed.

@@ -167,6 +167,7 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
               type="button"
               role="menuitem"
               aria-disabled={item.disabled || undefined}
+              aria-label={item.hint ? `${item.label}, ${item.hint}` : undefined}
               tabIndex={-1}
               className={`flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-left text-[14px] font-medium focus-visible:bg-fl-surface-subtle ${
                 item.disabled
@@ -178,10 +179,11 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
               onClick={() => select(item)}
             >
               {item.icon}
-              <span className="flex-1">{item.label}</span>
+              <span className="flex-1">
+                {item.label}
+              </span>
               {item.hint && (
-                <span className="text-[12px] font-normal text-fl-text-muted">
-                  <span className="fl-sr-only">, </span>
+                <span className="text-[12px] font-normal text-fl-text-muted" aria-hidden="true">
                   {item.hint}
                 </span>
               )}

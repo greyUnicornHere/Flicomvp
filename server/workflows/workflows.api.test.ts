@@ -142,6 +142,9 @@ describe('workflow persistence API', () => {
       ['duplicate step ids', { nodes: [{ id: 'a', type: 'start', label: 'S', position: { x: 0, y: 0 } }, { id: 'a', type: 'action', label: 'A', position: { x: 1, y: 0 } }], edges: [] }],
       ['an unknown step type', { nodes: [{ id: 'a', type: 'trigger', label: 'Run', position: { x: 0, y: 0 } }], edges: [] }],
       ['unexpected fields', { nodes: [], edges: [], script: 'run()' }],
+      ['a Yes path from a non-decision', { nodes: [{ id: 'a', type: 'start', label: 'S', position: { x: 0, y: 0 } }, { id: 'b', type: 'action', label: 'A', position: { x: 1, y: 0 } }], edges: [{ id: 'e', sourceId: 'a', targetId: 'b', type: 'yes', label: 'Yes' }] }],
+      ['two Yes paths on one decision', { nodes: [{ id: 'd', type: 'decision', label: 'Q?', position: { x: 0, y: 0 } }, { id: 'b', type: 'action', label: 'A', position: { x: 1, y: 0 } }, { id: 'c', type: 'action', label: 'C', position: { x: 2, y: 0 } }], edges: [{ id: 'e1', sourceId: 'd', targetId: 'b', type: 'yes' }, { id: 'e2', sourceId: 'd', targetId: 'c', type: 'yes' }] }],
+      ['a step connected to itself', { nodes: [{ id: 'a', type: 'action', label: 'A', position: { x: 0, y: 0 } }], edges: [{ id: 'e', sourceId: 'a', targetId: 'a', type: 'loop' }] }],
     ])('rejects %s without changing stored data', async (_name, graph) => {
       const wf = await create(a);
       const response = await call(a, 'PUT', `/api/workflows/${wf.id}/graph`, { graph, baseRevision: 1 });

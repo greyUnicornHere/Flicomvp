@@ -8,7 +8,6 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { SignInPage } from './pages/SignInPage';
 import { StatusPage } from './pages/StatusPage';
 import { VerifyPage } from './pages/VerifyPage';
-import { WorkflowPage } from './pages/WorkflowPage';
 
 // The outbox route exists only in development builds; production bundles don't contain it.
 const devRoutes: RouteObject[] = import.meta.env.DEV
@@ -29,7 +28,8 @@ export const routes: RouteObject[] = [
         children: [
           { path: '/', element: <DashboardPage /> },
           { path: '/create/ai', element: <CreateWithAiPage /> },
-          { path: '/workflows/:id', element: <WorkflowPage /> },
+          // The editor (and its diagram library) loads only when a workflow is opened.
+          { path: '/workflows/:id', lazy: async () => ({ Component: (await import('./editor/EditorPage')).EditorPage }) },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

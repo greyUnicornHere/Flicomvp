@@ -13,6 +13,18 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
+// jsdom lacks ResizeObserver and DOMMatrixReadOnly, which the diagram library uses.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.DOMMatrixReadOnly ??= class {
+  m22 = 1;
+  constructor() {}
+} as unknown as typeof DOMMatrixReadOnly;
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

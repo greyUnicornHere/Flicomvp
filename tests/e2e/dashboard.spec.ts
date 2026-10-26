@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { signIn, uniqueEmail } from './helpers';
 
-const SHOTS = 'docs/evidence/m1';
+// Milestone 1 evidence lives in docs/evidence/m1; re-runs write to the ignored test-results folder.
+const SHOTS = 'test-results/screenshots';
 
 const noHorizontalScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
@@ -48,8 +49,9 @@ test('D02/D03: Build manually creates a Start-only "Untitled workflow" that pers
   await page.getByRole('button', { name: /Build manually/ }).click();
   await expect(page).toHaveURL(/\/workflows\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Untitled workflow' })).toBeVisible();
-  await expect(page.getByText('The workflow editor is coming next')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/05-workflow-placeholder-1536.png` });
+  // Opens in the editor (Milestone 2) with only the Start step.
+  await expect(page.locator('.react-flow__node')).toHaveCount(1);
+  await expect(page.locator('.react-flow__node')).toHaveAttribute('aria-label', 'Start step: Start');
 
   const id = page.url().split('/').pop()!;
   const { workflow } = await (await page.request.get(`/api/workflows/${id}`)).json();
@@ -77,7 +79,9 @@ test('D04/D08/D09: populated table, live search, account menu at 1536 and 1280',
   await page.screenshot({ path: `${SHOTS}/03-dashboard-populated-1536.png` });
 
   await page.getByRole('button', { name: /^Account menu for/ }).click();
-  await expect(page.getByRole('menuitem')).toHaveText(['Feedback, Coming soon', 'Sign Out']);
+  await expect(page.getByRole('menuitem')).toHaveCount(2);
+  await expect(page.getByRole('menuitem').nth(0)).toHaveAccessibleName('Feedback, Coming soon');
+  await expect(page.getByRole('menuitem').nth(1)).toHaveAccessibleName('Sign Out');
   await page.screenshot({ path: `${SHOTS}/04-dashboard-account-menu-1536.png` });
   await page.keyboard.press('Escape');
 

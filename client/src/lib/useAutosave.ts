@@ -28,7 +28,8 @@ export function useAutosave<T>({ value, initialRevision, save, delayMs = 800 }: 
   const inFlight = useRef(false);
   const conflicted = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const isFirst = useRef(true);
+  /** The value currently known to be saved or scheduled; equal values never trigger a save. */
+  const known = useRef(value);
   const saveRef = useRef(save);
 
   useEffect(() => {
@@ -61,10 +62,9 @@ export function useAutosave<T>({ value, initialRevision, save, delayMs = 800 }: 
   }, []);
 
   useEffect(() => {
-    if (isFirst.current) {
-      isFirst.current = false;
-      return;
-    }
+    // Compare instead of "skip the first run": React may run effects twice in development.
+    if (value === known.current) return;
+    known.current = value;
     latest.current = value;
     dirty.current = true;
     clearTimeout(timer.current);

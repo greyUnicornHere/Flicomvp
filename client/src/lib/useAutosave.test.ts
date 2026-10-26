@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { ApiError } from './api';
 import { useAutosave } from './useAutosave';
@@ -6,8 +7,10 @@ import { useAutosave } from './useAutosave';
 type Props = { value: string };
 
 function setup(save: (value: string, base: number) => Promise<{ revision: number }>) {
+  // StrictMode, like the app in development: effects run twice and must not cause a save.
   return renderHook(({ value }: Props) => useAutosave({ value, initialRevision: 1, save, delayMs: 500 }), {
     initialProps: { value: 'v0' },
+    wrapper: StrictMode,
   });
 }
 

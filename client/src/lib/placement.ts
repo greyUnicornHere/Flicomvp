@@ -20,3 +20,20 @@ export function placeMenu(trigger: Rect, menu: Size, viewport: Size): { top: num
   const left = Math.min(Math.max(MARGIN, trigger.right - menu.width), viewport.width - MARGIN - menu.width);
   return { top, left: Math.max(MARGIN, left) };
 }
+
+/**
+ * Where to place a panel next to an anchor (e.g. the step details next to a step):
+ * below it if it fits, otherwise above, otherwise beside it; always inside the visible area.
+ * `minTop` keeps it clear of a fixed header.
+ */
+export function placePanel(anchor: Rect, panel: Size, viewport: Size, minTop = MARGIN): { top: number; left: number } {
+  const centredLeft = (anchor.left + anchor.right) / 2 - panel.width / 2;
+  const clampLeft = (left: number) => Math.min(Math.max(MARGIN, left), viewport.width - MARGIN - panel.width);
+  const clampTop = (top: number) => Math.min(Math.max(minTop, top), Math.max(minTop, viewport.height - MARGIN - panel.height));
+
+  if (anchor.bottom + GAP + panel.height <= viewport.height - MARGIN) return { top: anchor.bottom + GAP, left: clampLeft(centredLeft) };
+  if (anchor.top - GAP - panel.height >= minTop) return { top: anchor.top - GAP - panel.height, left: clampLeft(centredLeft) };
+  const right = anchor.right + GAP;
+  const left = right + panel.width <= viewport.width - MARGIN ? right : anchor.left - GAP - panel.width;
+  return { top: clampTop(anchor.top), left: clampLeft(left) };
+}

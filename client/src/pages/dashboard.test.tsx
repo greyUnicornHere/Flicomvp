@@ -203,7 +203,8 @@ describe('account menu (D08)', () => {
     const menu = screen.getByRole('menu');
     expect(menu).toHaveTextContent('jane@example.com');
     const items = within(menu).getAllByRole('menuitem');
-    expect(items.map((i) => i.textContent)).toEqual(['Feedback, Coming soon', 'Sign Out']);
+    expect(items[0]).toHaveAccessibleName('Feedback, Coming soon');
+    expect(items[1]).toHaveAccessibleName('Sign Out');
     expect(items[0]).toHaveFocus();
     expect(items[0]).toHaveAttribute('aria-disabled', 'true');
 
@@ -243,7 +244,6 @@ describe('workflow page', () => {
     });
     renderAt('/workflows/someone-elses');
     expect(await screen.findByRole('heading', { name: 'Workflow not found' })).toBeInTheDocument();
-    const backLinks = screen.getAllByRole('link', { name: 'Back to dashboard' });
-    expect(backLinks.map((link) => link.getAttribute('href'))).toEqual(['/', '/']);
+    expect(screen.getByRole('link', { name: 'Back to dashboard' })).toHaveAttribute('href', '/');
   });
 });

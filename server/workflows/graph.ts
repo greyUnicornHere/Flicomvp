@@ -55,8 +55,17 @@ export function validateGraph(input: unknown): GraphValidation {
     if (nodeIds.has(node.id)) problems.push(`Duplicate step id ${node.id}`);
     nodeIds.add(node.id);
   }
+  const types = new Map(nodes.map((n) => [n.id, n.type]));
+  const branches = new Set<string>();
   const edgeIds = new Set<string>();
   for (const edge of edges) {
+    if (edge.type === 'yes' || edge.type === 'no') {
+      if (types.get(edge.sourceId) !== 'decision') problems.push(`Connection ${edge.id}: only decisions have Yes/No paths`);
+      const key = `${edge.sourceId}:${edge.type}`;
+      if (branches.has(key)) problems.push(`A decision has more than one ${edge.type === 'yes' ? 'Yes' : 'No'} path`);
+      branches.add(key);
+    }
+    if (edge.sourceId === edge.targetId) problems.push(`Connection ${edge.id} connects a step to itself`);
     if (edgeIds.has(edge.id)) problems.push(`Duplicate connection id ${edge.id}`);
     edgeIds.add(edge.id);
     if (!nodeIds.has(edge.sourceId) || !nodeIds.has(edge.targetId)) {

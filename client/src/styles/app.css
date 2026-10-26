@@ -48,3 +48,40 @@
 
 .fl-link { color: var(--fl-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .fl-link:hover { color: var(--fl-brand-hover); }
+
+/* ---------- Workflow editor ---------- */
+/* The canvas pans itself; never let the browser scroll it (e.g. when focusing an off-screen step). */
+.react-flow { overflow: clip !important; }
+.fl-step { position: relative; gap: 10px; }
+.fl-step[data-type="decision"] { border-radius: 36px; }
+.fl-step[data-type="exception"] { border-style: dashed; }
+.fl-step .fl-node-label { word-break: break-word; }
+.react-flow__node:focus-visible { outline: none; }
+.react-flow__node:focus-visible .fl-step { outline: 2px solid var(--fl-focus); outline-offset: 3px; }
+.fl-step[data-selected="true"] { outline: 2px solid var(--fl-brand); outline-offset: 2px; }
+
+.fl-step-issue {
+  position: absolute; top: -8px; right: -8px; display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 999px; border: 1.5px solid var(--fl-surface);
+  background: var(--fl-approval-fill); color: var(--fl-warning);
+}
+
+.fl-step-add, .fl-edge-add {
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px;
+  border: 1.5px solid var(--fl-border-strong); background: var(--fl-surface); color: var(--fl-brand);
+  box-shadow: var(--fl-shadow-card); transition: background var(--fl-motion-fast) ease, border-color var(--fl-motion-fast) ease, opacity var(--fl-motion-fast) ease;
+}
+.fl-step-add { position: absolute; right: -44px; top: 50%; translate: 0 -50%; }
+.fl-step-add:hover, .fl-edge-add:hover, .fl-step-branch:hover { background: var(--fl-brand-pale); border-color: var(--fl-brand); }
+.fl-edge-add { position: absolute; pointer-events: all; opacity: 0; }
+.fl-edge-add.is-visible, .fl-edge-add:focus-visible { opacity: 1; }
+
+.fl-step-branch {
+  position: absolute; right: -66px; display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 9px 0 7px;
+  border-radius: 999px; border: 1.5px dashed var(--fl-border-strong); background: var(--fl-surface);
+  font-size: 11px; font-weight: 650; color: var(--fl-text-secondary); white-space: nowrap;
+}
+.fl-step-branch[data-branch="yes"] { top: -18px; }
+.fl-step-branch[data-branch="no"] { bottom: -18px; }
+
+.react-flow__edge:focus-visible .react-flow__edge-path { stroke: var(--fl-focus) !important; stroke-width: 2.5px !important; }

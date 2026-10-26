@@ -102,3 +102,59 @@ Fixed during review: card arrows were at different heights when the descriptions
 | Check | Result | Notes |
 |---|---|---|
 | Owner manual test on own PC, including the ⋯ menu fix | Pass | Product owner checked and approved Milestone 1 on 2026-10-26 |
+
+## Milestone 2 — 2026-10-26 (branch `milestone-2-editor`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63).
+
+### Automated
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `npm run lint` | Pass |
+| Typecheck | `npm run typecheck` | Pass |
+| Unit + API (server + shared: 66, client: 84) | `npm test` | **150 / 150 pass** |
+| Production build | `npm run build` | Pass (editor loads as a separate chunk) |
+| Browser E2E (auth, dashboard, menus, editor) | `npm run test:e2e` | **29 / 29 pass** (16 new editor tests) |
+| Dependency audit | `npm audit` | 0 vulnerabilities |
+
+New unit coverage:
+- **Graph operations** (deterministic fixtures from 05_QA): insert after a step and on a connection (keeps Yes/No), Finish never placed mid-path, toolbar insertion point; decision with two outcomes, suggested join, one path continuing, blank outcomes left open (never orphaning the next step); join suggestions; connect/remove keeping branch meaning; loop targets and validation of a way out; parallel with and without wait-for-all (shared group, join step); exception with response; delete impact, reconnect keeping Yes, no reconnect for decisions, Start protected, loops removed; detail updates and allowed type changes.
+- **Layout:** sequence on one line; Yes above No, symmetric, joins level; parallel stacked; loops ignored for columns; deterministic and connection-preserving; 25-step QA fixture 6 shape without overlaps.
+- **Validation:** connected unfinished workflow is clean; QA fixture 7 (dangling, missing branch, unlabelled paths, empty name, disconnected); Start/Finish rules; parallel with one activity; stable issue ids; pre-analysis blockers versus warnings.
+- **History** (exact undo/redo, redo branch discarded, naming merged into the add step, 100-step limit); **autosave** under StrictMode; **placement** of the details panel; reduced motion.
+- **Server:** rejects Yes paths from non-decisions, duplicate Yes on one decision, and self-connections.
+
+### Acceptance cases (05_QA M2)
+
+| ID | Case | Result | Evidence (E2E `tests/e2e/editor.spec.ts`; screenshots `docs/evidence/m2/`) |
+|---|---|---|---|
+| E01 | Manual workflow: only Start, visible +, dotted canvas | Pass | E01/E02; `01-start-only-1536.png` |
+| E02 | + → Action: block appears, default name selected for editing | Pass | E01/E02 (name focused, value "New action"); `02-insert-menu-1536.png` |
+| E03 | Decision: guided question + Yes/No outcomes, two labelled branches | Pass | E03/E04 (stored yes/no edges, labels, group) |
+| E04 | Actions on both branches + suggested reconnection | Pass | E03/E04 (Connect dialog pre-selects Finish; both paths join; 0 issues); `03-decision-merge-1536.png` |
+| E05 | Branch ends independently | Pass | E05 (no forced reconnection, no warnings) |
+| E06 | Guided loop to a previous step persists after reload | Pass | E06–E08 (typed loop edge with label survives reload; routed around steps); `04-loop-parallel-exception-1536.png` |
+| E07 | Two parallel activities, both must finish | Pass | E06–E08 (shared group id, "All activities complete" join with matching joinGroupId, continues to Finish) |
+| E08 | Exception on an action | Pass | E06–E08 (dashed, labelled exception path + response step) |
+| E09 | Select a step → contextual popover with all approved fields | Pass | E09 (all fields persist after reload; Escape returns focus); `05-step-popover-1536.png` |
+| E10 | Delete a connected step, Cancel | Pass | E10–E12 (nothing changes) |
+| E11 | Confirm delete with affected connections shown; Undo restores exactly | Pass | E10–E12 (both connections listed, reconnect offered; Undo restores identical ids); `06-delete-confirmation-1536.png` |
+| E12 | Undo/Redo multiple edits | Pass | E10–E12 (buttons + Ctrl+Z / Ctrl+Shift+Z); history unit tests |
+| E13 | Autosave; refresh keeps names, notes, topology, positions | Pass | E13 (dragged position and rename survive reload); E09 (notes) |
+| E14 | Save error: durable message + Retry, nothing lost | Pass | E14 (stays visible, Retry saves; second-tab conflict never overwrites); `07-save-error-retry-1536.png` |
+| E15 | Incomplete branch: inline marker + header summary point to it | Pass | E15 (marker in label, summary focuses the step, manual fix clears it; AI fix disabled); `08-validation-summary-1536.png` |
+| E16 | Pan / zoom / fit / auto-arrange keep semantics | Pass | E16; layout unit tests |
+| E17 | Keyboard only: add, edit, delete, confirm, navigate | Pass | E17 (details, + menu with arrows, naming, toolbar arrows, Delete key) |
+| E18 | 1280px: header and floating tools don't overlap core controls | Pass | E18 (no horizontal scroll, header fits, toolbar/controls don't cover steps); `10-editor-1280.png` |
+| — | Label truncation | Pass | Long name keeps block height; full name in tooltip, screen-reader label and details; `09-label-truncation-1536.png` |
+| — | Finish suggested, not auto-created | Pass | Finish test |
+| — | Opening a workflow never saves it | Pass | Regression test for the bug below |
+| — | Unbuilt commands clearly disabled | Pass | E15 (Ask Flico, Export disabled; Quick/Guided Analysis and Suggest fix "Coming soon"); E01 (Quick Add input disabled) |
+
+### Design comparison with `02-editor-approved.png`
+Matches: single header (logo, back arrow, title, Saved, Undo/Redo, Ask Flico, gradient Analyze ▾, Export, avatar); warm dotted canvas with "WORKFLOW EDITOR" and "Changes save automatically · Drag the canvas to pan"; pebble-shaped blocks with tinted icon squares and type colours (Start/Action green, Decision lavender, Approval amber, Wait blue, Finish grey); curved connections with open arrowheads and Yes/No chips; floating vertical toolbar on the left; bottom-right zoom − 100% +, fit and Auto-arrange; floating "Edit step" panel with Step name, Owner / team, Duration, Tools / software, Notes and "Ask Flico about this step". The Customer Order Processing shape from the mockup reproduces closely (`03-decision-merge-1536.png`).
+Intentional differences: Editor/Analysis tabs appear only once an analysis exists (Milestone 4); the details panel also has Type, Connections and Delete (spec §5); unbuilt AI and export features are visibly disabled; mockup sample owners and durations aren't reproduced.
+
+### Bugs found and fixed during Milestone 2
+See DECISIONS.md: autosave saving on open (regression test proves the fix), new-step name focus, name box staying open, Escape dropping focus, repeat connections crossing steps, menu item naming. Each has a test that failed before its fix.

@@ -43,7 +43,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 1536, height: 864
     await lastRow.getByRole('button', { name: /^Actions for/ }).click();
     await expectMenuFullyVisible(page);
     expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
-    await page.screenshot({ path: `docs/evidence/m1/10-row-menu-near-bottom-${viewport.width}.png` });
+    await page.screenshot({ path: `test-results/screenshots/10-row-menu-near-bottom-${viewport.width}.png` });
 
     // Keyboard still works from the repositioned menu.
     await page.keyboard.press('ArrowDown');

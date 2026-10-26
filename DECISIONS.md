@@ -80,3 +80,48 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - New primitives: `Menu` (keyboard: Enter/Space/↓ open, ↑/↓/Home/End move, Escape closes and returns focus) and `Modal` (focus trap, Escape and backdrop close, focus returns to the opener, or to the "Recent workflows" heading if the opener was deleted).
 - The workflow page uses the editor-style full-width header (logo, back, title, account), not the 1200px dashboard width.
 - Dialog focus restoration is safe under React StrictMode. Component tests now render in StrictMode to catch that class of bug; it was found by E2E.
+
+## Milestone 2 — Manual editor (2026-10-26)
+
+### Owner decisions (asked before building)
+- **Blank decision outcome:** stays an open path, with a labelled "+ Yes" / "+ No" button on the decision and a validation warning. No placeholder steps are invented.
+- **Parallel "wait for all":** a visible Wait step "All activities complete" joins the activities, then continues to whatever followed. Without wait-for-all, the main path continues and the activities run alongside, ending on their own.
+- **Deleting a mid-path step:** the confirmation lists every affected connection. When the step sits on a single path, a checked "Keep the path joined" option reconnects it (keeping Yes/No). Otherwise connections are removed and validation shows the gap. Undo always restores it.
+- **Floating toolbar:** Action, Decision, Approval, Wait, Finish, Repeat earlier step, Parallel activities, Add exception. Each acts on the selected step. When unavailable, the button says why (tooltip + screen reader).
+
+### Graph semantics (spec §6, §19; contract §2)
+- Operations are pure functions (`client/src/editor/ops.ts`) and return a new graph; every user action is one undoable step.
+- **Decision:** Yes/No connections are typed `yes`/`no`, labelled, and grouped by the decision's id (`branchGroupId`). When a decision is inserted where the path already continued, that step is never orphaned. The dialog offers "Both paths join again" (suggested; the step gets `joinGroupId`) or "Only Yes/No continues" (the other branch ends separately).
+- **Joins / reconnection:** "Connect to a step…" in the step details links a path end forward (or fills an open Yes/No path). The suggestions are where the decision's other paths lead. Backward links aren't offered: they would be loops.
+- **Loop:** an explicit `loop` connection back to an earlier step (only steps that lead to the current one are offered), with an optional condition label (default "Repeat"). Validation warns only if nothing in the repeated section has a way out.
+- **Parallel:** connections typed `parallel` sharing a group id. The join step stores that group id.
+- **Exception:** an `exception` step on a dashed `exception` connection labelled "Exception", with an optional response step.
+- **Type changes** in step details are limited to Action, Approval, Wait and Finish (Finish only for steps that end a path). Decisions and exceptions are created through their guided flows.
+- New steps get type-based default names ("New action", "New approval", "New wait", "Finish"). The name is selected for typing immediately; naming merges into the same undo step, so one Undo removes the step entirely.
+- **Finish** is never created automatically. When exactly one path end remains and there are at least two steps, a dismissible suggestion offers to add it (dismissal remembered for the browser session).
+- **Server-side storage check** (in addition to M1): Yes/No only from decisions, at most one of each per decision, and no step connected to itself.
+
+### Layout
+- **Deterministic left-to-right layout** (`client/src/editor/layout.ts`): columns follow the longest path from Start (repeat connections ignored), Yes above No, parallel activities stacked vertically, joins level with their parents. The same graph always gives the same picture.
+- **After any structural change** (add, decision, loop, parallel, exception, delete, connect) the diagram is re-arranged automatically, so it stays readable without manual tidying. Dragged positions are saved and kept until the next structural change or Auto-arrange. Layout never changes connections (tested).
+- **Repeat connections are routed around steps:** out through the empty gap after the source's column, along a lane below every step they pass, and back into the target's left side. Other connections are smooth curves with open arrowheads.
+- After a change, new steps are brought into view. Small workflows stay fully visible and centred in the free area; larger ones pan to the change, zooming out only when needed.
+
+### Behaviour and accessibility
+- Steps are keyboard-focusable. **Enter** opens details, **Delete/Backspace** opens the delete confirmation, **Escape** closes details then clears the selection, and focus stays on the step. Every + (after a step, on a connection, open Yes/No paths) is a real button, and the connection + also appears on keyboard focus. The toolbar is a single Tab stop with arrow-key navigation.
+- **Undo/Redo:** header buttons plus Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z only (no other shortcut set). Inside text fields the browser's own text undo applies. History lasts for the session (100 steps) and isn't kept across reloads.
+- **Autosave:** each change is saved about 0.8 s later, with revision checking. "Saving…", "Saved" and "Couldn't save — Retry" stay visible until resolved. If another tab saved first, "Changed in another tab — Reload" appears and nothing is overwritten. Leaving the page saves pending changes immediately, and closing the tab with unsaved changes asks first.
+- **Validation:** continuous, with a warning marker on the step (included in its screen-reader label) and an "N issues" header summary whose entries move focus to the step. Rules: no or duplicate Start, dangling connection, disconnected step, decision missing a Yes/No path, unlabelled decision path, empty name, repeat with no way out, Finish that continues, parallel with fewer than two activities. The **pre-analysis check** (shared with the server for Milestone 4) runs from the Analyze menu.
+- **Not yet built, shown as such:** Ask Flico and Export (disabled, "Available in a later update"), Quick/Guided Analysis and "Suggest fix with AI" ("Coming soon"), and AI Quick Add in the + menu (disabled input). "Ask Flico about this step" in the details is labelled coming soon.
+- Reduced motion: viewport animations are skipped when the person prefers reduced motion.
+- The browser can't scroll the canvas container (`overflow: clip`), so focusing an off-screen step can't shift the diagram.
+- The editor code loads only when a workflow is opened (keeps the dashboard light).
+- React Flow's small attribution link is hidden (`proOptions.hideAttribution`), which its MIT licence permits. It can be shown again if preferred.
+
+### Bugs found and fixed during Milestone 2
+- **Autosave saved a workflow just by opening it** (development mode runs effects twice; the "skip the first value" check failed). This caused needless writes and false "changed in another tab" conflicts. Now the hook compares with the last known value. Its tests run under StrictMode and were confirmed to fail without the fix.
+- **A new step's name box didn't get focus**, because new steps are hidden until measured. Focus is now applied once the step is visible.
+- **A step's name box stayed open** after clicking another step (the diagram blocks the normal focus change). It now saves on any click elsewhere.
+- **Escape on a step dropped keyboard focus** to the page (the diagram library's own selection handling). Flico now manages selection itself.
+- **Repeat connections crossed other steps.** They now route around them.
+- **"Suggest fix with AI, Coming soon"** was read with a stray space; menu items now have explicit accessible names.

@@ -44,7 +44,7 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - **Authorization** is enforced on the server for every private route (`requireAuth` plus `owner_id` in every query). Another user's resource returns the same `404` as a missing one, so its existence isn't revealed.
 - **Minimal `workflows` table and read-only `GET /api/workflows/:id`:** added in M0 only so cross-user denial can be tested now (spec A06). There is no create/list/rename/delete and no UI. Milestone 1 extends the table with a new migration.
 - **Cross-site request protection:** SameSite cookies, JSON-only request bodies (`text/plain` and form posts are rejected), and an Origin check on state-changing requests.
-- **Rate limits** (per client IP, per 15 minutes): 10 link requests, 30 verifications. Set `TRUST_PROXY=true` only behind a trusted reverse proxy.
+- **Rate limits** (per client IP, per 15 minutes): 10 link requests (`AUTH_RATE_LIMIT`, raised only for the automated browser tests), 30 verifications. Set `TRUST_PROXY=true` only behind a trusted reverse proxy.
 - **Headers:** Helmet with a strict Content-Security-Policy, `frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, and HSTS in production.
 - **Logging:** method and path only. No query strings, headers, cookies, bodies or email addresses.
 - **Production guardrails:** startup fails with readable messages if `APP_URL` is missing or not https, or if `dev-outbox` is configured. Secret values are never echoed. The outbox API is not registered in production, and the outbox page is not in production bundles.
@@ -76,6 +76,7 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 ### UI
 - Text and layout follow the approved dashboard mockup. Product wording comes from the spec: **Build manually** (the mockup says "Create manually") and no Explore Example. Fake mockup dates and names are not reproduced.
 - Type sizes follow the design system table (hero 40/48, card and section headings 18/26). The mockup raster is scaled about 1.25× relative to it.
+- Menus are drawn in a top layer (portal) with fixed positioning: below the trigger if they fit, otherwise above, clamped inside the window, re-placed on scroll/resize. This came from owner review; the row menu was cut off near the bottom of the screen.
 - New primitives: `Menu` (keyboard: Enter/Space/↓ open, ↑/↓/Home/End move, Escape closes and returns focus) and `Modal` (focus trap, Escape and backdrop close, focus returns to the opener, or to the "Recent workflows" heading if the opener was deleted).
 - The workflow page uses the editor-style full-width header (logo, back, title, account), not the 1200px dashboard width.
 - Dialog focus restoration is safe under React StrictMode. Component tests now render in StrictMode to catch that class of bug; it was found by E2E.

@@ -28,6 +28,8 @@ const schema = z
     SMTP_PASS: optionalString,
     MAGIC_LINK_TTL_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
     SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(14),
+    /** Sign-in link requests allowed per client address per 15 minutes. */
+    AUTH_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).default(10),
     TRUST_PROXY: booleanString,
   })
   .superRefine((env, ctx) => {

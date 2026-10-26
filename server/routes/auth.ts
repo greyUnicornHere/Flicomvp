@@ -36,7 +36,7 @@ export const authRoutes =
 
     app.post(
       '/request-link',
-      { config: { rateLimit: { max: 10, timeWindow: FIFTEEN_MINUTES } } },
+      { config: { rateLimit: { max: config.AUTH_RATE_LIMIT, timeWindow: FIFTEEN_MINUTES } } },
       async (request, reply) => {
         const parsed = requestLinkBody.safeParse(request.body);
         if (!parsed.success) return sendError(reply, 400, 'bad_request', 'Please enter a valid email address.');

@@ -99,6 +99,16 @@ describe('request hardening', () => {
     expect(codes.at(-1)).toBe(429);
   });
 
+  it('uses the configured sign-in rate limit', async () => {
+    const t = await makeTestApp({ AUTH_RATE_LIMIT: '2' });
+    const codes: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const response = await t.app.inject({ method: 'POST', url: '/api/auth/request-link', headers: ORIGIN, payload: { email: `p${i}@example.com` } });
+      codes.push(response.statusCode);
+    }
+    expect(codes).toEqual([200, 200, 429]);
+  });
+
   it('sets security headers', async () => {
     const t = await makeTestApp();
     const response = await t.app.inject({ method: 'GET', url: '/api/health' });

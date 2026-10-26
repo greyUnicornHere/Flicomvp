@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { placeMenu } from '../lib/placement';
 
 export type MenuItem = {
   label: string;
@@ -29,13 +31,45 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // Drawn in a layer above the page (so containers can't clip it) and placed to stay fully on screen:
+  // below the trigger when it fits, otherwise above. Re-placed on scroll and resize.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const trigger = buttonRef.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      setPosition(
+        placeMenu(trigger, { width: menu.offsetWidth, height: menu.offsetHeight }, { width: window.innerWidth, height: window.innerHeight }),
+      );
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+
+  const visible = open && position !== null;
+  const close = () => {
+    setOpen(false);
+    setPosition(null);
+  };
+
+  // Focus the first item once the menu is placed and visible (not on every re-position).
+  useEffect(() => {
+    if (visible) itemRefs.current[0]?.focus({ preventScroll: true });
+  }, [visible]);
 
   useEffect(() => {
     if (!open) return;
-    itemRefs.current[0]?.focus();
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!menuRef.current?.contains(target) && !buttonRef.current?.contains(target)) setOpen(false);
+      if (!menuRef.current?.contains(target) && !buttonRef.current?.contains(target)) close();
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
@@ -43,7 +77,7 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
 
   const focusItem = (index: number) => {
     const count = items.length;
-    itemRefs.current[(index + count) % count]?.focus();
+    itemRefs.current[(index + count) % count]?.focus({ preventScroll: true });
   };
 
   const onMenuKeyDown = (event: React.KeyboardEvent) => {
@@ -68,18 +102,20 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
       case 'Escape':
         event.preventDefault();
         event.stopPropagation();
-        setOpen(false);
+        close();
         buttonRef.current?.focus();
         break;
       case 'Tab':
-        setOpen(false);
+        // Continue the normal tab order from the trigger (the menu itself lives at the end of the page).
+        close();
+        buttonRef.current?.focus();
         break;
     }
   };
 
   const select = (item: MenuItem) => {
     if (item.disabled) return;
-    setOpen(false);
+    close();
     buttonRef.current?.focus();
     item.onSelect?.();
   };
@@ -96,7 +132,8 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
         aria-controls={open ? menuId : undefined}
         onClick={(event) => {
           event.stopPropagation();
-          setOpen((value) => !value);
+          if (open) close();
+          else setOpen(true);
         }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' && !open) {
@@ -108,14 +145,15 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
         {triggerContent}
       </button>
 
-      {open && (
+      {open &&
+        createPortal(
         <div
           ref={menuRef}
           id={menuId}
           role="menu"
           aria-label={label}
-          style={{ width }}
-          className="fl-popover absolute right-0 top-[calc(100%+8px)] z-50 !p-2"
+          style={{ width, top: position?.top ?? 0, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}
+          className="fl-popover fixed z-50 !p-2"
           onKeyDown={onMenuKeyDown}
           onClick={(event) => event.stopPropagation()}
         >
@@ -154,8 +192,9 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
               {error}
             </p>
           )}
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </div>
   );
 }

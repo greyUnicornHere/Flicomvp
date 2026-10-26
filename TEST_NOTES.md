@@ -89,3 +89,11 @@ Fixed during review: card arrows were at different heights when the descriptions
 ### Bugs found and fixed during Milestone 1
 - **Rename dialog lost keyboard focus in the real browser** (React development StrictMode re-ran the dialog's focus-restore code). Fixed. Component tests now run under StrictMode, and the regression test was confirmed to fail without the fix.
 - E2E reads after page reloads now wait for the table instead of racing the data load.
+
+### Owner review fix — 2026-10-26
+- **Reported:** the ⋯ row menu was not fully visible near the bottom of the screen; it had to be scrolled to.
+- **Cause:** menus always opened downward, inside the table's clipped frame.
+- **Fix:** menus are drawn in a layer above the page and placed to stay fully on screen: below the button when there's room, otherwise above, and kept inside the window's edges. They are re-placed on scroll and resize. This applies to the row menu and the account menu (design system §5: "flip/shift to remain inside viewport").
+- **Evidence:** new E2E `menu-placement.spec.ts` at 1280×720 and 1536×864 (bottom row scrolled to the window edge: menu fully inside the window, both options clickable at their position, page did not scroll, keyboard still works). It failed before the fix (menu bottom at 720.2px in a 720px window) and passes after. Unit tests for the placement rules. Screenshots `docs/evidence/m1/10-row-menu-near-bottom-1280.png` and `-1536.png`.
+- **Test environment:** the full browser suite now signs in 12 times from one machine, exceeding the sign-in rate limit (10 per 15 minutes) and failing the last tests at sign-in. The limit is now a setting (`AUTH_RATE_LIMIT`, default 10, unit tested) that only the E2E server raises.
+- **Totals after fix:** unit/API **94 / 94**, E2E **13 / 13**, lint, typecheck and build pass.

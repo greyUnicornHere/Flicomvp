@@ -8,6 +8,7 @@ describe('loadConfig', () => {
     expect(config.MAIL_TRANSPORT).toBe('dev-outbox');
     expect(config.APP_URL).toBe('http://localhost:5173');
     expect(config.MAGIC_LINK_TTL_MINUTES).toBe(15);
+    expect(config.AUTH_RATE_LIMIT).toBe(10);
   });
 
   it('treats empty .env values as unset', () => {

@@ -34,6 +34,8 @@ export default defineConfig({
       APP_URL: E2E.appUrl,
       DATABASE_PATH: E2E.dbPath,
       MAIL_TRANSPORT: 'dev-outbox',
+      // Every E2E test signs in from the same machine; the default limit (10) is covered by unit tests.
+      AUTH_RATE_LIMIT: '200',
     },
   },
 });

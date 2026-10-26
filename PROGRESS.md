@@ -5,7 +5,7 @@
 | # | Milestone | Status |
 |---|---|---|
 | 0 | **Foundation:** scripts, SQLite + migrations, invite-only magic-link auth, sessions, tokens + logo, error boundary, health/status | **Approved by owner 2026-10-26; merged to `main`.** |
-| 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | **Built. Awaiting owner approval.** |
+| 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | **Approved by owner 2026-10-26; merged to `main`.** |
 | 2 | Manual editor: organic graph editor, branches/loops/parallel/exceptions, validation, autosave, undo/redo | Not started |
 | 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | Not started |
 | 4 | Analysis: credits, Quick/Guided, one-diagram change review, recommendations and application | Not started |
@@ -40,7 +40,6 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
-- **Feedback** is not in the account menu yet (it arrives with the feedback feature in Milestone 5).
 - Real SMTP delivery is implemented but **not yet tested** against a live provider.
 - E2E has run in Chromium only. Edge needs a machine with Edge installed.
 - Feedback in the account menu is disabled ("Coming soon") until Milestone 5.

@@ -59,6 +59,16 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_workflows_owner_updated ON workflows (owner_id, updated_at);
     `,
   },
+  {
+    id: 2,
+    name: 'workflow_persistence',
+    sql: `
+      ALTER TABLE workflows ADD COLUMN status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'analyzed'));
+      -- Optimistic locking for autosave: every graph save must name the revision it was based on.
+      ALTER TABLE workflows ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE workflows ADD COLUMN graph_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}';
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

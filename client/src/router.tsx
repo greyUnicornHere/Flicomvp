@@ -2,11 +2,13 @@ import { createBrowserRouter, type RouteObject } from 'react-router';
 import { ErrorFallback } from './components/ErrorFallback';
 import { RequireAuth } from './components/RequireAuth';
 import { RootLayout } from './components/RootLayout';
-import { HomePage } from './pages/HomePage';
+import { CreateWithAiPage } from './pages/CreateWithAiPage';
+import { DashboardPage } from './pages/DashboardPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SignInPage } from './pages/SignInPage';
 import { StatusPage } from './pages/StatusPage';
 import { VerifyPage } from './pages/VerifyPage';
+import { WorkflowPage } from './pages/WorkflowPage';
 
 // The outbox route exists only in development builds; production bundles don't contain it.
 const devRoutes: RouteObject[] = import.meta.env.DEV
@@ -22,7 +24,14 @@ export const routes: RouteObject[] = [
       { path: '/auth/verify', element: <VerifyPage /> },
       { path: '/status', element: <StatusPage /> },
       ...devRoutes,
-      { element: <RequireAuth />, children: [{ path: '/', element: <HomePage /> }] },
+      {
+        element: <RequireAuth />,
+        children: [
+          { path: '/', element: <DashboardPage /> },
+          { path: '/create/ai', element: <CreateWithAiPage /> },
+          { path: '/workflows/:id', element: <WorkflowPage /> },
+        ],
+      },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

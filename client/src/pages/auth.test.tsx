@@ -11,14 +11,6 @@ describe('route protection', () => {
     expect(router.state.location.pathname).toBe('/signin');
   });
 
-  it('shows the signed-in home with the real logo and account menu', async () => {
-    mockApi({ 'GET /api/auth/me': signedIn('jane@example.com') });
-    renderAt('/');
-    expect(await screen.findByRole('heading', { name: 'Welcome to Flico' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Flico' })).toHaveAttribute('src', '/brand/flico-logo.png');
-    expect(screen.getByRole('button', { name: 'Account menu for jane@example.com' })).toBeInTheDocument();
-  });
-
   it('offers Retry when the API cannot be reached', async () => {
     mockApi({ 'GET /api/auth/me': { status: 502, body: null } });
     renderAt('/');
@@ -92,26 +84,5 @@ describe('verify page', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Continue to Flico' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already been used');
     expect(screen.getByRole('link', { name: 'Request a new sign-in link' })).toHaveAttribute('href', '/signin');
-  });
-});
-
-describe('account menu', () => {
-  it('opens with keyboard, closes with Escape, and signs out (A05)', async () => {
-    mockApi({ 'GET /api/auth/me': signedIn('jane@example.com'), 'POST /api/auth/logout': { status: 204 } });
-    const router = renderAt('/');
-    const trigger = await screen.findByRole('button', { name: 'Account menu for jane@example.com' });
-
-    trigger.focus();
-    await userEvent.keyboard('{Enter}');
-    expect(screen.getByRole('menuitem', { name: 'Sign Out' })).toHaveFocus();
-    expect(screen.getByRole('menu')).toHaveTextContent('jane@example.com');
-    await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
-
-    await userEvent.click(trigger);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Sign Out' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/signin'));
-    expect(await screen.findByText("You've been signed out.")).toBeInTheDocument();
   });
 });

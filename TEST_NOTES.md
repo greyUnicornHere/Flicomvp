@@ -46,3 +46,46 @@ Client tests cover route protection redirect, API-unreachable Retry, sign-in req
 | Real SMTP email delivery | Blocked | No SMTP credentials yet |
 | Microsoft Edge | Blocked | Edge not available in the build environment |
 | Owner manual test on own PC (5-step check) | Pass | Product owner checked and approved Milestone 0 on 2026-10-26 |
+
+## Milestone 1 — 2026-10-26 (branch `milestone-1-dashboard`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63).
+
+### Automated
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `npm run lint` | Pass |
+| Typecheck | `npm run typecheck` | Pass |
+| Unit + API (server: 56, client: 33) | `npm test` | **89 / 89 pass** |
+| Production build | `npm run build` | Pass |
+| Browser E2E (M0 auth + M1 dashboard) | `npm run test:e2e` | **11 / 11 pass** |
+| Dependency audit | `npm audit` | 0 vulnerabilities |
+
+New coverage:
+- **Server:** Start-only creation; unsupported creation kinds rejected; owner-only listing sorted by last modified (rename re-sorts); rename trimming and validation; permanent delete (gone from list and detail, second delete 404, row removed); user separation (B can't read/rename/save/delete A's workflow); sign-in required on every workflow route; workflow limit; autosave contract (revision bump, stale save 409 without overwrite, invalid graphs rejected without changing data); migration upgrade from an M0 database and the status CHECK.
+- **Client (rendered in StrictMode):** hero and equal cards with no sidebar; empty state replaces table and search; populated table hides the empty state; column headers, order and status text; live case-insensitive search and no-match message; row click opens; Build manually creates and opens; rename (focus, Enter, re-sort, empty-name error); delete Cancel/Escape keeps (focus returns to ⋯); delete confirm removes (last one brings back the empty state, focus moves to the heading); delete failure keeps the dialog open with an error; list-load Retry; account menu items, keyboard and Sign Out; Feedback disabled; Create with AI sends nothing; workflow not-found page; search/sort helpers; `useAutosave` (no initial save, debounce, in-flight queueing, error and Retry, conflict stop, flush on leave).
+
+### Acceptance cases (05_QA M1)
+
+| ID | Case | Result | Evidence |
+|---|---|---|---|
+| D01 | No workflows: hero + two equal cards; optional example; no table | Pass (example intentionally omitted per owner) | E2E D01; `docs/evidence/m1/01-dashboard-empty-1536.png`, `02-dashboard-empty-1280.png` |
+| D02 | Build manually → `Untitled workflow`, Start only, persisted | Pass | E2E D02/D03 (API check of the graph); `05-workflow-placeholder-1536.png` |
+| D03 | Back on dashboard: table appears, empty state disappears | Pass | E2E D02/D03, survives reload |
+| D04 | 3 workflows + search: live filter, correct status/date columns | Pass | E2E D04; `03-dashboard-populated-1536.png` |
+| D05 | Rename from row action, reopen → persists | Pass | E2E D05 (reload); `07-rename-dialog-1536.png` |
+| D06 | Delete → Cancel → workflow remains | Pass | E2E D06/D07 (reload); client test with Escape |
+| D07 | Delete → confirm → gone, no trash UI | Pass | E2E D06/D07 (reload + API 404); `08-delete-confirmation-1536.png` |
+| D08 | Profile menu: Email, Feedback, Sign Out only | Pass (Feedback disabled, "Coming soon", per owner decision) | E2E D04/D08; `04-dashboard-account-menu-1536.png` |
+| D09 | 1280 and 1536px: no sidebar, approved logo, centred max-width | Pass | E2E checks no `nav`/`aside`, `main` ≤ 1200px and centred, no horizontal scroll at 1280; `06-dashboard-populated-1280.png` |
+| A06 (UI) | User B opens User A's workflow URL | Pass | E2E A06: "Workflow not found", no private name shown, B's dashboard empty |
+
+### Design comparison with `01-dashboard-approved.png`
+Matches: centred hero and subtitle, two equal bordered cards with icon circles and right arrows, hover changes only border/background, "Recent workflows" with search on the right, compact table with a pale header row, status pills, ⋯ row actions, and an account dropdown in the same position.
+Intentional differences (spec wins): "Build manually" label; no fake dates or names; no empty state under a populated table; no Explore Example; Feedback disabled until M5.
+Fixed during review: card arrows were at different heights when the descriptions wrapped differently.
+
+### Bugs found and fixed during Milestone 1
+- **Rename dialog lost keyboard focus in the real browser** (React development StrictMode re-ran the dialog's focus-restore code). Fixed. Component tests now run under StrictMode, and the regression test was confirmed to fail without the fix.
+- E2E reads after page reloads now wait for the table instead of racing the data load.

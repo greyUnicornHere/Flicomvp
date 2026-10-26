@@ -12,7 +12,7 @@ export class ApiError extends Error {
 }
 
 /** JSON fetch against the Flico API. Throws ApiError with a user-readable message on failure. */
-export async function api<T>(path: string, options: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {
+export async function api<T>(path: string, options: { method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'; body?: unknown } = {}): Promise<T> {
   const method = options.method ?? 'GET';
   let response: Response;
   try {

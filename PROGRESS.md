@@ -5,7 +5,7 @@
 | # | Milestone | Status |
 |---|---|---|
 | 0 | **Foundation:** scripts, SQLite + migrations, invite-only magic-link auth, sessions, tokens + logo, error boundary, health/status | **Approved by owner 2026-10-26; merged to `main`.** |
-| 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | Not started |
+| 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | **Built. Awaiting owner approval.** |
 | 2 | Manual editor: organic graph editor, branches/loops/parallel/exceptions, validation, autosave, undo/redo | Not started |
 | 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | Not started |
 | 4 | Analysis: credits, Quick/Guided, one-diagram change review, recommendations and application | Not started |
@@ -27,14 +27,27 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Root error boundary and router error page with recovery actions; clear messages for API-unreachable, rate-limited, expired/used links, and misconfiguration.
 - Desktop-scope notice below 1280px (dismissible, non-blocking).
 
+## Milestone 1: what works
+
+- Dashboard at `/`: logo + account menu (email, Feedback *coming soon*, Sign Out), hero, two equal creation cards, "Recent workflows" with live search and a Name / Status / Last modified / Actions table.
+- Empty state replaces the table when there are no workflows (never shown beneath it).
+- **Build manually** creates and opens `Untitled workflow` (Start step only), saved in the database.
+- Row click (or keyboard on the name link) opens the workflow page (title + placeholder until the editor).
+- Rename (dialog, validation) and permanent delete (confirmation, Cancel by default) from each row's ⋯ menu; both persist after reload.
+- **Create with AI** input screen, clearly marked not yet available; nothing is sent or saved.
+- Owner-scoped workflow API (list/create/read/rename/delete) and the autosave contract (`PUT /:id/graph` with revision conflict protection) ready for the editor.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
 - **Feedback** is not in the account menu yet (it arrives with the feedback feature in Milestone 5).
 - Real SMTP delivery is implemented but **not yet tested** against a live provider.
 - E2E has run in Chromium only. Edge needs a machine with Edge installed.
-- The signed-in home page is a placeholder until the Milestone 1 dashboard.
+- Feedback in the account menu is disabled ("Coming soon") until Milestone 5.
+- Opening a workflow shows a placeholder until the Milestone 2 editor; status is always Draft until analysis exists (Milestone 4).
+- No Customer Order Processing example (owner decision for now).
+- Search filters loaded workflows in the browser (fine for the 200-workflow limit).
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/` and `docs/evidence/m1/`.

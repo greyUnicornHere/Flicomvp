@@ -53,3 +53,29 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - Real SMTP delivery has not been tested against a live provider (no credentials yet). The adapter is in place and covered by config validation.
 - Data retention/backup policy, telemetry, and deployment target are decided in Milestone 5.
 - Microsoft Edge E2E runs need a machine with Edge installed (the Playwright project is ready to add `channel: 'msedge'`).
+
+## Milestone 1 — Dashboard and persistence (2026-10-26)
+
+### Owner decisions (asked before building)
+- **Feedback menu item:** follow the prompt strictly. The account menu lists **email, Feedback, Sign Out**. Feedback is shown but disabled, marked "Coming soon", until the feedback feature is built in Milestone 5. It stays focusable so screen-reader users can discover it.
+- **Opening a workflow:** title + placeholder only (`/workflows/:id`), until the editor in Milestone 2. Steps aren't displayed yet.
+- **Customer Order Processing example:** not built for now. The empty state shows a short message only.
+
+### Behaviour and data
+- `workflows` gains `status` (`draft` | `analyzed`, enforced by a CHECK), `revision` (optimistic locking) and `graph_json` (migration `002`). Existing Milestone 0 databases upgrade automatically on start; this is tested.
+- The graph format follows `IMPLEMENTATION_CONTRACTS.md` §2 (`shared/graph.ts`). The server stores a graph only if it passes schema validation, has unique step/connection IDs, and every connection points to an existing step. Unfinished workflows (no Finish, disconnected steps) are allowed; they become editor warnings in Milestone 2. Unknown fields and step types such as `trigger` are rejected.
+- **Build manually** creates `Untitled workflow` with exactly one Start step and no Finish (spec §6).
+- **List order:** most recently modified first. Renaming counts as a modification.
+- **Search:** live, client-side, case-insensitive substring on the name; extra spaces are ignored. A non-matching search shows "No workflows match …" inside the table. It never shows the empty state.
+- **Empty state** replaces the table (and search) only when the person has zero workflows.
+- **Delete** is permanent, with a confirmation dialog that focuses **Cancel** by default. The dialog says it can't be undone and that there's no trash. Related records added later (analyses, chat) will be removed by `ON DELETE CASCADE`. The backup/retention wording for production is decided with deployment in Milestone 5; the dialog makes no claims about backups.
+- **Limits (documented defaults):** 200 workflows per person; 300 steps, 600 connections, 200-character labels and 2,000-character notes per workflow; names 1–120 characters.
+- **Autosave storage contract (ready for Milestone 2):** `PUT /api/workflows/:id/graph` with `{ graph, baseRevision }`. A stale revision returns `409` and nothing is overwritten. The client hook `useAutosave` debounces saves, runs one save at a time, keeps failures visible with Retry, stops on conflict, flushes on leaving the screen, and warns before closing the tab with unsaved changes. No editor UI uses it yet.
+- **Create with AI** (`/create/ai`) is a labeled input screen. The **Create draft** button is disabled with an explanation, and nothing typed is sent or stored. AI generation is Milestone 3.
+
+### UI
+- Text and layout follow the approved dashboard mockup. Product wording comes from the spec: **Build manually** (the mockup says "Create manually") and no Explore Example. Fake mockup dates and names are not reproduced.
+- Type sizes follow the design system table (hero 40/48, card and section headings 18/26). The mockup raster is scaled about 1.25× relative to it.
+- New primitives: `Menu` (keyboard: Enter/Space/↓ open, ↑/↓/Home/End move, Escape closes and returns focus) and `Modal` (focus trap, Escape and backdrop close, focus returns to the opener, or to the "Recent workflows" heading if the opener was deleted).
+- The workflow page uses the editor-style full-width header (logo, back, title, account), not the 1200px dashboard width.
+- Dialog focus restoration is safe under React StrictMode. Component tests now render in StrictMode to catch that class of bug; it was found by E2E.

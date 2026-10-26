@@ -45,3 +45,4 @@ Client tests cover route protection redirect, API-unreachable Retry, sign-in req
 | Production mode (`npm run build && npm start`) | Pass | Static app served, CSP/HSTS headers present, `/api/auth/me` 401, outbox 404 |
 | Real SMTP email delivery | Blocked | No SMTP credentials yet |
 | Microsoft Edge | Blocked | Edge not available in the build environment |
+| Owner manual test on own PC (5-step check) | Pass | Product owner checked and approved Milestone 0 on 2026-10-26 |

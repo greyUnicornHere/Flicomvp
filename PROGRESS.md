@@ -4,7 +4,7 @@
 
 | # | Milestone | Status |
 |---|---|---|
-| 0 | **Foundation:** scripts, SQLite + migrations, invite-only magic-link auth, sessions, tokens + logo, error boundary, health/status | **Built. Awaiting owner approval.** |
+| 0 | **Foundation:** scripts, SQLite + migrations, invite-only magic-link auth, sessions, tokens + logo, error boundary, health/status | **Approved by owner 2026-10-26; merged to `main`.** |
 | 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | Not started |
 | 2 | Manual editor: organic graph editor, branches/loops/parallel/exceptions, validation, autosave, undo/redo | Not started |
 | 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | Not started |

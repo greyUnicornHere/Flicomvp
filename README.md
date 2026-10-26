@@ -12,7 +12,6 @@ You need **Node.js 22.13 or newer** (the current LTS is fine) and **Git**. Use C
 ```bash
 git clone https://github.com/greyUnicornHere/Flicomvp.git
 cd Flicomvp
-git checkout milestone-0-foundation   # until Milestone 0 is merged into main
 npm ci                                # install exact dependency versions
 npm run setup                         # creates .env and the local database
 npm run invite -- you@example.com     # invite yourself (any address works locally)

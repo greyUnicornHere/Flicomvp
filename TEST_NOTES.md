@@ -167,3 +167,8 @@ See DECISIONS.md: autosave saving on open (regression test proves the fix), new-
   - E2E: "adding steps never tidies the layout" (hand-placed step unchanged after adding steps; insert on an arrow slides only Verify stock and Finish; Auto-arrange then re-arranges columns) and "a long arrow goes around a step" (the drawn path never passes over the step; it becomes a simple curve again once the step is moved away).
   - Screenshots: `docs/evidence/m2/11-no-auto-tidy-1536.png`, `12-long-arrow-detour-1536.png`.
 - **Totals after these changes:** unit/API **162 / 162**, E2E **31 / 31**, lint, typecheck and build pass.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner manual test on own PC, including the no-auto-tidy and long-arrow changes | Pass | Product owner approved Milestone 2 on 2026-10-28 |

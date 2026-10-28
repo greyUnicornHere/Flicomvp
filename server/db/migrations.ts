@@ -69,6 +69,44 @@ export const migrations: Migration[] = [
       ALTER TABLE workflows ADD COLUMN graph_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}';
     `,
   },
+  {
+    id: 3,
+    name: 'ai_assistant',
+    sql: `
+      -- Assumptions an AI draft made, for the person to confirm or correct (JSON array).
+      ALTER TABLE workflows ADD COLUMN assumptions_json TEXT NOT NULL DEFAULT '[]';
+
+      -- One persistent Ask Flico conversation per workflow. Deleted with the workflow.
+      CREATE TABLE workflow_chat_messages (
+        id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL REFERENCES workflows (id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content TEXT NOT NULL,
+        source TEXT CHECK (source IN ('live', 'fixture')),
+        context_json TEXT,
+        proposal_json TEXT,
+        proposal_status TEXT CHECK (proposal_status IN ('pending', 'applied', 'cancelled', 'expired')),
+        base_revision INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_chat_workflow_seq ON workflow_chat_messages (workflow_id, seq);
+
+      -- Counts for daily AI limits. No prompts, workflow text or replies are stored here.
+      CREATE TABLE ai_usage (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('draft', 'quick_add', 'chat')),
+        day TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('live', 'fixture')),
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_ai_usage_user_day ON ai_usage (user_id, day, kind);
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

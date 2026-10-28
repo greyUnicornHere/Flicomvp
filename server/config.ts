@@ -31,13 +31,34 @@ const schema = z
     /** Sign-in link requests allowed per client address per 15 minutes. */
     AUTH_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).default(10),
     TRUST_PROXY: booleanString,
+    /**
+     * AI provider: anthropic (live Claude responses), fixture (deterministic test responses, never in
+     * production) or none. Empty means anthropic when ANTHROPIC_API_KEY is set, otherwise none.
+     */
+    AI_PROVIDER: z.enum(['anthropic', 'fixture', 'none', '']).default(''),
+    ANTHROPIC_API_KEY: optionalString,
+    AI_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
+    /** Longest a single AI request may take before Flico gives up (seconds). */
+    AI_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(300).default(90),
+    /** Per-person daily caps (UTC days). AI drafting, Quick Add and chat never use analysis credits. */
+    AI_DAILY_DRAFTS: z.coerce.number().int().min(0).max(10000).default(20),
+    AI_DAILY_QUICK_ADDS: z.coerce.number().int().min(0).max(10000).default(100),
+    AI_DAILY_CHAT: z.coerce.number().int().min(0).max(10000).default(150),
+    /** AI requests allowed per client address per minute (burst protection). */
+    AI_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).default(20),
   })
   .superRefine((env, ctx) => {
     if (env.MAIL_TRANSPORT === 'smtp') {
       if (!env.SMTP_HOST) ctx.addIssue({ code: 'custom', path: ['SMTP_HOST'], message: 'is required when MAIL_TRANSPORT=smtp' });
       if (!env.MAIL_FROM) ctx.addIssue({ code: 'custom', path: ['MAIL_FROM'], message: 'is required when MAIL_TRANSPORT=smtp' });
     }
+    if (env.AI_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) {
+      ctx.addIssue({ code: 'custom', path: ['ANTHROPIC_API_KEY'], message: 'is required when AI_PROVIDER=anthropic' });
+    }
     if (env.NODE_ENV === 'production') {
+      if (env.AI_PROVIDER === 'fixture') {
+        ctx.addIssue({ code: 'custom', path: ['AI_PROVIDER'], message: 'fixture is for development and tests only, never production' });
+      }
       if (env.MAIL_TRANSPORT === 'dev-outbox') {
         ctx.addIssue({
           code: 'custom',
@@ -52,6 +73,12 @@ const schema = z
   });
 
 export type Config = z.infer<typeof schema>;
+
+/** The AI provider actually in use after applying the defaults. */
+export function aiProviderKind(config: Config): 'anthropic' | 'fixture' | 'none' {
+  if (config.AI_PROVIDER) return config.AI_PROVIDER;
+  return config.ANTHROPIC_API_KEY ? 'anthropic' : 'none';
+}
 
 export class ConfigError extends Error {
   constructor(readonly problems: string[]) {

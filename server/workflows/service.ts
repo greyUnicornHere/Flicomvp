@@ -1,4 +1,4 @@
-import type { WorkflowDetail, WorkflowStatus, WorkflowSummary } from '../../shared/api.js';
+import type { Assumption, WorkflowDetail, WorkflowStatus, WorkflowSummary } from '../../shared/api.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
 import type { Db } from '../db/database.js';
 import { newId } from '../auth/tokens.js';
@@ -12,11 +12,12 @@ type Row = {
   status: WorkflowStatus;
   revision: number;
   graph_json: string;
+  assumptions_json: string;
   created_at: number;
   updated_at: number;
 };
 
-const toSummary = (row: Omit<Row, 'graph_json' | 'revision'>): WorkflowSummary => ({
+const toSummary = (row: Pick<Row, 'id' | 'name' | 'status' | 'created_at' | 'updated_at'>): WorkflowSummary => ({
   id: row.id,
   name: row.name,
   status: row.status,
@@ -28,6 +29,7 @@ const toDetail = (row: Row): WorkflowDetail => ({
   ...toSummary(row),
   revision: row.revision,
   graph: JSON.parse(row.graph_json) as WorkflowGraph,
+  assumptions: JSON.parse(row.assumptions_json) as Assumption[],
 });
 
 /** A new manual workflow contains exactly one Start step and nothing else (spec §6). */
@@ -56,12 +58,19 @@ export function getWorkflow(db: Db, ownerId: string, id: string): WorkflowDetail
   return row ? toDetail(row) : null;
 }
 
-export function createWorkflow(db: Db, ownerId: string, name: string, graph: WorkflowGraph, now: number): WorkflowDetail {
+export function createWorkflow(
+  db: Db,
+  ownerId: string,
+  name: string,
+  graph: WorkflowGraph,
+  now: number,
+  assumptions: Assumption[] = [],
+): WorkflowDetail {
   const id = newId();
   db.prepare(
-    `INSERT INTO workflows (id, owner_id, name, status, revision, graph_json, created_at, updated_at)
-     VALUES (?, ?, ?, 'draft', 1, ?, ?, ?)`,
-  ).run(id, ownerId, name, JSON.stringify(graph), now, now);
+    `INSERT INTO workflows (id, owner_id, name, status, revision, graph_json, assumptions_json, created_at, updated_at)
+     VALUES (?, ?, ?, 'draft', 1, ?, ?, ?, ?)`,
+  ).run(id, ownerId, name, JSON.stringify(graph), JSON.stringify(assumptions), now, now);
   return getWorkflow(db, ownerId, id)!;
 }
 
@@ -70,7 +79,7 @@ export function renameWorkflow(db: Db, ownerId: string, id: string, name: string
     .prepare('UPDATE workflows SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
     .run(name, now, id, ownerId).changes;
   if (!changed) return null;
-  const { revision: _revision, graph: _graph, ...summary } = getWorkflow(db, ownerId, id)!;
+  const { revision: _revision, graph: _graph, assumptions: _assumptions, ...summary } = getWorkflow(db, ownerId, id)!;
   return summary;
 }
 
@@ -104,4 +113,12 @@ export function saveGraph(
   if (!current) return { ok: false, reason: 'not_found' };
   if (!changed) return { ok: false, reason: 'conflict', currentRevision: current.revision };
   return { ok: true, revision: current.revision, updatedAt: new Date(now).toISOString() };
+}
+
+export function saveAssumptions(db: Db, ownerId: string, id: string, assumptions: Assumption[], now: number): boolean {
+  return (
+    db
+      .prepare('UPDATE workflows SET assumptions_json = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
+      .run(JSON.stringify(assumptions), now, id, ownerId).changes > 0
+  );
 }

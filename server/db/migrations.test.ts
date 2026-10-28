@@ -5,13 +5,13 @@ import { migrations, runMigrations } from './migrations.js';
 describe('runMigrations', () => {
   it('creates the schema once and is idempotent', () => {
     const db = openDatabase(':memory:');
-    expect(runMigrations(db)).toEqual(['001_auth_foundation', '002_workflow_persistence']);
+    expect(runMigrations(db)).toEqual(['001_auth_foundation', '002_workflow_persistence', '003_ai_assistant']);
     expect(runMigrations(db)).toEqual([]);
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map(
       (t) => t.name,
     );
     expect(tables).toEqual(
-      expect.arrayContaining(['invitations', 'magic_link_tokens', 'schema_migrations', 'sessions', 'users', 'workflows']),
+      expect.arrayContaining(['ai_usage', 'invitations', 'magic_link_tokens', 'schema_migrations', 'sessions', 'users', 'workflow_chat_messages', 'workflows']),
     );
   });
 
@@ -37,13 +37,24 @@ describe('runMigrations', () => {
     db.prepare("INSERT INTO users (id, email, created_at) VALUES ('u1', 'a@example.com', 1)").run();
     db.prepare("INSERT INTO workflows (id, owner_id, name, created_at, updated_at) VALUES ('w1', 'u1', 'Kept', 1, 2)").run();
 
-    expect(runMigrations(db)).toEqual(['002_workflow_persistence']);
+    expect(runMigrations(db)).toEqual(['002_workflow_persistence', '003_ai_assistant']);
     expect(db.prepare('SELECT name, status, revision, graph_json FROM workflows').get()).toEqual({
       name: 'Kept',
       status: 'draft',
       revision: 1,
       graph_json: '{"nodes":[],"edges":[]}',
     });
+    expect(db.prepare('SELECT assumptions_json FROM workflows').get()).toEqual({ assumptions_json: '[]' });
+  });
+
+  it('deletes a workflow\'s chat with the workflow', () => {
+    const db = openDatabase(':memory:');
+    runMigrations(db);
+    db.prepare("INSERT INTO users (id, email, created_at) VALUES ('u1', 'a@example.com', 1)").run();
+    db.prepare("INSERT INTO workflows (id, owner_id, name, created_at, updated_at) VALUES ('w1', 'u1', 'x', 1, 1)").run();
+    db.prepare("INSERT INTO workflow_chat_messages (id, workflow_id, owner_id, seq, role, content, created_at) VALUES ('m1', 'w1', 'u1', 1, 'user', 'hi', 1)").run();
+    db.prepare("DELETE FROM workflows WHERE id = 'w1'").run();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM workflow_chat_messages').get()).toEqual({ n: 0 });
   });
 
   it('rejects unknown workflow statuses', () => {

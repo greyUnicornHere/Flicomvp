@@ -14,6 +14,9 @@ import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import { workflowRoutes } from './routes/workflows.js';
 import { devRoutes } from './routes/dev.js';
+import { aiRoutes } from './routes/ai.js';
+import { createProvider } from './ai/index.js';
+import type { AiProvider } from './ai/provider.js';
 
 export type BuildAppOptions = {
   config: Config;
@@ -22,6 +25,10 @@ export type BuildAppOptions = {
   now?: () => number;
   /** Built web client to serve in production. Defaults to ./dist/client. */
   clientDir?: string;
+  /** AI provider override (tests). Defaults to the one configured; null means AI isn't set up. */
+  ai?: AiProvider | null;
+  /** Send request logs here (tests check that no workflow or chat content is logged). */
+  logStream?: { write: (line: string) => void };
 };
 
 function allowedOrigins(config: Config): Set<string> {
@@ -44,10 +51,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     trustProxy: config.TRUST_PROXY,
     bodyLimit: 64 * 1024,
     logger:
-      config.NODE_ENV === 'test'
+      config.NODE_ENV === 'test' && !options.logStream
         ? false
         : {
             level: 'info',
+            ...(options.logStream ? { stream: options.logStream } : {}),
             // Log method and path only: never query strings, headers, cookies or bodies.
             serializers: {
               req: (req) => ({ method: req.method, path: req.url.split('?')[0] }),
@@ -114,6 +122,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(healthRoutes(ctx), { prefix: '/api' });
   await app.register(authRoutes(ctx), { prefix: '/api/auth' });
   await app.register(workflowRoutes(ctx), { prefix: '/api/workflows' });
+  await app.register(aiRoutes(ctx, options.ai === undefined ? createProvider(config) : options.ai), { prefix: '/api' });
   if (!isProduction && mailer.kind === 'dev-outbox') {
     await app.register(devRoutes(ctx), { prefix: '/api/dev' });
   }

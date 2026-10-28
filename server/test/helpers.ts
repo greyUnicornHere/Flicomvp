@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../app.js';
+import { buildApp, type BuildAppOptions } from '../app.js';
 import { loadConfig, type Config } from '../config.js';
 import { openDatabase, type Db } from '../db/database.js';
 import { runMigrations } from '../db/migrations.js';
@@ -18,13 +18,16 @@ export type TestApp = {
   clock: { now: number };
 };
 
-export async function makeTestApp(env: Record<string, string> = {}): Promise<TestApp> {
+export async function makeTestApp(
+  env: Record<string, string> = {},
+  options: Pick<BuildAppOptions, 'ai' | 'logStream'> = {},
+): Promise<TestApp> {
   const config = loadConfig({ NODE_ENV: 'test', APP_URL, DATABASE_PATH: ':memory:', ...env });
   const db = openDatabase(':memory:');
   runMigrations(db);
   const outbox = new DevOutbox();
   const clock = { now: Date.UTC(2026, 9, 25, 12, 0, 0) };
-  const app = await buildApp({ config, db, mailer: outbox, now: () => clock.now });
+  const app = await buildApp({ config, db, mailer: outbox, now: () => clock.now, ...options });
   return { app, db, outbox, config, clock };
 }
 

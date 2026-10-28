@@ -129,3 +129,55 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - **Escape on a step dropped keyboard focus** to the page (the diagram library's own selection handling). Flico now manages selection itself.
 - **Repeat connections crossed other steps.** They now route around them.
 - **"Suggest fix with AI, Coming soon"** was read with a stray space; menu items now have explicit accessible names.
+
+## Milestone 3 — AI generation, Quick Add and Ask Flico (2026-10-28)
+
+### Owner decisions (asked before building)
+- **Provider:** Anthropic Claude, through the official `@anthropic-ai/sdk`, behind a provider-agnostic adapter (`server/ai/provider.ts`). Default model `claude-opus-5-5` (`AI_MODEL`).
+- **Live demo:** the owner adds `ANTHROPIC_API_KEY` to this cloud environment. Until then everything runs against a clearly labelled test fixture and nothing pretends to be a live answer.
+- **Cost of AI:** AI drafts, Quick Add and Ask Flico never use analysis credits. They have per-person daily limits (UTC days), set in `.env`: `AI_DAILY_DRAFTS=20`, `AI_DAILY_QUICK_ADDS=100`, `AI_DAILY_CHAT=150` (Suggest Fix counts as chat). Reaching a limit gives a clear message and manual editing keeps working.
+
+### Adapter and providers
+- A provider turns one request into raw text and never touches the database. Use cases (`server/ai/service.ts`): `generateWorkflow`, `quickAdd`, `answerAssistant` (answers, edit proposals and Suggest Fix). Analysis (Milestone 4) will plug into the same adapter.
+- **`AI_PROVIDER`**: `anthropic` (live), `fixture` (deterministic test responses for development and automated tests; refused in production) or `none`. Empty means `anthropic` when a key is set, otherwise `none`. With no provider, every AI feature says "AI isn't set up on this server" and sends nothing.
+- **Live provider** (`server/ai/anthropic.ts`): structured output (`output_config.format` with a JSON Schema), `effort` per task (drafts and chat `medium`, Quick Add `low`), adaptive thinking (always on for this model), request timeout (`AI_TIMEOUT_SECONDS`, default 90; Quick Add at most 30), one SDK retry for transient errors. **Server-side refusal fallback is enabled** (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`): if the model declines, Anthropic re-runs the request on its recommended fallback model. If the API rejects that option, Flico asks once more without it. A final refusal shows "Flico couldn't help with that request."
+- The Claude API address is always explicit (`AI_BASE_URL`, default `https://api.anthropic.com`, must be https in production), so the key can never follow an `ANTHROPIC_BASE_URL` inherited from the machine's environment. (This cloud environment sets one for its own use.)
+- Errors map to safe messages (timeout, busy, unavailable, misconfigured, refused). Only the error class is logged; prompts, workflow text and replies never are.
+- Every response is tagged `live` or `fixture`. The interface labels fixture output ("Test fixture, not a live AI response", "test mode" notice on Create with AI, fixture note on drafts and Quick Add).
+
+### Validation of model output (never trusted)
+- Versioned schemas (`server/ai/schemas.ts`, `v1`): JSON Schema sent to the model, then re-checked with Zod (types, enums, lengths, counts).
+- The model never sees or produces real IDs. Steps and connections are shown as short refs (`s1`, `c1`) and new steps use `n1`, `n2`… The server translates refs to IDs; an unknown or duplicate ref is an error, never a guess.
+- Edit proposals are a finite list of operations (`shared/aiOps.ts`): add/update/remove step, add/remove/update connection, at most 40. Applying is all-or-nothing and checks references, duplicate IDs, Start protection, names, Yes/No only from decisions (one each), self-connections, duplicate connections and size limits.
+- **One correction attempt:** if output fails any check, the model gets the list of problems once and must return a corrected response. Never a third call.
+  - Draft still invalid: the valid part is kept (broken steps and connections dropped, a Start added if missing) and marked partial; the editor offers **Retry** (a new draft; the partial one stays saved) or **Continue editing manually**. Nothing usable: nothing is created and the description stays in the box.
+  - Chat proposal still invalid: the answer is shown with "I couldn't turn this into a valid change… nothing is proposed".
+  - Quick Add still invalid: a clear message in the menu; nothing inserted.
+- **Prompt injection:** workflow text, descriptions and issues are JSON-encoded inside tagged blocks (with `<` escaped so text can't close a tag), and the system prompt says to treat them as data. The prompt contains only this workflow, its chat and its issues: no other workflows, no secrets, no IDs. Above all, nothing a model says can change the graph without validation and the person's explicit Apply.
+
+### AI Create
+- `POST /api/workflows/ai-draft` creates a named draft straight away, without questions. Steps the description didn't mention are marked `ai-inferred` / `unconfirmed`, with an **Inferred** tag on the canvas and a "Confirm step" action in the step details. The draft is laid out with the normal auto-arrange and fitted to the canvas.
+- **Assumptions** are stored with the workflow (`assumptions_json`) and shown in a collapsible card: Confirm, Edit (an edited assumption counts as confirmed), Remove and Show step(s). It collapses when Ask Flico opens.
+
+### AI Quick Add
+- The **Describe what happens next…** box in the + menu infers a type (Action, Decision, Approval, Wait, or Finish where a path ends) and a name, then **inserts immediately** at that spot as one undoable step. This is the only AI action without a preview (spec §6). A message offers **Undo**. The step is marked Inferred until confirmed (design §7.4). Finish suggested between two steps becomes an Action.
+
+### Ask Flico
+- Floating, movable window (not a sidebar): compact 360×460, **Expand** to 520×640, **Minimize**, **Close**. It always stays inside the viewport (drag, resize or window resize), and can be moved with arrow keys on its handle. Escape closes it and focus returns to the Ask Flico button.
+- One conversation per workflow, stored in `workflow_chat_messages` (deleted with the workflow). **Clear History** asks first and never touches the workflow. The latest 20 turns go to the model as context. A question and its answer are stored together only when the answer succeeds, so a failure leaves nothing half-saved; the message can be retried.
+- Fixed suggested prompts: Summarize / What's missing or unclear? / Fix the issues (when there are issues). For a selected step: Explain / What could go wrong / Suggest an improvement. "Ask Flico about this step" in the step details sets that context.
+- Model text is plain text only (never HTML or Markdown), so it can't inject markup.
+- No analysis exists yet. The prompt says so; Milestone 4 adds the latest analysis to the context.
+
+### Edit proposals, preview and Apply (contract §3)
+- Before any AI request about the graph, pending edits are saved first so the server has exactly what the person sees. The request names that revision; a stale one is refused.
+- A valid proposal appears in chat **and** as a read-only overlay on the canvas at the same time: added steps and connections green **+ Added**, changed amber **↗ Updated**, removed red, dashed and struck through **− Removed** (badges and line styles, not colour alone; screen-reader labels say "Proposed: added", etc.). A bar shows what changes, a legend, and Apply / Cancel. Editing is paused during the preview. The saved graph isn't touched.
+- **Apply** (`POST …/chat/:messageId/apply`) re-checks owner, the expected revision, the operations and graph integrity, then saves in one transaction. The editor adopts the saved graph as **one undoable step**. If the workflow changed since the suggestion, the proposal is marked expired and nothing changes.
+- **Cancel** discards only the preview and marks the suggestion cancelled. Suggestions in the history keep their final state (Applied / Cancelled / Not applied).
+- **Suggest Fix with AI** (issues menu, or the prompt) asks for the smallest fix for the current validation issues and goes through the same preview and Apply.
+- New steps from an applied proposal are placed with the same `placeNewSteps` as manual edits (moved to `shared/layout.ts` so the server places them exactly as the preview did).
+
+### Limits and protection
+- Daily limits as above; `AI_RATE_LIMIT` (default 20 per minute per client address) on AI requests; text limits: description 4,000, chat message 2,000, Quick Add 300 characters; model output bounded (max tokens per task, at most 60 draft steps).
+- `ai_usage` records counts and token totals per person and day (no content), so costs can be monitored.
+- The sign-in link verification limit now follows `AUTH_RATE_LIMIT` when that is set above 30 (default unchanged at 30 per 15 minutes). The longer E2E suite signs in more than 30 times.

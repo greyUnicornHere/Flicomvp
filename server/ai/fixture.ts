@@ -27,10 +27,10 @@ export class FixtureProvider implements AiProvider {
   readonly source = 'fixture' as const;
 
   async generate(request: AiRequest): Promise<AiResponse> {
-    const first = request.messages[0]!.content;
-    const attempt = request.messages.filter((m) => m.role === 'assistant').length; // >0 on the correction retry
     const last = request.messages.at(-1)!.content;
-    const input = request.task === 'chat' ? (attempt ? request.messages.at(-3)!.content : last) : first;
+    // The correction retry appends [previous answer, correction]; the original prompt is then third from the end.
+    const attempt = last.startsWith('Your previous response could not be used') ? 1 : 0;
+    const input = request.messages.at(attempt ? -3 : -1)!.content;
     if (input.includes('[fixture:error]')) throw new AiError('unavailable', AI_ERROR_MESSAGES.unavailable);
     if (input.includes('[fixture:invalid]') || (input.includes('[fixture:retry]') && attempt === 0)) {
       return respond('{"this is": not json');
@@ -60,7 +60,14 @@ function draft(description: string) {
     /\?|^if\b|whether/i.test(s) ? 'decision' : /approv|sign[s -]?off/i.test(s) ? 'approval' : /\bwait/i.test(s) ? 'wait' : 'action';
   const steps = [
     { key: 's0', type: 'start', label: 'Start', inferred: false, notes: '' },
-    ...sentences.map((s, i) => ({ key: `s${i + 1}`, type: typeOf(s), label: title(s.replace(/^if\s+/i, '')) + (typeOf(s) === 'decision' && !s.endsWith('?') ? '?' : ''), inferred: false, notes: '' })),
+    ...sentences.map((s, i) => ({
+      key: `s${i + 1}`,
+      type: typeOf(s),
+      // "If the amount is over 5000, the head approves it." becomes the question "The amount is over 5000?"
+      label: typeOf(s) === 'decision' ? `${title(s.replace(/^if\s+/i, '').split(',')[0]!.replace(/\?$/, ''), 8)}?` : title(s),
+      inferred: false,
+      notes: '',
+    })),
     { key: 'end', type: 'finish', label: 'Process complete', inferred: true, notes: '' },
   ];
   const connections: { from: string; to: string; type: string; label: string }[] = [];

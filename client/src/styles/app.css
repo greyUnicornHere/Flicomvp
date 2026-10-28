@@ -85,3 +85,31 @@
 .fl-step-branch[data-branch="no"] { bottom: -18px; }
 
 .react-flow__edge:focus-visible .react-flow__edge-path { stroke: var(--fl-focus) !important; stroke-width: 2.5px !important; }
+
+/* ---------- AI (Milestone 3) ---------- */
+
+/* Proposed-change badges on the canvas preview: text + colour, never colour alone. */
+.fl-diff-badge {
+  position: absolute; top: -11px; left: 14px; display: inline-flex; align-items: center; gap: 3px; height: 20px;
+  padding: 0 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 1; color: #fff; white-space: nowrap;
+}
+.fl-diff-badge[data-diff="added"] { background: #1F7A58; }
+.fl-diff-badge[data-diff="modified"] { background: #8A5B12; }
+.fl-diff-badge[data-diff="removed"] { background: #A3504B; }
+
+/* An AI-inferred step that hasn't been confirmed yet. */
+.fl-inferred {
+  position: absolute; bottom: -10px; left: 14px; display: inline-flex; align-items: center; gap: 3px; height: 19px; padding: 0 7px;
+  border-radius: 999px; border: 1px dashed var(--fl-brand); background: var(--fl-brand-pale); color: var(--fl-brand-active);
+  font-size: 10.5px; font-weight: 650; white-space: nowrap;
+}
+
+.fl-chat { position: fixed; z-index: 40; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-popover); box-shadow: var(--fl-shadow-float); overflow: hidden; }
+.fl-chat-bubble { max-width: 88%; border-radius: 14px; padding: 9px 12px; font-size: 13.5px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@keyframes fl-dot { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+.fl-dots span { display: inline-block; width: 5px; height: 5px; margin: 0 1.5px; border-radius: 999px; background: currentColor; animation: fl-dot 1.2s infinite ease-in-out; }
+.fl-dots span:nth-child(2) { animation-delay: .15s; }
+.fl-dots span:nth-child(3) { animation-delay: .3s; }
+@media (prefers-reduced-motion: reduce) { .fl-dots span { animation: none; opacity: .6; } }

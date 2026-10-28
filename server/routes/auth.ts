@@ -67,7 +67,8 @@ export const authRoutes =
 
     app.post(
       '/verify',
-      { config: { rateLimit: { max: 30, timeWindow: FIFTEEN_MINUTES } } },
+      // Opening links: 30 per 15 minutes by default (raised only if AUTH_RATE_LIMIT is set higher, e.g. for E2E runs).
+      { config: { rateLimit: { max: Math.max(30, config.AUTH_RATE_LIMIT), timeWindow: FIFTEEN_MINUTES } } },
       async (request, reply) => {
         const parsed = verifyBody.safeParse(request.body);
         if (!parsed.success) return sendError(reply, 400, 'link_invalid', linkErrors.link_invalid);

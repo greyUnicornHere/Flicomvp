@@ -41,6 +41,13 @@ describe('FixtureProvider (development and tests only)', () => {
     const fixed = applyOperations(open, fix.proposal!.operations);
     expect(fixed.ok && validateWorkflow(fixed.graph).some((i) => i.code === 'decision_missing_branch')).toBe(false);
 
+    const history = [
+      { role: 'user' as const, content: 'Earlier question' },
+      { role: 'assistant' as const, content: 'Earlier answer' },
+    ];
+    const withHistory = await answerAssistant(fixture, { graph: open, history, content: 'Fix it', fix: true }, 1000);
+    expect(withHistory.proposal).not.toBeNull();
+
     const plain = await answerAssistant(fixture, { graph, history: [], content: 'Summarize this workflow', fix: false }, 1000);
     expect(plain.proposal).toBeNull();
     expect(plain.reply).toMatch(/5 steps after Start/);

@@ -2,10 +2,11 @@ import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps } from '@xyflow/
 import { Plus, Repeat } from 'lucide-react';
 import type { WorkflowEdge } from '../../../shared/graph';
 import { useEditorUi } from './EditorContext';
+import { CHANGE_BADGE, type Change } from './changes';
 import { cubic, curvePoints, roundedPath, type Detour, type Point } from './routing';
 
 export type FlowEdgeType = Edge<
-  { edge: WorkflowEdge; sourceLabel: string; targetLabel: string; loopBottom?: number; detour?: Detour },
+  { edge: WorkflowEdge; sourceLabel: string; targetLabel: string; loopBottom?: number; detour?: Detour; change?: Change },
   'flow'
 >;
 
@@ -49,11 +50,19 @@ export function FlowEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, da
   const path = route.path;
 
   const isLoop = edge.type === 'loop';
-  const canInsert = edge.type !== 'loop' && edge.type !== 'exception';
+  const canInsert = edge.type !== 'loop' && edge.type !== 'exception' && !ui.previewing;
   const showPlus = ui.hoveredEdgeId === id || selected || ui.selectedEdgeId === id;
   const labelAt = route.at(0.5);
   const plusAt = route.at(edge.label ? 0.82 : 0.5);
-  const stroke = selected ? 'var(--fl-brand)' : edge.type === 'exception' ? 'var(--fl-exception-stroke)' : 'var(--fl-edge)';
+  const change = data.change;
+  const stroke = change
+    ? { added: 'var(--fl-diff-add)', modified: 'var(--fl-diff-change)', removed: 'var(--fl-diff-remove)' }[change]
+    : selected
+      ? 'var(--fl-brand)'
+      : edge.type === 'exception'
+        ? 'var(--fl-exception-stroke)'
+        : 'var(--fl-edge)';
+  const dashed = change === 'removed' ? '3 5' : edge.type === 'exception' ? '6 5' : undefined;
 
   return (
     <>
@@ -62,9 +71,19 @@ export function FlowEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, da
         path={path}
         markerEnd={markerEnd}
         interactionWidth={22}
-        style={{ stroke, strokeWidth: selected ? 2.25 : 1.85, strokeDasharray: edge.type === 'exception' ? '6 5' : undefined }}
+        style={{ stroke, strokeWidth: selected || change ? 2.25 : 1.85, strokeDasharray: dashed, opacity: change === 'removed' ? 0.75 : undefined }}
       />
       <EdgeLabelRenderer>
+        {change && (
+          <span
+            className="fl-diff-badge pointer-events-none"
+            data-diff={change}
+            style={{ top: 0, left: 0, transform: `translate(-50%, -50%) translate(${labelAt.x}px, ${labelAt.y + (edge.label ? -20 : 0)}px)` }}
+            aria-hidden="true"
+          >
+            {CHANGE_BADGE[change]}
+          </span>
+        )}
         {edge.label && (
           <span
             className={`pointer-events-none absolute inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-[650] leading-4 ${chipClass[edge.type] ?? chipClass.loop}`}

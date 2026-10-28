@@ -36,6 +36,10 @@ export default defineConfig({
       MAIL_TRANSPORT: 'dev-outbox',
       // Every E2E test signs in from the same machine; the default limit (10) is covered by unit tests.
       AUTH_RATE_LIMIT: '200',
+      // Deterministic, clearly labelled test responses: E2E never calls a live AI model.
+      AI_PROVIDER: 'fixture',
+      ANTHROPIC_API_KEY: '',
+      AI_RATE_LIMIT: '500',
     },
   },
 });

@@ -45,6 +45,15 @@ System status: **http://localhost:5173/status** (API: `/api/health`).
 
 All settings live in `.env` (created from [`.env.example`](.env.example), never committed). In production Flico refuses to start unless `APP_URL` is an `https://` address and real email (`MAIL_TRANSPORT=smtp` with `SMTP_HOST` and `MAIL_FROM`) is configured. It explains exactly what to fix.
 
+## AI (Claude)
+
+AI drafting, Quick Add and Ask Flico use Anthropic Claude on the server. The key is never sent to the browser.
+
+- **Live AI:** put your key in `.env` as `ANTHROPIC_API_KEY=…` (never commit it), then restart `npm run dev`. The default model is `claude-opus-5-5` (`AI_MODEL`).
+- **No key:** Flico works normally and the AI features say "AI isn't set up on this server". Nothing is sent.
+- **Test mode:** `AI_PROVIDER=fixture` gives fixed, clearly labelled test responses (used by the automated tests). It's refused in production.
+- Daily limits per person (reset at midnight UTC): `AI_DAILY_DRAFTS`, `AI_DAILY_QUICK_ADDS`, `AI_DAILY_CHAT`. AI never uses analysis credits.
+
 ## Project layout
 
 ```

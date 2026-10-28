@@ -87,8 +87,9 @@ test('E01/E02: Start only, then + inserts an Action with its name ready to edit'
   await page.getByRole('button', { name: 'Add a step after “Start”' }).click();
   const menu = page.getByRole('menu', { name: 'Add a step' });
   await expect(menu.getByRole('menuitem')).toHaveText(['Action', 'Decision', 'Approval', 'Wait', 'Finish']);
-  await expect(menu.getByRole('textbox', { name: 'Describe what happens next' })).toBeDisabled();
-  await expect(menu).toContainText('AI Quick Add arrives in a later update.');
+  // AI Quick Add (Milestone 3) sits under the manual types.
+  await expect(menu.getByRole('textbox', { name: 'Quick Add with AI' })).toBeEnabled();
+  await expect(menu).toContainText('Press Enter to add it right away. You can undo.');
   await page.screenshot({ path: `${SHOTS}/02-insert-menu-1536.png` });
   await menu.getByRole('menuitem', { name: 'Action' }).click();
 
@@ -380,7 +381,7 @@ test('E15: validation marker and header summary point to the same problem', asyn
   await expect(page.getByRole('button', { name: 'Add the No path of “Complete?”' })).toBeVisible();
 
   await summary.click();
-  await expect(page.getByRole('menuitem', { name: 'Suggest fix with AI, Coming soon' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('menuitem', { name: 'Suggest fix with AI' })).not.toHaveAttribute('aria-disabled', 'true');
   await page.screenshot({ path: `${SHOTS}/08-validation-summary-1536.png` });
   await page.getByRole('menuitem', { name: '“Complete?” has no No path yet.' }).click();
   await expect(decision).toBeFocused();
@@ -397,7 +398,7 @@ test('E15: validation marker and header summary point to the same problem', asyn
   await expect(page.getByRole('menu', { name: 'Analyze' })).toContainText('This workflow is ready for analysis.');
   await expect(page.getByRole('menuitem', { name: 'Quick Analysis, Coming soon' })).toHaveAttribute('aria-disabled', 'true');
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Ask Flico' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Ask Flico' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();
 });
 

@@ -20,6 +20,10 @@ type Props = {
   issues: Issue[];
   onShowIssue: (issue: Issue) => void;
   analysisCheck: PreAnalysisResult;
+  aiAvailable: boolean;
+  chatOpen: boolean;
+  onToggleChat: () => void;
+  onSuggestFix: () => void;
 };
 
 const soon = 'Available in a later update';
@@ -62,12 +66,20 @@ export function EditorHeader(props: Props) {
             width={340}
             items={[
               ...issues.slice(0, 12).map((issue) => ({ label: issue.message, onSelect: () => props.onShowIssue(issue) })),
-              { label: 'Suggest fix with AI', icon: <Sparkles size={15} aria-hidden="true" />, disabled: true, hint: 'Coming soon' },
+              props.aiAvailable
+                ? { label: 'Suggest fix with AI', icon: <Sparkles size={15} aria-hidden="true" />, onSelect: props.onSuggestFix }
+                : { label: 'Suggest fix with AI', icon: <Sparkles size={15} aria-hidden="true" />, disabled: true, hint: 'AI not set up' },
             ]}
           />
         )}
 
-        <button type="button" className={soonBtn} disabled title={soon} aria-describedby="fl-soon">
+        <button
+          type="button"
+          className={`${soonBtn} ${props.chatOpen ? '!border-fl-brand !bg-fl-brand-pale !text-fl-brand' : ''}`}
+          aria-pressed={props.chatOpen}
+          onClick={props.onToggleChat}
+          data-ask-flico
+        >
           <Sparkles size={15} aria-hidden="true" /> Ask Flico
         </button>
         <AnalyzeMenu check={props.analysisCheck} />

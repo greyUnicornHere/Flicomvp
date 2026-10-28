@@ -75,7 +75,7 @@ describe('dashboard', () => {
     mockApi({
       'GET /api/auth/me': signedIn(),
       'GET /api/workflows': { status: 200, body: { workflows: three } },
-      'GET /api/workflows/w2': { status: 200, body: { workflow: { ...three[1], revision: 1, graph: { nodes: [], edges: [] } } } },
+      'GET /api/workflows/w2': { status: 200, body: { workflow: { ...three[1], revision: 1, graph: { nodes: [], edges: [] }, assumptions: [] } } },
     });
     const router = renderAt('/');
     await userEvent.click(await screen.findByText('Oct 25, 2026'));
@@ -84,7 +84,7 @@ describe('dashboard', () => {
   });
 
   it('Build manually creates a workflow and opens it (D02)', async () => {
-    const created = { ...wf('new1', 'Untitled workflow', '2026-10-26T12:00:00.000Z'), revision: 1, graph: { nodes: [], edges: [] } };
+    const created = { ...wf('new1', 'Untitled workflow', '2026-10-26T12:00:00.000Z'), revision: 1, graph: { nodes: [], edges: [] }, assumptions: [] };
     const calls = mockApi({
       'GET /api/auth/me': signedIn(),
       'GET /api/workflows': { status: 200, body: { workflows: [] } },
@@ -224,15 +224,56 @@ describe('account menu (D08)', () => {
 });
 
 describe('create with AI route', () => {
-  it('is clearly marked unavailable and cannot submit', async () => {
-    const calls = mockApi({ 'GET /api/auth/me': signedIn() });
+  const status = (available: boolean, source: 'live' | 'fixture' | null = available ? 'live' : null) => ({
+    status: 200,
+    body: { available, source, limits: { draft: { limit: 20, used: 3 }, quick_add: { limit: 100, used: 0 }, chat: { limit: 150, used: 0 } } },
+  });
+
+  it('says clearly when AI is not set up and sends nothing', async () => {
+    const calls = mockApi({ 'GET /api/auth/me': signedIn(), 'GET /api/ai/status': status(false) });
     renderAt('/create/ai');
     expect(await screen.findByRole('heading', { name: 'Create with AI' })).toBeInTheDocument();
-    expect(screen.getByText("AI drafting isn't available yet.")).toBeInTheDocument();
+    expect(await screen.findByText("AI isn't set up on this Flico server yet.")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Describe your workflow'), 'We receive orders by email');
     expect(screen.getByRole('button', { name: 'Create draft' })).toBeDisabled();
-    // Nothing is sent anywhere except the session check.
-    expect(new Set(calls.map((c) => c.key))).toEqual(new Set(['GET /api/auth/me']));
+    expect(new Set(calls.map((c) => c.key))).toEqual(new Set(['GET /api/auth/me', 'GET /api/ai/status']));
+  });
+
+  it('creates a draft and opens it in the editor', async () => {
+    const created = { ...wf('d1', 'Order handling', '2026-10-26T12:00:00.000Z'), revision: 1, graph: { nodes: [], edges: [] }, assumptions: [] };
+    const calls = mockApi({
+      'GET /api/auth/me': signedIn(),
+      'GET /api/ai/status': status(true),
+      'POST /api/workflows/ai-draft': { status: 201, body: { workflow: created, source: 'live', partial: false } },
+      'GET /api/workflows/d1': { status: 200, body: { workflow: created } },
+    });
+    const router = renderAt('/create/ai');
+    expect(await screen.findByText(/17 of 20 AI drafts left today/)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Describe your workflow'), '  We receive orders by email ');
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/workflows/d1'));
+    expect(calls.find((c) => c.key === 'POST /api/workflows/ai-draft')?.body).toEqual({ description: 'We receive orders by email' });
+  });
+
+  it('keeps the description and offers to try again when drafting fails', async () => {
+    mockApi({
+      'GET /api/auth/me': signedIn(),
+      'GET /api/ai/status': status(true),
+      'POST /api/workflows/ai-draft': { status: 503, body: { error: { code: 'ai_unavailable', message: 'Flico took too long to respond. Please try again.' } } },
+    });
+    renderAt('/create/ai');
+    await screen.findByText(/AI drafts left today/);
+    await userEvent.type(screen.getByLabelText('Describe your workflow'), 'Orders arrive');
+    await userEvent.click(screen.getByRole('button', { name: 'Create draft' }));
+    expect(await screen.findByText('Flico took too long to respond. Please try again.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Describe your workflow')).toHaveValue('Orders arrive');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('labels the test fixture as not a live AI model', async () => {
+    mockApi({ 'GET /api/auth/me': signedIn(), 'GET /api/ai/status': status(true, 'fixture') });
+    renderAt('/create/ai');
+    expect(await screen.findByText(/built-in test fixture instead of a live AI model/)).toBeInTheDocument();
   });
 });
 

@@ -7,7 +7,7 @@ import type { AiProvider } from './provider.js';
 export function createProvider(config: Config): AiProvider | null {
   switch (aiProviderKind(config)) {
     case 'anthropic':
-      return new AnthropicProvider(config.ANTHROPIC_API_KEY!, config.AI_MODEL);
+      return new AnthropicProvider(config.ANTHROPIC_API_KEY!, config.AI_MODEL, {}, config.AI_BASE_URL);
     case 'fixture':
       return config.NODE_ENV === 'production' ? null : new FixtureProvider();
     case 'none':

@@ -12,29 +12,42 @@ export class AnthropicProvider implements AiProvider {
   constructor(
     apiKey: string,
     private readonly model: string,
+    /** Tests only: e.g. a stub `fetch`. */
+    clientOptions: Omit<NonNullable<ConstructorParameters<typeof Anthropic>[0]>, 'apiKey'> = {},
+    baseURL = 'https://api.anthropic.com',
   ) {
+    // The address is always explicit so the key is never sent to an ANTHROPIC_BASE_URL inherited from the environment.
     // One SDK retry for transient failures (429/5xx/connection); Flico's own retry is only for invalid output.
-    this.client = new Anthropic({ apiKey, maxRetries: 1 });
+    this.client = new Anthropic({ apiKey, baseURL, maxRetries: 1, ...clientOptions });
+  }
+
+  private send(request: AiRequest, fallback: boolean) {
+    return this.client.beta.messages.create(
+      {
+        model: this.model,
+        max_tokens: request.maxTokens,
+        system: request.system,
+        messages: request.messages,
+        output_config: { effort: request.effort, format: { type: 'json_schema', schema: request.schema } },
+        // A declined request is re-run on Anthropic's recommended fallback model instead of failing.
+        ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+      },
+      { timeout: request.timeoutMs },
+    );
   }
 
   async generate(request: AiRequest): Promise<AiResponse> {
-    const fallback = supportsDefaultFallback(this.model);
     let response: Anthropic.Beta.Messages.BetaMessage;
     try {
-      response = await this.client.beta.messages.create(
-        {
-          model: this.model,
-          max_tokens: request.maxTokens,
-          system: request.system,
-          messages: request.messages,
-          output_config: { effort: request.effort, format: { type: 'json_schema', schema: request.schema } },
-          // A declined request is re-run on Anthropic's recommended fallback model instead of failing.
-          ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
-        },
-        { timeout: request.timeoutMs },
-      );
+      response = await this.send(request, supportsDefaultFallback(this.model));
     } catch (error) {
-      throw toAiError(error);
+      // If this account or model doesn't accept the refusal fallback, ask once more without it.
+      if (!(error instanceof Anthropic.BadRequestError) || !supportsDefaultFallback(this.model)) throw toAiError(error);
+      try {
+        response = await this.send(request, false);
+      } catch (retryError) {
+        throw toAiError(retryError);
+      }
     }
 
     if (response.stop_reason === 'refusal') throw new AiError('refused', AI_ERROR_MESSAGES.refused);
@@ -48,6 +61,7 @@ export class AnthropicProvider implements AiProvider {
 }
 
 function toAiError(error: unknown): AiError {
+  if (error instanceof AiError) return error;
   if (error instanceof Anthropic.APIConnectionTimeoutError) return new AiError('timeout', AI_ERROR_MESSAGES.timeout);
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
     return new AiError('misconfigured', AI_ERROR_MESSAGES.misconfigured);

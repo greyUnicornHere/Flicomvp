@@ -7,7 +7,7 @@
 | 0 | **Foundation:** scripts, SQLite + migrations, invite-only magic-link auth, sessions, tokens + logo, error boundary, health/status | **Approved by owner 2026-10-26; merged to `main`.** |
 | 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | **Approved by owner 2026-10-26; merged to `main`.** |
 | 2 | Manual editor: organic graph editor, branches/loops/parallel/exceptions, validation, autosave, undo/redo | **Approved by owner 2026-10-28; merged to `main`.** |
-| 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | Not started |
+| 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | **Built on `milestone-3-ai`; waiting for owner review.** Live Claude demo pending the API key. |
 | 4 | Analysis: credits, Quick/Guided, one-diagram change review, recommendations and application | Not started |
 | 5 | Pilot-ready: export, privacy-aware telemetry, feedback, audits, accessibility, deployment | Not started |
 | 6 | Pilot fixes only | Not started |
@@ -49,6 +49,15 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Continuous validation (step markers + header summary that focuses the step), pre-analysis check in the Analyze menu; Finish suggestion.
 - Keyboard-operable throughout, accurate screen-reader labels, reduced-motion support, 1280px layout.
 
+## Milestone 3: what works
+
+- **AI adapter** with a live Anthropic Claude provider (`claude-opus-5-5`, structured output, refusal fallback enabled) and a labelled test fixture for development and tests. Without a key, every AI feature says it isn't set up and sends nothing.
+- **Create with AI**: describe a process and get a named, laid-out draft immediately. Inferred steps are tagged and can be confirmed; assumptions can be confirmed, edited or removed. Invalid output gets one correction; if still invalid, the valid part is kept with Retry / Continue editing manually; a failure never creates anything or loses the description.
+- **AI Quick Add** in the + menu: type what happens next, press Enter; the step is inserted at once (marked Inferred) with Undo.
+- **Ask Flico**: movable floating window (compact, expand, minimize, close; always on screen; arrow-key moving), one saved conversation per workflow, Clear History, fixed contextual prompts, "Ask Flico about this step".
+- **AI edits and Suggest Fix**: explanation in chat plus a simultaneous canvas overlay (green added, amber updated, red struck-through removed, changed connections marked); Apply is checked on the server against the revision, all-or-nothing, and is one undoable step; Cancel changes nothing.
+- Daily AI limits per person (no analysis credits), rate limit, timeouts, input and output size limits; no workflow text or chat in logs.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -56,7 +65,12 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - E2E has run in Chromium only. Edge needs a machine with Edge installed.
 - Feedback in the account menu is disabled ("Coming soon") until Milestone 5.
 - Status is always Draft until analysis exists (Milestone 4).
-- Ask Flico, Export, AI Quick Add, Suggest Fix and analysis are visibly disabled until their milestones.
+- Export and analysis are visibly disabled until their milestones.
+- **Live AI not yet demonstrated:** no `ANTHROPIC_API_KEY` in this environment yet. All AI features are tested end to end with the test fixture, and the Claude adapter's request format and error handling are unit-tested against a stubbed API. The first live run happens once the key is added (see TEST_NOTES.md).
+- The test fixture follows a simple fixed pattern (one step per sentence, approval/removal/fix suggestions on keywords). It exists to test the app, not to judge AI quality.
+- Ask Flico doesn't use analysis results yet (there are none until Milestone 4).
+- A suggestion made before later edits can't be applied ("the workflow changed"); ask again. Moving a step while Flico is answering also counts as a change.
+- The Ask Flico window can cover part of the diagram; it can be moved, minimized or closed. Changes it previews are kept clear of it when possible.
 - Adding steps never re-arranges the diagram (owner feedback); only Auto-arrange does. Inserted steps make room by sliding the later steps on that path to the right.
 - Undo history lasts for the browser session only.
 - Arrows bend around a step that sits in their way. With very crowded hand-made layouts a detour can still touch a step; Auto-arrange tidies it.
@@ -65,4 +79,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/` and `docs/evidence/m2/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/` and `docs/evidence/m3/`.

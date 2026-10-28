@@ -2,24 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { AlertTriangle, Plus } from 'lucide-react';
 import type { WorkflowNode } from '../../../shared/graph';
+import { CHANGE_BADGE, type Change } from './changes';
 import { useEditorUi } from './EditorContext';
 import { BRANCH_LABEL, flowOut, openBranches, type Slot } from './ops';
 import { focusWhenReady } from './focus';
 import { STEP_META } from './stepMeta';
 
-export type StepFlowNode = Node<{ step: WorkflowNode }, 'step'>;
+export type StepFlowNode = Node<{ step: WorkflowNode; change?: Change }, 'step'>;
 
 const hiddenHandle = '!h-2 !w-2 !min-h-0 !min-w-0 !border-0 !bg-transparent';
 
 /** Organic step block: icon + up to two lines of name. Selection is an outline only; nodes never move or morph. */
 export function StepNode({ id, data, selected }: NodeProps<StepFlowNode>) {
   const ui = useEditorUi();
-  const { step } = data;
+  const { step, change } = data;
   const Icon = STEP_META[step.type].icon;
   const issues = ui.issuesByNode.get(id) ?? [];
   const editing = ui.editingId === id;
-  const open = openBranches(ui.graph, id);
-  const endsPath = step.type !== 'finish' && step.type !== 'decision' && flowOut(ui.graph, id).length === 0;
+  // While an AI proposal is previewed the canvas is read-only: no add buttons.
+  const open = ui.previewing ? [] : openBranches(ui.graph, id);
+  const endsPath = !ui.previewing && step.type !== 'finish' && step.type !== 'decision' && flowOut(ui.graph, id).length === 0;
+  const inferred = step.origin === 'ai-inferred' && step.assumptionStatus === 'unconfirmed';
 
   const add = (slot: Slot) => (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -31,8 +34,19 @@ export function StepNode({ id, data, selected }: NodeProps<StepFlowNode>) {
       className="fl-node fl-step"
       data-type={step.type}
       data-selected={selected ? 'true' : undefined}
+      data-diff={change}
       title={step.label}
     >
+      {change && (
+        <span className="fl-diff-badge" data-diff={change} aria-hidden="true">
+          {CHANGE_BADGE[change]}
+        </span>
+      )}
+      {inferred && !change && (
+        <span className="fl-inferred" aria-hidden="true">
+          Inferred
+        </span>
+      )}
       <Handle type="target" position={Position.Left} id="in" isConnectable={false} className={hiddenHandle} />
       <Handle type="source" position={Position.Right} id="out" isConnectable={false} className={hiddenHandle} />
       <Handle type="source" position={Position.Right} id="loop-out" isConnectable={false} className={hiddenHandle} style={{ top: '72%' }} />

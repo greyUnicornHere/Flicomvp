@@ -9,12 +9,18 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
-import type { WorkflowDetail } from '../../../shared/api';
+import { useLocation, useNavigate } from 'react-router';
+import type { AiSource, Assumption, ChatMessage, ChatMode, WorkflowDetail } from '../../../shared/api';
+import { applyOperations, diffGraphs, type GraphChanges } from '../../../shared/aiOps';
 import type { WorkflowGraph } from '../../../shared/graph';
 import { preAnalysisCheck, validateWorkflow, type Issue } from '../../../shared/validation';
 import { useAuth } from '../lib/auth';
 import { useAutosave } from '../lib/useAutosave';
 import { renameWorkflow, saveWorkflowGraph } from '../lib/workflows';
+import { applyProposal, cancelProposal, createAiDraft, fetchAiStatus, quickAddStep, removeAssumption, updateAssumption } from '../lib/ai';
+import { AskFlico } from './AskFlico';
+import { AssumptionsPanel, DraftNotice, PreviewBar } from './AiPanels';
+import { useChat, type ChatRequest } from './useChat';
 import { CanvasControls } from './CanvasControls';
 import { ConnectDialog, DecisionDialog, DeleteStepDialog, ExceptionDialog, LoopDialog, ParallelDialog } from './dialogs';
 import { EditorHeader } from './EditorHeader';
@@ -50,6 +56,7 @@ import {
   type OpResult,
   type Slot,
 } from './ops';
+import { CHANGE_BADGE, type Change } from './changes';
 import { StepNode, type StepFlowNode } from './StepNode';
 import { StepPopover } from './StepPopover';
 import { STEP_META } from './stepMeta';
@@ -75,6 +82,12 @@ type Dialog =
   | { kind: 'exception'; nodeId: string }
   | { kind: 'delete'; nodeId: string }
   | { kind: 'connect'; fromId: string };
+
+type Preview = { messageId: string; graph: WorkflowGraph; changes: GraphChanges };
+export type AiDraftState = { aiDraft?: { partial: boolean; source: AiSource; description: string } };
+
+const PREVIEW_REASON = 'Apply or cancel the suggestion first.';
+const CHANGE_COLOUR: Record<Change, string> = { added: 'var(--fl-diff-add)', modified: 'var(--fl-diff-change)', removed: 'var(--fl-diff-remove)' };
 
 /** Lay out a loaded graph only if it has never been arranged (every step at the same spot). */
 function initialGraph(g: WorkflowGraph): WorkflowGraph {
@@ -106,6 +119,45 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
   const [dragging, setDragging] = useState<Record<string, { x: number; y: number }>>({});
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // ---------- AI state ----------
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [ai, setAi] = useState<{ available: boolean; source: AiSource | null } | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatContext, setChatContext] = useState<{ stepId: string; stepLabel: string } | null>(null);
+  const chat = useChat(workflow.id, chatOpen);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const [assumptions, setAssumptions] = useState<Assumption[]>(workflow.assumptions);
+  const [assumptionsCollapsed, setAssumptionsCollapsed] = useState(false);
+  const [draftNotice, setDraftNotice] = useState(() => {
+    const draft = (location.state as AiDraftState | null)?.aiDraft;
+    return draft && (draft.partial || draft.source === 'fixture') ? draft : null;
+  });
+  const [redrafting, setRedrafting] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  const [toast, setToast] = useState<{ text: string; after: WorkflowGraph } | null>(null);
+  const graphRef = useRef(graph);
+  useEffect(() => {
+    graphRef.current = graph;
+  });
+
+  useEffect(() => {
+    let active = true;
+    fetchAiStatus().then(
+      (status) => active && setAi({ available: status.available, source: status.source }),
+      () => active && setAi({ available: false, source: null }),
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const issues = useMemo(() => validateWorkflow(graph), [graph]);
   const analysisCheck = useMemo(() => preAnalysisCheck(graph), [graph]);
@@ -144,6 +196,9 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           const { x, y, zoom } = rf.getViewport();
           // Keep clear of the toolbar (left), the hint text (top) and the controls (bottom).
           const view = { left: 110, top: 50, right: box.width - 80, bottom: box.height - 100 };
+          // Ask Flico floats over the canvas: keep changes clear of it when it sits on the right.
+          const chatBox = document.querySelector('.fl-chat')?.getBoundingClientRect();
+          if (chatBox && chatBox.height > 60 && chatBox.left > box.left + box.width / 2) view.right = Math.min(view.right, chatBox.left - box.left - 24);
           type Box = NonNullable<typeof target>;
           const inView = (b: Box) =>
             b.left * zoom + x >= view.left && b.top * zoom + y >= view.top && b.right * zoom + x <= view.right && b.bottom * zoom + y <= view.bottom;
@@ -170,10 +225,12 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   /** Run a graph operation as one undoable step. New steps are placed; nothing else is re-arranged. */
   const apply = useCallback(
-    (op: (g: WorkflowGraph) => OpResult, options: { editName?: boolean; select?: boolean } = {}): string | null => {
+    (op: (g: WorkflowGraph) => OpResult, options: { editName?: boolean; select?: boolean; onCommitted?: (g: WorkflowGraph) => void } = {}): string | null => {
       try {
         const result = op(graph);
-        commit(placeNewSteps(graph, result.graph));
+        const next = placeNewSteps(graph, result.graph);
+        commit(next);
+        options.onCommitted?.(next);
         setNotice(null);
         const added = result.graph.nodes.filter((n) => !findNode(graph, n.id)).map((n) => n.id);
         if (result.focusId && options.select !== false) {
@@ -196,6 +253,42 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     [graph, commit, reveal],
   );
 
+  const applyRef = useRef(apply);
+  useEffect(() => {
+    applyRef.current = apply;
+  });
+
+  /** AI Quick Add: the one AI action that changes the graph immediately (undoable), because the person chose the spot. */
+  const quickAdd = async (slot: Slot, text: string): Promise<string | null> => {
+    const g = graphRef.current;
+    const from = slot.kind === 'edge' ? g.edges.find((e) => e.id === slot.edgeId)?.sourceId : slot.nodeId;
+    const to = slot.kind === 'edge' ? g.edges.find((e) => e.id === slot.edgeId)?.targetId : undefined;
+    try {
+      const { step, source } = await quickAddStep(workflow.id, {
+        text,
+        finishAllowed: slot.kind !== 'edge',
+        ...(from ? { previousLabel: findNode(g, from)?.label ?? '' } : {}),
+        ...(to ? { nextLabel: findNode(g, to)?.label ?? '' } : {}),
+      });
+      setInsertMenu(null);
+      const inferred = { origin: 'ai-inferred' as const, assumptionStatus: 'unconfirmed' as const };
+      const error = applyRef.current(
+        (current) => {
+          const result = step.type === 'decision' ? addDecision(current, slot, { question: step.label }) : insertStep(current, slot, step.type);
+          const id = result.focusId!;
+          return { ...result, graph: { ...result.graph, nodes: result.graph.nodes.map((n) => (n.id === id ? { ...n, label: step.label, ...inferred } : n)) } };
+        },
+        {
+          onCommitted: (after) =>
+            setToast({ text: `Added “${step.label}” with Quick Add${source === 'fixture' ? ' (test fixture, not live AI)' : ''}.`, after }),
+        },
+      );
+      return error;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  };
+
   const insertAt = (slot: Slot, choice: InsertChoice) => {
     setInsertMenu(null);
     if (choice === 'decision') setDialog({ kind: 'decision', slot });
@@ -208,7 +301,8 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     hoveredEdgeId,
     selectedEdgeId: null,
     issuesByNode,
-    openInsertMenu: (slot, anchor) => setInsertMenu({ slot, anchor }),
+    previewing: preview !== null,
+    openInsertMenu: (slot, anchor) => !preview && setInsertMenu({ slot, anchor }),
     commitName: (id, label) => {
       const node = findNode(graph, id);
       const trimmed = label.trim();
@@ -230,33 +324,59 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   // ---------- React Flow view of the graph ----------
 
+  /** What the canvas shows: the graph, or during an AI preview the proposed graph plus what it removes. */
+  const display = useMemo(() => {
+    const nodeChange = new Map<string, Change>();
+    const edgeChange = new Map<string, Change>();
+    if (!preview) return { graph, nodeChange, edgeChange };
+    const { changes } = preview;
+    for (const id of changes.addedNodes) nodeChange.set(id, 'added');
+    for (const id of changes.modifiedNodes) nodeChange.set(id, 'modified');
+    for (const id of changes.removedNodes) nodeChange.set(id, 'removed');
+    for (const id of changes.addedEdges) edgeChange.set(id, 'added');
+    for (const id of changes.modifiedEdges) edgeChange.set(id, 'modified');
+    for (const id of changes.removedEdges) edgeChange.set(id, 'removed');
+    return {
+      graph: {
+        nodes: [...preview.graph.nodes, ...graph.nodes.filter((n) => nodeChange.get(n.id) === 'removed')],
+        edges: [...preview.graph.edges, ...graph.edges.filter((e) => edgeChange.get(e.id) === 'removed')],
+      },
+      nodeChange,
+      edgeChange,
+    };
+  }, [graph, preview]);
+
   const rfNodes: StepFlowNode[] = useMemo(
     () =>
-      graph.nodes.map((n) => {
-        const problems = issuesByNode.get(n.id) ?? [];
+      display.graph.nodes.map((n) => {
+        const problems = preview ? [] : (issuesByNode.get(n.id) ?? []);
+        const change = display.nodeChange.get(n.id);
         return {
           id: n.id,
           type: 'step',
           position: dragging[n.id] ?? n.position,
-          data: { step: n },
-          selected: n.id === selected,
+          data: change ? { step: n, change } : { step: n },
+          selected: n.id === selected && !preview,
           measured: dims[n.id],
-          ariaLabel: `${STEP_META[n.type].name} step: ${n.label || 'Untitled step'}${problems.length ? `. ${problems.map((p) => p.message).join(' ')}` : ''}`,
+          ariaLabel: `${change ? `Proposed: ${CHANGE_BADGE[change].slice(2).toLowerCase()}. ` : ''}${STEP_META[n.type].name} step: ${n.label || 'Untitled step'}${problems.length ? `. ${problems.map((p) => p.message).join(' ')}` : ''}${n.origin === 'ai-inferred' && n.assumptionStatus === 'unconfirmed' ? '. Inferred by Flico, not yet confirmed' : ''}`,
         };
       }),
-    [graph, selected, dims, dragging, issuesByNode],
+    [display, preview, selected, dims, dragging, issuesByNode],
   );
 
   const rfEdges: FlowEdgeType[] = useMemo(() => {
     // Current on-screen boxes of every step (including one being dragged).
+    const shown = display.graph;
+    const labelIn = (id: string) => findNode(shown, id)?.label || 'Untitled step';
     const boxes = new Map<string, Box>(
-      graph.nodes.map((n) => {
+      shown.nodes.map((n) => {
         const p = dragging[n.id] ?? n.position;
         const size = dims[n.id] ?? { width: NODE_WIDTH, height: NODE_HEIGHT };
         return [n.id, { left: p.x, top: p.y, right: p.x + size.width, bottom: p.y + size.height }];
       }),
     );
-    return graph.edges.map((e): FlowEdgeType => {
+    return shown.edges.map((e): FlowEdgeType => {
+      const change = display.edgeChange.get(e.id);
       const isLoop = e.type === 'loop';
       const s = boxes.get(e.sourceId);
       const t = boxes.get(e.targetId);
@@ -273,7 +393,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
         const others = [...boxes.entries()].filter(([id]) => id !== e.sourceId && id !== e.targetId).map(([, b]) => b);
         if (curveCrosses(from, to, others)) route = detour(from, to, others);
       }
-      const colour = e.type === 'exception' ? 'var(--fl-exception-stroke)' : 'var(--fl-edge)';
+      const colour = change ? CHANGE_COLOUR[change] : e.type === 'exception' ? 'var(--fl-exception-stroke)' : 'var(--fl-edge)';
       const kind = e.type === 'yes' || e.type === 'no' ? `, ${e.label ?? e.type}` : e.type === 'loop' ? ', repeats' : e.type === 'exception' ? ', exception path' : '';
       return {
         id: e.id,
@@ -283,17 +403,18 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
         sourceHandle: isLoop ? 'loop-out' : 'out',
         targetHandle: isLoop ? 'loop-in' : 'in',
         markerEnd: { type: MarkerType.Arrow, color: colour, width: 18, height: 18, strokeWidth: 1.6 },
-        ariaLabel: `Connection from ${labelOf(e.sourceId)} to ${labelOf(e.targetId)}${kind}`,
+        ariaLabel: `${change ? `Proposed: ${CHANGE_BADGE[change].slice(2).toLowerCase()} connection. ` : ''}Connection from ${labelIn(e.sourceId)} to ${labelIn(e.targetId)}${kind}`,
         data: {
           edge: e,
-          sourceLabel: labelOf(e.sourceId),
-          targetLabel: labelOf(e.targetId),
+          sourceLabel: labelIn(e.sourceId),
+          targetLabel: labelIn(e.targetId),
+          ...(change ? { change } : {}),
           ...(loopBottom !== undefined ? { loopBottom } : {}),
           ...(route ? { detour: route } : {}),
         },
       };
     });
-  }, [graph, dims, dragging, labelOf]);
+  }, [display, dims, dragging]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<StepFlowNode>[]) => {
@@ -319,7 +440,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || preview) return;
       const target = e.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return; // native text undo
       e.preventDefault();
@@ -328,11 +449,11 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [history]);
+  }, [history, preview]);
 
   const onCanvasKeyDown = (e: React.KeyboardEvent) => {
     const nodeEl = (e.target as HTMLElement).closest<HTMLElement>('.react-flow__node');
-    if (!nodeEl || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'BUTTON') return;
+    if (preview || !nodeEl || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'BUTTON') return;
     const id = nodeEl.dataset.id!;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -372,7 +493,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           ? 'This step already splits into several paths.'
           : undefined;
     const exceptionReason = !node ? none : node.type === 'start' || node.type === 'finish' ? 'Choose a step between Start and Finish.' : undefined;
-    return [
+    const actions: ToolbarAction[] = [
       stepAction('action', 'Add action'),
       stepAction('decision', 'Add decision'),
       stepAction('approval', 'Add approval'),
@@ -382,6 +503,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       { id: 'parallel', label: 'Parallel activities', icon: TOOLBAR_ICONS.parallel, ...(parallelReason ? { disabledReason: parallelReason } : {}), onClick: () => node && setDialog({ kind: 'parallel', fromId: node.id }) },
       { id: 'exception', label: 'Add exception', icon: TOOLBAR_ICONS.exception, ...(exceptionReason ? { disabledReason: exceptionReason } : {}), onClick: () => node && setDialog({ kind: 'exception', nodeId: node.id }) },
     ];
+    return preview ? actions.map((a) => ({ ...a, disabledReason: PREVIEW_REASON })) : actions;
   })();
 
   const showIssue = (issue: Issue) => {
@@ -392,8 +514,106 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     reveal([id], id);
   };
 
+  // ---------- Ask Flico and AI proposals ----------
+
+  /** Show a proposal on the canvas without changing the workflow. */
+  const startPreview = async (message: ChatMessage) => {
+    const proposal = message.proposal;
+    if (!proposal || proposal.status !== 'pending' || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const revision = await save.flushNow();
+      const current = graphRef.current;
+      if (revision !== proposal.baseRevision) {
+        setNotice('The workflow changed after this suggestion was made, so it can’t be previewed. Ask Flico again for an updated suggestion.');
+        return;
+      }
+      const result = applyOperations(current, proposal.operations);
+      if (!result.ok) {
+        setNotice('This suggestion no longer fits the workflow. Ask Flico again.');
+        return;
+      }
+      const placed = placeNewSteps(current, result.graph);
+      const changes = diffGraphs(current, placed);
+      setInsertMenu(null);
+      setDialog(null);
+      setDetailsId(null);
+      setEditing(null);
+      setSelectedId(null);
+      setNotice(null);
+      setPreview({ messageId: message.id, graph: placed, changes });
+      reveal([...changes.addedNodes, ...changes.modifiedNodes, ...changes.removedNodes]);
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setProposalBusy(false);
+    }
+  };
+
+  /** Apply the previewed proposal: one server-checked, all-or-nothing change and one undoable step. */
+  const applyPreview = async () => {
+    if (!preview || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      await save.flushNow();
+      const result = await applyProposal(workflow.id, preview.messageId);
+      save.rebase(result.graph, result.revision);
+      commit(result.graph);
+      chat.replace(result.message);
+      const added = preview.changes.addedNodes;
+      setPreview(null);
+      if (added.length) reveal(added);
+    } catch (error) {
+      setPreview(null);
+      setNotice((error as Error).message);
+      void chat.reload();
+    } finally {
+      setProposalBusy(false);
+    }
+  };
+
+  const cancelSuggestion = async (message: ChatMessage) => {
+    if (preview?.messageId === message.id) setPreview(null);
+    try {
+      chat.replace(await cancelProposal(workflow.id, message.id));
+    } catch (error) {
+      setNotice((error as Error).message);
+    }
+  };
+
+  const askFlico = async (request: ChatRequest) => {
+    const added = await chat.send(request, save.flushNow);
+    const reply = added?.find((m) => m.role === 'assistant');
+    if (reply?.proposal?.status === 'pending') await startPreview(reply);
+  };
+
+  const openChat = (context: { stepId: string; stepLabel: string } | null = null) => {
+    setChatContext(context);
+    setChatOpen(true);
+    setAssumptionsCollapsed(true);
+  };
+
+  const closeChat = () => {
+    setChatOpen(false);
+    document.querySelector<HTMLElement>('[data-ask-flico]')?.focus();
+  };
+
+  const retryDraft = async () => {
+    if (!draftNotice) return;
+    setRedrafting({ busy: true, error: null });
+    try {
+      const result = await createAiDraft(draftNotice.description);
+      const state: AiDraftState = { aiDraft: { partial: result.partial, source: result.source, description: draftNotice.description } };
+      navigate(`/workflows/${result.workflow.id}`, { state });
+    } catch (error) {
+      setRedrafting({ busy: false, error: (error as Error).message });
+    }
+  };
+
+  const assumptionAction = (action: () => Promise<Assumption[]>) => async () => setAssumptions(await action());
+
   const closeDialog = () => setDialog(null);
-  const finishAfter = finishCandidate(graph);
+  const finishAfter = preview ? null : finishCandidate(graph);
 
   return (
     <EditorUiContext.Provider value={ui}>
@@ -406,13 +626,20 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             onRenamed(name);
           }}
           save={save}
-          canUndo={history.canUndo}
-          canRedo={history.canRedo}
+          canUndo={history.canUndo && !preview}
+          canRedo={history.canRedo && !preview}
           onUndo={history.undo}
           onRedo={history.redo}
           issues={issues}
           onShowIssue={showIssue}
           analysisCheck={analysisCheck}
+          aiAvailable={ai?.available ?? false}
+          chatOpen={chatOpen}
+          onToggleChat={() => (chatOpen ? closeChat() : openChat())}
+          onSuggestFix={() => {
+            openChat();
+            void askFlico({ content: 'Fix the issues in this workflow', mode: 'fix' });
+          }}
         />
 
         <div className="relative flex-1" onKeyDown={onCanvasKeyDown}>
@@ -423,6 +650,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
             onNodeClick={(_, node) => {
+              if (preview) return;
               setSelectedId(node.id);
               setDetailsId(node.id);
             }}
@@ -433,6 +661,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             onEdgeMouseEnter={(_, edge: Edge) => ui.hoverEdge(edge.id)}
             onEdgeMouseLeave={() => ui.hoverEdge(null)}
             nodesConnectable={false}
+            nodesDraggable={!preview}
             elementsSelectable={false}
             deleteKeyCode={null}
             selectionKeyCode={null}
@@ -466,6 +695,53 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               onAdd={() => apply((g) => insertStep(g, { kind: 'after', nodeId: finishAfter }, 'finish'))}
             />
           )}
+          {assumptions.length > 0 && !preview && (
+            <AssumptionsPanel
+              assumptions={assumptions}
+              collapsed={assumptionsCollapsed}
+              onToggle={() => setAssumptionsCollapsed(!assumptionsCollapsed)}
+              onConfirm={(id) => assumptionAction(() => updateAssumption(workflow.id, id, { status: 'confirmed' }))()}
+              onEdit={(id, text) => assumptionAction(() => updateAssumption(workflow.id, id, { text }))()}
+              onRemove={(id) => assumptionAction(() => removeAssumption(workflow.id, id))()}
+              onShowSteps={(ids) => {
+                const present = ids.filter((id) => findNode(graph, id));
+                if (present[0]) {
+                  setSelectedId(present[0]);
+                  reveal(present, present[0]);
+                }
+              }}
+            />
+          )}
+          {draftNotice && !preview && (
+            <DraftNotice
+              partial={draftNotice.partial}
+              fixture={draftNotice.source === 'fixture'}
+              retrying={redrafting.busy}
+              retryError={redrafting.error}
+              onRetry={() => void retryDraft()}
+              onDismiss={() => setDraftNotice(null)}
+            />
+          )}
+          {preview && <PreviewBar changes={preview.changes} busy={proposalBusy} onApply={() => void applyPreview()} onCancel={() => {
+            const message = chat.messages?.find((m) => m.id === preview.messageId);
+            if (message) void cancelSuggestion(message);
+            else setPreview(null);
+          }} />}
+          {toast && !notice && (
+            <div role="status" className="absolute bottom-6 left-1/2 z-20 flex max-w-[560px] -translate-x-1/2 items-center gap-3 rounded-[12px] border border-fl-border bg-white px-4 py-2.5 text-[13px] text-fl-text shadow-fl-float">
+              {toast.text}
+              <button
+                type="button"
+                className="fl-link text-[13px]"
+                onClick={() => {
+                  if (graphRef.current === toast.after) history.undo();
+                  setToast(null);
+                }}
+              >
+                Undo
+              </button>
+            </div>
+          )}
           {notice && (
             <div role="alert" className="absolute bottom-6 left-1/2 z-20 flex max-w-[520px] -translate-x-1/2 items-center gap-3 rounded-[12px] border border-[var(--fl-exception-stroke)] bg-[var(--fl-exception-fill)] px-4 py-2.5 text-[13px] text-[var(--fl-exception-ink)] shadow-fl-card">
               {notice}
@@ -483,6 +759,10 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           finishAllowed={insertMenu.slot.kind !== 'edge'}
           onChoose={(type) => insertAt(insertMenu.slot, type)}
           onClose={() => setInsertMenu(null)}
+          quickAdd={{
+            ...(ai === null ? { disabledReason: 'Checking AI availability…' } : !ai.available ? { disabledReason: "AI isn't set up on this server. Choose a step type above." } : {}),
+            onSubmit: (text) => quickAdd(insertMenu.slot, text),
+          }}
         />
       )}
 
@@ -500,6 +780,41 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           onDelete={() => setDialog({ kind: 'delete', nodeId: detailsNode.id })}
           onConnect={() => setDialog({ kind: 'connect', fromId: detailsNode.id })}
           onRemoveConnection={(edgeId) => apply((g) => removeConnection(g, edgeId), { select: false })}
+          onAsk={() => {
+            setDetailsId(null);
+            openChat({ stepId: detailsNode.id, stepLabel: detailsNode.label });
+          }}
+        />
+      )}
+
+      {chatOpen && (
+        <AskFlico
+          available={ai?.available ?? false}
+          messages={chat.messages}
+          loadError={chat.loadError}
+          pending={chat.pending}
+          failed={chat.failed}
+          context={chatContext}
+          hasIssues={issues.length > 0}
+          previewId={preview?.messageId ?? null}
+          busyProposal={proposalBusy}
+          onSend={(content: string, mode: ChatMode) => void askFlico({ content, mode, ...(chatContext ? { stepId: chatContext.stepId } : {}) })}
+          onRetry={() => chat.failed && void askFlico(chat.failed.request)}
+          onDismissError={chat.dismissError}
+          onReload={() => void chat.reload()}
+          onClearContext={() => setChatContext(null)}
+          onClear={async () => {
+            if (preview) setPreview(null);
+            try {
+              await chat.clear();
+            } catch (error) {
+              setNotice((error as Error).message);
+            }
+          }}
+          onPreview={(message) => void startPreview(message)}
+          onApply={() => void applyPreview()}
+          onCancelProposal={(message) => void cancelSuggestion(message)}
+          onClose={closeChat}
         />
       )}
 

@@ -111,4 +111,44 @@ describe('useAutosave', () => {
     unmount();
     expect(save).toHaveBeenCalledWith('v1', 1);
   });
+  it('flushNow saves pending edits immediately and resolves with the saved revision', async () => {
+    const save = vi.fn(async (_v: string, base: number) => ({ revision: base + 1 }));
+    const { result, rerender } = setup(save);
+    rerender({ value: 'v1' });
+    let revision = 0;
+    await act(async () => {
+      revision = await result.current.flushNow();
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(revision).toBe(2);
+    await act(async () => {
+      revision = await result.current.flushNow();
+    });
+    expect(save).toHaveBeenCalledTimes(1); // nothing pending: no extra save
+    expect(revision).toBe(2);
+  });
+
+  it('flushNow rejects when saving fails', async () => {
+    const save = vi.fn(async () => {
+      throw new ApiError(500, 'server_error', 'Down');
+    });
+    const { result, rerender } = setup(save);
+    rerender({ value: 'v1' });
+    await act(async () => {
+      await expect(result.current.flushNow()).rejects.toThrow('Down');
+    });
+  });
+
+  it('rebase adopts a server-saved value without saving it again', async () => {
+    const save = vi.fn(async (_v: string, base: number) => ({ revision: base + 1 }));
+    const { result, rerender } = setup(save);
+    act(() => result.current.rebase('server', 7));
+    rerender({ value: 'server' });
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(save).not.toHaveBeenCalled();
+    rerender({ value: 'next' });
+    await act(async () => vi.advanceTimersByTime(500));
+    await flushPromises();
+    expect(save).toHaveBeenLastCalledWith('next', 7);
+  });
 });

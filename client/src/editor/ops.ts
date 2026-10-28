@@ -379,7 +379,7 @@ export function removeConnection(g: WorkflowGraph, edgeId: string): OpResult {
   return { graph: { nodes: g.nodes, edges: g.edges.filter((e) => e.id !== edgeId) } };
 }
 
-export type StepPatch = Partial<Pick<WorkflowNode, 'label' | 'type' | 'owner' | 'duration' | 'tools' | 'notes'>>;
+export type StepPatch = Partial<Pick<WorkflowNode, 'label' | 'type' | 'owner' | 'duration' | 'tools' | 'notes' | 'assumptionStatus'>>;
 
 /** Types a step can be switched to in its details (decisions and exceptions use their guided flows). */
 export function allowedTypeChanges(g: WorkflowGraph, nodeId: string): StepType[] {

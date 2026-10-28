@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles } from 'lucide-react';
+import { AI_QUICK_ADD_MAX } from '../../../shared/api';
 import type { StepType } from '../../../shared/graph';
 import { placePanel } from '../lib/placement';
 import { STEP_META } from './stepMeta';
@@ -14,14 +15,31 @@ type Props = {
   finishAllowed: boolean;
   onChoose: (type: InsertChoice) => void;
   onClose: () => void;
+  /** AI Quick Add: describe the next step; it is inserted immediately (with Undo). Resolves to an error message, if any. */
+  quickAdd: { disabledReason?: string; onSubmit: (text: string) => Promise<string | null> };
 };
 
-/** Compact menu opened from a +: the manual step types, plus AI Quick Add (not available yet). */
-export function InsertMenu({ anchor, finishAllowed, onChoose, onClose }: Props) {
+/** Compact menu opened from a +: the manual step types, plus AI Quick Add. */
+export function InsertMenu({ anchor, finishAllowed, onChoose, onClose, quickAdd }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const items = useRef<(HTMLButtonElement | null)[]>([]);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const hintId = useId();
+  const [text, setText] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submitQuickAdd = async () => {
+    if (!text.trim() || adding) return;
+    setAdding(true);
+    setError(null);
+    const problem = await quickAdd.onSubmit(text.trim());
+    // On success the menu closes; on failure keep the text so it can be retried or edited.
+    if (problem) {
+      setError(problem);
+      setAdding(false);
+    }
+  };
 
   useLayoutEffect(() => {
     const place = () => {
@@ -54,7 +72,8 @@ export function InsertMenu({ anchor, finishAllowed, onChoose, onClose }: Props) 
   const onKeyDown = (e: React.KeyboardEvent) => {
     const list = items.current.filter(Boolean) as HTMLButtonElement[];
     const i = list.indexOf(document.activeElement as HTMLButtonElement);
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const inInput = (e.target as HTMLElement).tagName === 'INPUT';
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput) {
       e.preventDefault();
       list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus();
     } else if (e.key === 'Escape') {
@@ -101,12 +120,28 @@ export function InsertMenu({ anchor, finishAllowed, onChoose, onClose }: Props) 
       })}
       <div className="mx-1 my-1.5 border-t border-fl-border" role="separator" />
       <div className="px-1 pb-1">
-        <label className="flex items-center gap-1.5 text-[12px] font-semibold text-fl-text-secondary">
+        <label htmlFor={`${hintId}-input`} className="flex items-center gap-1.5 text-[12px] font-semibold text-fl-text-secondary">
           <Sparkles size={13} aria-hidden="true" /> Quick Add with AI
         </label>
-        <input className="fl-input mt-1.5 !min-h-10 !text-[13px]" placeholder="Describe what happens next…" disabled aria-label="Describe what happens next" aria-describedby={hintId} />
-        <p id={hintId} className="mt-1 text-[11px] leading-4 text-fl-text-muted">
-          AI Quick Add arrives in a later update.
+        <input
+          id={`${hintId}-input`}
+          className="fl-input mt-1.5 !min-h-10 !text-[13px]"
+          placeholder="Describe what happens next…"
+          value={text}
+          maxLength={AI_QUICK_ADD_MAX}
+          disabled={!!quickAdd.disabledReason || adding}
+          aria-describedby={hintId}
+          aria-invalid={error ? true : undefined}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void submitQuickAdd();
+            }
+          }}
+        />
+        <p id={hintId} className={`mt-1 text-[11px] leading-4 ${error ? 'text-fl-error' : 'text-fl-text-muted'}`} role={error ? 'alert' : undefined}>
+          {quickAdd.disabledReason ?? error ?? (adding ? 'Adding your step…' : 'Press Enter to add it right away. You can undo.')}
         </p>
       </div>
     </div>,

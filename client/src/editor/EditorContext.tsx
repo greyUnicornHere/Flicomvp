@@ -10,6 +10,8 @@ export type EditorUi = {
   hoveredEdgeId: string | null;
   selectedEdgeId: string | null;
   issuesByNode: Map<string, Issue[]>;
+  /** An AI proposal is shown on the canvas: editing is paused until it is applied or cancelled. */
+  previewing: boolean;
   openInsertMenu: (slot: Slot, anchor: HTMLElement) => void;
   commitName: (nodeId: string, label: string) => void;
   cancelName: () => void;

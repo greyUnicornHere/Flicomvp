@@ -16,10 +16,11 @@ type Props = {
   onDelete: () => void;
   onConnect: () => void;
   onRemoveConnection: (edgeId: string) => void;
+  onAsk: () => void;
 };
 
 /** Contextual step details next to the selected step (never a permanent inspector). */
-export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection }: Props) {
+export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection, onAsk }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const transform = useStore((s) => s.transform);
@@ -110,6 +111,15 @@ export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, 
         </button>
       </div>
 
+      {node.origin === 'ai-inferred' && node.assumptionStatus === 'unconfirmed' && (
+        <div className="mx-[18px] mb-2 flex items-center gap-2 rounded-[10px] border border-dashed border-fl-brand bg-fl-brand-pale px-3 py-2 text-[12.5px] leading-[18px] text-fl-brand-active">
+          <span className="flex-1">Flico inferred this step. Check it, then confirm.</span>
+          <button type="button" className="fl-btn !min-h-8 !px-2.5 !text-[12px]" onClick={() => onChange({ assumptionStatus: 'confirmed' })}>
+            Confirm step
+          </button>
+        </div>
+      )}
+
       <div className="space-y-3 px-[18px] pb-4" onBlur={() => commit()} onKeyDown={commitOnEnter}>
         <Labeled label="Step name">
           {(id) => <input id={id} className="fl-input !min-h-10" value={fields.label} maxLength={200} onChange={set('label')} />}
@@ -198,9 +208,16 @@ export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, 
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-fl-border px-[18px] py-3">
-        <span className="inline-flex items-center gap-1.5 text-[12px] text-fl-text-muted" title="Ask Flico arrives in a later update">
-          <Sparkles size={13} aria-hidden="true" /> Ask Flico about this step: coming soon
-        </span>
+        <button
+          type="button"
+          className="inline-flex h-9 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-semibold text-fl-brand hover:bg-fl-brand-pale"
+          onClick={() => {
+            commit();
+            onAsk();
+          }}
+        >
+          <Sparkles size={14} aria-hidden="true" /> Ask Flico about this step
+        </button>
         {node.type !== 'start' && (
           <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-semibold text-fl-error hover:bg-[var(--fl-exception-fill)]" onClick={onDelete}>
             <Trash2 size={14} aria-hidden="true" /> Delete

@@ -38,6 +38,8 @@ const schema = z
     AI_PROVIDER: z.enum(['anthropic', 'fixture', 'none', '']).default(''),
     ANTHROPIC_API_KEY: optionalString,
     AI_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
+    /** Claude API address. Only change it for an approved gateway; the key is sent there. */
+    AI_BASE_URL: z.url().default('https://api.anthropic.com'),
     /** Longest a single AI request may take before Flico gives up (seconds). */
     AI_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(300).default(90),
     /** Per-person daily caps (UTC days). AI drafting, Quick Add and chat never use analysis credits. */
@@ -56,6 +58,9 @@ const schema = z
       ctx.addIssue({ code: 'custom', path: ['ANTHROPIC_API_KEY'], message: 'is required when AI_PROVIDER=anthropic' });
     }
     if (env.NODE_ENV === 'production') {
+      if (!env.AI_BASE_URL.startsWith('https://')) {
+        ctx.addIssue({ code: 'custom', path: ['AI_BASE_URL'], message: 'must use https:// in production' });
+      }
       if (env.AI_PROVIDER === 'fixture') {
         ctx.addIssue({ code: 'custom', path: ['AI_PROVIDER'], message: 'fixture is for development and tests only, never production' });
       }

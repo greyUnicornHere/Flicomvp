@@ -107,6 +107,60 @@ export const migrations: Migration[] = [
       CREATE INDEX idx_ai_usage_user_day ON ai_usage (user_id, day, kind);
     `,
   },
+  {
+    id: 4,
+    name: 'analysis_and_credits',
+    sql: `
+      -- Analysis credits as an append-only ledger. The balance is the sum of deltas.
+      -- No foreign key to runs: the history stays even when a workflow is deleted.
+      CREATE TABLE credit_ledger (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        delta INTEGER NOT NULL,
+        reason TEXT NOT NULL CHECK (reason IN ('initial_grant', 'analysis', 'top_up', 'adjustment')),
+        -- At most one debit per analysis run, whatever happens with retries.
+        analysis_run_id TEXT UNIQUE,
+        idempotency_key TEXT UNIQUE,
+        note TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_credit_ledger_user ON credit_ledger (user_id);
+
+      CREATE TABLE analysis_runs (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        workflow_id TEXT NOT NULL REFERENCES workflows (id) ON DELETE CASCADE,
+        idempotency_key TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK (mode IN ('quick', 'guided')),
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled')),
+        stage TEXT NOT NULL,
+        error TEXT,
+        analysis_id TEXT,
+        created_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        UNIQUE (owner_id, idempotency_key)
+      );
+      CREATE INDEX idx_analysis_runs_owner_status ON analysis_runs (owner_id, status);
+
+      -- Only the initial and the latest analysis of a workflow are kept.
+      CREATE TABLE analyses (
+        id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL REFERENCES workflows (id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        slot TEXT NOT NULL CHECK (slot IN ('initial', 'latest')),
+        mode TEXT NOT NULL CHECK (mode IN ('quick', 'guided')),
+        source TEXT NOT NULL CHECK (source IN ('live', 'fixture')),
+        base_revision INTEGER NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        answers_json TEXT NOT NULL DEFAULT '[]',
+        review_json TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL,
+        applied_at INTEGER,
+        UNIQUE (workflow_id, slot)
+      );
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

@@ -16,6 +16,7 @@
     "start": "node --disable-warning=ExperimentalWarning dist/server/server/index.js",
     "db:migrate": "tsx --disable-warning=ExperimentalWarning server/scripts/migrate.ts",
     "invite": "tsx --disable-warning=ExperimentalWarning server/scripts/invite.ts",
+    "credits": "tsx --disable-warning=ExperimentalWarning server/scripts/credits.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

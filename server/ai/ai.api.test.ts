@@ -4,24 +4,8 @@ import type { WorkflowGraph } from '../../shared/graph.js';
 import { loadConfig } from '../config.js';
 import { ORIGIN, makeTestApp, signIn, type TestApp } from '../test/helpers.js';
 import { createProvider } from './index.js';
-import { AiError, AI_ERROR_MESSAGES, type AiProvider, type AiRequest } from './provider.js';
-
-/** A provider that returns scripted outputs and records every request it receives. */
-class Scripted implements AiProvider {
-  readonly source = 'live' as const;
-  readonly calls: AiRequest[] = [];
-  constructor(private readonly outputs: (string | Error)[]) {}
-  async generate(request: AiRequest) {
-    this.calls.push(request);
-    const next = this.outputs.shift();
-    if (next === undefined) throw new Error('No scripted output left');
-    if (next instanceof Error) throw next;
-    return { text: next, usage: { inputTokens: 10, outputTokens: 5 } };
-  }
-  push(...outputs: (string | Error)[]) {
-    this.outputs.push(...outputs);
-  }
-}
+import { AiError, AI_ERROR_MESSAGES } from './provider.js';
+import { Scripted, op } from '../test/scripted.js';
 
 const draft = (overrides: Record<string, unknown> = {}) =>
   JSON.stringify({
@@ -44,19 +28,6 @@ const draft = (overrides: Record<string, unknown> = {}) =>
     ...overrides,
   });
 
-const op = (fields: Record<string, string>) => ({
-  op: '',
-  step: '',
-  new_ref: '',
-  type: '',
-  label: '',
-  notes: '',
-  from: '',
-  to: '',
-  connection: '',
-  connection_type: '',
-  ...fields,
-});
 const chat = (reply: string, operations: ReturnType<typeof op>[] = [], summary = '') =>
   JSON.stringify({ reply, change_summary: summary, operations });
 

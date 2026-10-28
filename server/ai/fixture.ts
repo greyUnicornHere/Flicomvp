@@ -32,6 +32,8 @@ export class FixtureProvider implements AiProvider {
     const attempt = last.startsWith('Your previous response could not be used') ? 1 : 0;
     const input = request.messages.at(attempt ? -3 : -1)!.content;
     if (input.includes('[fixture:error]')) throw new AiError('unavailable', AI_ERROR_MESSAGES.unavailable);
+    // A slow answer, so cancellation can be tested: waits ~4 s unless the request is aborted.
+    if (input.includes('[fixture:slow]')) await wait(4000, request.signal);
     if (input.includes('[fixture:invalid]') || (input.includes('[fixture:retry]') && attempt === 0)) {
       return respond('{"this is": not json');
     }
@@ -42,11 +44,26 @@ export class FixtureProvider implements AiProvider {
         return respond(JSON.stringify(quickAdd(decode(tagged(input, 'step_description'), ''), input.includes('"finish_allowed": true'))));
       case 'chat':
         return respond(JSON.stringify(chat(input)));
+      case 'questions':
+        return respond(JSON.stringify(questions(input)));
+      case 'analysis':
+        return respond(JSON.stringify(analysis(input, attempt)));
     }
   }
 }
 
 const respond = (text: string): AiResponse => ({ text, usage: { inputTokens: 0, outputTokens: 0 } });
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new AiError('cancelled', AI_ERROR_MESSAGES.cancelled));
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new AiError('cancelled', AI_ERROR_MESSAGES.cancelled));
+    });
+  });
+}
 
 /** One step per sentence: questions/"if" become decisions, sign-offs approvals, waiting waits. */
 function draft(description: string) {
@@ -177,5 +194,145 @@ function chat(input: string) {
   return {
     reply: `This workflow has ${steps} step${steps === 1 ? '' : 's'} after Start${finishes.length ? ` and ends at ${finishes.join(' or ')}` : ' and no Finish yet'}.${focus}${issues.length ? ` There ${issues.length === 1 ? 'is 1 open issue' : `are ${issues.length} open issues`}.` : ''}`,
     ...none,
+  };
+}
+
+function questions(input: string) {
+  const view = decode<View>(tagged(input, 'workflow_data'), { steps: [], connections: [] });
+  const approval = view.steps.find((s) => s.type === 'approval' || s.type === 'decision');
+  return {
+    questions: [
+      { question: 'Roughly how often does this process run?', hint: 'For example: about 40 times a week' },
+      { question: 'Where does work most often get stuck or wait?', hint: 'Name a step or a hand-off' },
+      ...(approval ? [{ question: `What decides the outcome at “${approval.label}”?`, hint: 'The rule or person who decides' }] : []),
+    ],
+  };
+}
+
+/**
+ * A deterministic assessment: combine two consecutive actions (quick win), write down the criteria
+ * at the first approval/decision (strategic), and log the request after Start (complex).
+ * [fixture:none] = no improvements, [fixture:roi] = invented savings on the first attempt,
+ * [fixture:conflict] = an extra recommendation that clashes with the quick win.
+ */
+function analysis(input: string, attempt: number) {
+  const view = decode<View>(tagged(input, 'workflow_data'), { steps: [], connections: [] });
+  const label = (ref: string) => view.steps.find((s) => s.ref === ref)?.label ?? ref;
+  const flow = view.connections.filter((c) => c.type !== 'loop' && c.type !== 'exception');
+  const type = (ref: string) => view.steps.find((s) => s.ref === ref)?.type;
+  const base = (rest: Record<string, unknown>) => ({ benefits: '', risks: '', assumptions: '', verification: '', depends_on: [] as string[], ...rest });
+
+  if (input.includes('[fixture:none]')) {
+    return {
+      headline: 'This workflow is already in good shape.',
+      summary: 'The steps follow a clear order, every path ends in an outcome, and there is no duplicate work. Flico found no changes worth recommending.',
+      outcome: 'no_improvements',
+      assumptions: ['The workflow shows every step that happens today.'],
+      recommendations: [],
+    };
+  }
+
+  const recs: Record<string, unknown>[] = [];
+  // Quick win: two actions in a row, the second removed and its path kept.
+  const pair = flow.find((c) => c.type === 'normal' && type(c.from) === 'action' && type(c.to) === 'action');
+  if (pair) {
+    const after = flow.filter((c) => c.from === pair.to);
+    recs.push(
+      base({
+        key: 'r1',
+        title: `Combine “${label(pair.from)}” and “${label(pair.to)}”`,
+        problem: 'Two manual steps in a row repeat similar work and add a hand-off.',
+        proposal: `Do both in “${label(pair.from)}” and remove “${label(pair.to)}”.`,
+        reason: 'Fewer hand-offs mean less waiting and fewer chances for mistakes.',
+        category: 'quick_win',
+        impact: 'medium',
+        effort: 'low',
+        evidence: 'supported',
+        benefits: 'Fewer hand-offs and less duplicate checking.',
+        risks: 'The combined step must still cover everything the second step did.',
+        assumptions: 'The same person or team can do both steps.',
+        verification: 'Check with the people involved that nothing in the second step is lost.',
+        operations: [
+          op({ op: 'remove_step', step: pair.to }),
+          ...after.map((c) => op({ op: 'add_connection', from: pair.from, to: c.to, connection_type: c.type, label: c.type === 'yes' ? 'Yes' : c.type === 'no' ? 'No' : '' })),
+        ],
+      }),
+    );
+  }
+  // Strategic: write down the criteria at the first approval or decision.
+  const gate = view.steps.find((s) => s.type === 'approval' || s.type === 'decision');
+  if (gate) {
+    recs.push(
+      base({
+        key: 'r2',
+        title: `Write down the criteria for “${gate.label}”`,
+        problem: 'The rule for this decision is not recorded in the workflow.',
+        proposal: 'Add the decision criteria to the step so everyone applies the same rule.',
+        reason: 'Clear criteria make the outcome consistent and easier to delegate.',
+        category: 'strategic',
+        impact: 'medium',
+        effort: 'medium',
+        evidence: 'verify',
+        benefits: 'More consistent decisions and fewer questions back and forth.',
+        risks: 'Criteria that are too strict could slow down unusual cases.',
+        assumptions: 'There is an agreed rule that can be written down.',
+        verification: 'Confirm the criteria with whoever owns this decision today.',
+        operations: [op({ op: 'update_step', step: gate.ref, notes: 'Criteria: to be agreed and written down.' })],
+      }),
+    );
+  }
+  // Complex: log every request right after Start.
+  const start = view.steps.find((s) => s.type === 'start');
+  const first = start && flow.find((c) => c.from === start.ref);
+  if (start && first) {
+    recs.push(
+      base({
+        key: 'r3',
+        title: 'Log every request when it arrives',
+        problem: 'There is no single record of incoming requests, so status questions are hard to answer.',
+        proposal: 'Add a step that records each request in one shared place before work starts.',
+        reason: 'A shared log makes progress visible and prevents requests from being lost.',
+        category: 'complex',
+        impact: 'high',
+        effort: 'high',
+        evidence: 'assumption',
+        benefits: 'Better visibility and fewer lost requests.',
+        risks: 'Needs a shared tool and a habit change for everyone involved.',
+        assumptions: 'Requests currently arrive through several channels.',
+        verification: 'Check which tool the team could use and whether it fits current systems.',
+        operations: [
+          op({ op: 'add_step', new_ref: 'n1', type: 'action', label: 'Log the request' }),
+          op({ op: 'remove_connection', connection: first.ref }),
+          op({ op: 'add_connection', from: start.ref, to: 'n1', connection_type: 'normal' }),
+          op({ op: 'add_connection', from: 'n1', to: first.to, connection_type: first.type === 'normal' ? 'normal' : first.type }),
+        ],
+      }),
+    );
+  }
+  if (input.includes('[fixture:conflict]') && pair) {
+    recs.push(
+      base({
+        key: 'r4',
+        title: `Clarify “${label(pair.to)}”`,
+        problem: 'This step is described only briefly.',
+        proposal: 'Rename the step so its purpose is clear.',
+        reason: 'Clear names reduce confusion.',
+        category: 'quick_win',
+        impact: 'low',
+        effort: 'low',
+        evidence: 'supported',
+        operations: [op({ op: 'update_step', step: pair.to, label: `${label(pair.to)} (clarified)` })],
+      }),
+    );
+  }
+  const roi = input.includes('[fixture:roi]') && attempt === 0;
+  return {
+    headline: recs.length ? 'A clearer, leaner way to run this workflow.' : 'This workflow is already in good shape.',
+    summary: recs.length
+      ? `The workflow is easy to follow, but some steps repeat work or rely on unwritten rules. Flico proposes ${recs.length} change${recs.length === 1 ? '' : 's'}; these are proposals, not applied changes.${roi ? ' This will save 30% of processing time and $12,000 a year.' : ''}`
+      : 'Flico found no changes worth recommending.',
+    outcome: recs.length ? 'improvements' : 'no_improvements',
+    assumptions: ['The workflow shows every step that happens today.'],
+    recommendations: recs,
   };
 }

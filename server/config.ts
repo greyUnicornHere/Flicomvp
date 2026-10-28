@@ -46,6 +46,10 @@ const schema = z
     AI_DAILY_DRAFTS: z.coerce.number().int().min(0).max(10000).default(20),
     AI_DAILY_QUICK_ADDS: z.coerce.number().int().min(0).max(10000).default(100),
     AI_DAILY_CHAT: z.coerce.number().int().min(0).max(10000).default(150),
+    /** Longest a single analysis may take (seconds). */
+    AI_ANALYSIS_TIMEOUT_SECONDS: z.coerce.number().int().min(30).max(600).default(180),
+    /** Analysis credits each person starts with (pilot: 10). Top-ups use `npm run credits`. */
+    ANALYSIS_INITIAL_CREDITS: z.coerce.number().int().min(0).max(1000).default(10),
     /** AI requests allowed per client address per minute (burst protection). */
     AI_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).default(20),
   })

@@ -24,6 +24,7 @@ import { AI_ERROR_MESSAGES, AiError, type AiProvider } from '../ai/provider.js';
 import { AiOutputError, answerAssistant, generateWorkflow, quickAdd, type HistoryTurn } from '../ai/service.js';
 import { appendExchange, clearChat, getMessage, listMessages, recordUsage, setProposalStatus, usedToday } from '../ai/store.js';
 import { validateGraph } from '../workflows/graph.js';
+import { currentAnalysis } from '../analysis/store.js';
 import { MAX_WORKFLOWS_PER_USER, countWorkflows, createWorkflow, getWorkflow, saveAssumptions, saveGraph } from '../workflows/service.js';
 
 const text = (max: number, empty: string, long: string) => z.string().trim().min(1, empty).max(max, long);
@@ -61,6 +62,16 @@ function historyTurns(messages: ChatMessage[]): HistoryTurn[] {
     const outcome = { pending: 'not yet applied', applied: 'applied by the person', cancelled: 'cancelled by the person', expired: 'not applied' }[m.proposal.status];
     return { role: m.role, content: `${m.content}\n\n[Proposed change: ${m.proposal.summary} (${outcome})]` };
   });
+}
+
+/** The latest analysis as Ask Flico sees it: summary and recommendation titles with their review state. */
+function analysisContext(analysis: ReturnType<typeof currentAnalysis>) {
+  if (!analysis) return null;
+  return {
+    headline: analysis.headline,
+    summary: analysis.summary,
+    recommendations: analysis.recommendations.map((r) => ({ title: r.title, category: r.category, status: analysis.appliedAt && r.status === 'accepted' ? 'applied' : r.status, proposal: r.proposal })),
+  };
 }
 
 export const aiRoutes =
@@ -191,6 +202,7 @@ export const aiRoutes =
             content: parsed.data.content,
             fix: parsed.data.mode === 'fix',
             ...(step ? { stepId: step.id } : {}),
+            analysis: analysisContext(currentAnalysis(db, userId, workflowId)),
           },
           timeouts.chat,
         );

@@ -15,6 +15,7 @@ import { healthRoutes } from './routes/health.js';
 import { workflowRoutes } from './routes/workflows.js';
 import { devRoutes } from './routes/dev.js';
 import { aiRoutes } from './routes/ai.js';
+import { analysisRoutes } from './routes/analysis.js';
 import { createProvider } from './ai/index.js';
 import type { AiProvider } from './ai/provider.js';
 
@@ -122,7 +123,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(healthRoutes(ctx), { prefix: '/api' });
   await app.register(authRoutes(ctx), { prefix: '/api/auth' });
   await app.register(workflowRoutes(ctx), { prefix: '/api/workflows' });
-  await app.register(aiRoutes(ctx, options.ai === undefined ? createProvider(config) : options.ai), { prefix: '/api' });
+  const provider = options.ai === undefined ? createProvider(config) : options.ai;
+  await app.register(aiRoutes(ctx, provider), { prefix: '/api' });
+  await app.register(analysisRoutes(ctx, provider), { prefix: '/api' });
   if (!isProduction && mailer.kind === 'dev-outbox') {
     await app.register(devRoutes(ctx), { prefix: '/api/dev' });
   }

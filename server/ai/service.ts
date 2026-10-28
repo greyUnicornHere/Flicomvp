@@ -1,7 +1,8 @@
 // AI use cases: generateWorkflow (draft), quickAdd and answerAssistant (chat, edit proposals, fixes).
 // Each validates the model's output before anything is returned; invalid output gets exactly one
 // correction attempt. Nothing here writes to the database.
-import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type QuickAddType } from '../../shared/api.js';
+import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type QuickAddType, type Recommendation } from '../../shared/api.js';
+import { unsupportedFigures } from '../../shared/analysis.js';
 import { applyOperations, structuralProblems, type ProposalOperation } from '../../shared/aiOps.js';
 import type { EdgeType, StepType, WorkflowEdge, WorkflowGraph, WorkflowNode } from '../../shared/graph.js';
 import { autoLayout } from '../../shared/layout.js';
@@ -9,10 +10,15 @@ import { validateWorkflow } from '../../shared/validation.js';
 import { newId } from '../auth/tokens.js';
 import type { AiMessage, AiProvider, AiRequest } from './provider.js';
 import {
+  ANALYSIS_SYSTEM,
   CHAT_SYSTEM,
   DRAFT_SYSTEM,
+  QUESTIONS_SYSTEM,
   QUICK_ADD_SYSTEM,
+  analysisPrompt,
   chatPrompt,
+  questionsPrompt,
+  type AnalysisContext,
   correctionPrompt,
   draftPrompt,
   quickAddPrompt,
@@ -21,6 +27,11 @@ import {
 } from './prompts.js';
 import {
   LIMITS,
+  analysisJsonSchema,
+  analysisOutput,
+  questionsJsonSchema,
+  questionsOutput,
+  type AnalysisOutput,
   chatJsonSchema,
   chatOutput,
   draftJsonSchema,
@@ -273,7 +284,7 @@ export function translateOperations(ops: ChatOutput['operations'], refs: RefMap,
 
 export async function answerAssistant(
   provider: AiProvider,
-  input: { graph: WorkflowGraph; history: HistoryTurn[]; content: string; fix: boolean; stepId?: string },
+  input: { graph: WorkflowGraph; history: HistoryTurn[]; content: string; fix: boolean; stepId?: string; analysis?: AnalysisContext | null },
   timeoutMs: number,
 ): Promise<AssistantAnswer> {
   const { view, refs } = workflowView(input.graph);
@@ -283,6 +294,7 @@ export async function answerAssistant(
     content: input.content,
     stepRef: input.stepId ? refs.stepRefs.get(input.stepId) : undefined,
     fix: input.fix,
+    analysis: input.analysis ?? null,
   });
   const request: AiRequest = {
     task: 'chat',
@@ -318,6 +330,179 @@ export async function answerAssistant(
     reply: `${reply}\n\nI couldn't turn this into a valid change to your workflow, so nothing is proposed. Try asking for a smaller, more specific change.`,
     proposal: null,
     rejectedProposal: true,
+    usage,
+  };
+}
+
+// ---------- suggestQuestions (Guided Analysis) ----------
+
+export async function suggestQuestions(provider: AiProvider, graph: WorkflowGraph, timeoutMs: number): Promise<{ questions: { question: string; hint: string }[]; usage: Usage }> {
+  const request: AiRequest = {
+    task: 'questions',
+    system: QUESTIONS_SYSTEM,
+    messages: [{ role: 'user', content: questionsPrompt(workflowView(graph).view) }],
+    schema: questionsJsonSchema,
+    maxTokens: 4000,
+    effort: 'low',
+    timeoutMs,
+  };
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, questionsOutput);
+    if (!parsed.ok) return parsed;
+    const questions = parsed.value.questions.filter((q) => q.question.trim()).slice(0, 3);
+    return { ok: true, value: questions.map((q) => ({ question: q.question.trim(), hint: q.hint.trim() })) };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't prepare questions for this workflow. You can analyze without them.");
+  return { questions: result.value, usage };
+}
+
+// ---------- analyzeWorkflow ----------
+
+export type AnalysisResult = {
+  headline: string;
+  summary: string;
+  outcome: 'improvements' | 'no_improvements';
+  assumptions: string[];
+  recommendations: Omit<Recommendation, 'status'>[];
+  /** Recommendations left out because they stayed invalid after the correction attempt. */
+  dropped: number;
+  usage: Usage;
+};
+
+type CheckedAnalysis = { value: Omit<AnalysisResult, 'usage' | 'dropped'>; problems: string[]; invalidKeys: Set<string> };
+
+/** Validate the model's analysis: every recommendation must apply cleanly to the snapshot, and no invented figures. */
+function checkAnalysis(out: AnalysisOutput, graph: WorkflowGraph, refs: RefMap, source: string): CheckedAnalysis {
+  const problems: string[] = [];
+  const invalidKeys = new Set<string>();
+  const ids = new Map<string, string>();
+  for (const r of out.recommendations) {
+    if (ids.has(r.key) || !r.key) problems.push(`Recommendation key "${r.key}" is missing or repeated.`);
+    ids.set(r.key, newId());
+  }
+  const figures = (where: string, ...texts: string[]) => {
+    const found = unsupportedFigures(texts.join(' '), source);
+    if (found.length) problems.push(`${where} states figures that the workflow doesn't support (${found.join(', ')}). Describe impact in words instead.`);
+    return found.length > 0;
+  };
+  figures('The headline or summary', out.headline, out.summary, ...out.assumptions);
+
+  const recommendations: Omit<Recommendation, 'status'>[] = [];
+  for (const r of out.recommendations) {
+    // Structural problems make a recommendation unusable; invented figures can be removed after the retry.
+    const structural: string[] = [];
+    if (!r.title.trim()) structural.push(`Recommendation ${r.key} has no title.`);
+    if (r.operations.length === 0) structural.push(`Recommendation ${r.key} has no diagram changes; give each recommendation at least one operation.`);
+    figures(`Recommendation ${r.key}`, r.title, r.problem, r.proposal, r.reason, r.benefits, r.risks, r.assumptions, r.verification);
+    const unknownDeps = r.depends_on.filter((k) => !ids.has(k) || k === r.key);
+    if (unknownDeps.length) structural.push(`Recommendation ${r.key} depends on unknown recommendations (${unknownDeps.join(', ')}).`);
+    const translated = translateOperations(r.operations, refs);
+    if (!translated.ok) structural.push(...translated.problems.map((p) => `Recommendation ${r.key}: ${p}`));
+    else {
+      const applied = applyOperations(graph, translated.value);
+      if (!applied.ok && r.operations.length) structural.push(...applied.problems.map((p) => `Recommendation ${r.key}: ${p}`));
+    }
+    if (structural.length) {
+      problems.push(...structural);
+      invalidKeys.add(r.key);
+      continue;
+    }
+    recommendations.push({
+      id: ids.get(r.key)!,
+      title: r.title.trim(),
+      problem: r.problem.trim(),
+      proposal: r.proposal.trim(),
+      reason: r.reason.trim(),
+      category: r.category,
+      impact: r.impact,
+      effort: r.effort,
+      evidence: r.evidence,
+      benefits: r.benefits.trim(),
+      risks: r.risks.trim(),
+      assumptions: r.assumptions.trim(),
+      verification: r.verification.trim(),
+      dependsOn: r.depends_on.map((k) => ids.get(k)!).filter(Boolean),
+      operations: translated.ok ? translated.value : [],
+    });
+  }
+  if (out.outcome === 'improvements' && out.recommendations.length === 0) problems.push('Outcome is "improvements" but there are no recommendations.');
+  if (out.outcome === 'no_improvements' && out.recommendations.length > 0) problems.push('Outcome is "no_improvements" but recommendations were given.');
+  if (!out.summary.trim()) problems.push('The summary is empty.');
+  return {
+    value: {
+      headline: out.headline.trim() || 'Workflow assessment',
+      summary: out.summary.trim(),
+      outcome: out.outcome,
+      assumptions: out.assumptions.map((a) => a.trim()).filter(Boolean).slice(0, 5),
+      recommendations,
+    },
+    problems,
+    invalidKeys,
+  };
+}
+
+/** Remove sentences that state unsupported figures (used only after the correction attempt). */
+const stripFigures = (text: string, source: string) =>
+  text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => unsupportedFigures(sentence, source).length === 0)
+    .join(' ');
+
+export async function analyzeWorkflow(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; answers: { question: string; answer: string }[] },
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<AnalysisResult> {
+  const { view, refs } = workflowView(input.graph);
+  // Figures the person supplied (in the workflow or their answers) may be repeated; nothing else.
+  const source = JSON.stringify(view) + JSON.stringify(input.answers);
+  const request: AiRequest = {
+    task: 'analysis',
+    system: ANALYSIS_SYSTEM,
+    messages: [{ role: 'user', content: analysisPrompt({ view, issues: validateWorkflow(input.graph), answers: input.answers }) }],
+    schema: analysisJsonSchema,
+    maxTokens: 16000,
+    effort: 'high',
+    timeoutMs,
+    ...(signal ? { signal } : {}),
+  };
+  let last: CheckedAnalysis | null = null;
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, analysisOutput);
+    if (!parsed.ok) return parsed;
+    last = checkAnalysis(parsed.value, input.graph, refs, source);
+    return last.problems.length ? { ok: false, problems: last.problems.slice(0, 12) } : { ok: true, value: last.value };
+  });
+  if (result.ok) return { ...result.value, dropped: 0, usage };
+
+  // Still invalid after the one correction: keep what is valid, never what isn't.
+  const checked = last as CheckedAnalysis | null;
+  if (!checked || !checked.value.summary) throw new AiOutputError("Flico couldn't complete this analysis. No credit was used. Please try again.");
+  const { value, invalidKeys } = checked;
+  if (value.outcome === 'improvements' && value.recommendations.length === 0) {
+    throw new AiOutputError("Flico's recommendations couldn't be checked, so none are shown. No credit was used. Please try again.");
+  }
+  const clean = (t: string) => stripFigures(t, source);
+  const kept = new Set(value.recommendations.map((r) => r.id));
+  return {
+    headline: clean(value.headline) || 'Workflow assessment',
+    summary: clean(value.summary),
+    outcome: value.recommendations.length ? 'improvements' : value.outcome,
+    assumptions: value.assumptions.map(clean).filter(Boolean),
+    recommendations: value.recommendations.map((r) => ({
+      ...r,
+      title: clean(r.title) || r.title.replace(/\d/g, '').trim(),
+      problem: clean(r.problem),
+      proposal: clean(r.proposal),
+      reason: clean(r.reason),
+      benefits: clean(r.benefits),
+      risks: clean(r.risks),
+      assumptions: clean(r.assumptions),
+      verification: clean(r.verification),
+      dependsOn: r.dependsOn.filter((id) => kept.has(id)),
+    })),
+    dropped: invalidKeys.size,
     usage,
   };
 }

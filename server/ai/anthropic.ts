@@ -32,7 +32,7 @@ export class AnthropicProvider implements AiProvider {
         // A declined request is re-run on Anthropic's recommended fallback model instead of failing.
         ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
       },
-      { timeout: request.timeoutMs },
+      { timeout: request.timeoutMs, ...(request.signal ? { signal: request.signal } : {}) },
     );
   }
 
@@ -62,6 +62,7 @@ export class AnthropicProvider implements AiProvider {
 
 function toAiError(error: unknown): AiError {
   if (error instanceof AiError) return error;
+  if (error instanceof Anthropic.APIUserAbortError) return new AiError('cancelled', AI_ERROR_MESSAGES.cancelled);
   if (error instanceof Anthropic.APIConnectionTimeoutError) return new AiError('timeout', AI_ERROR_MESSAGES.timeout);
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
     return new AiError('misconfigured', AI_ERROR_MESSAGES.misconfigured);

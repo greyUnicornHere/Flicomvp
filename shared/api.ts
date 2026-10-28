@@ -20,6 +20,7 @@ export type ApiErrorCode =
   | 'ai_unavailable'
   | 'ai_not_configured'
   | 'ai_failed'
+  | 'no_credits'
   | 'server_error';
 
 export type ApiErrorBody = { error: { code: ApiErrorCode; message: string } };
@@ -116,6 +117,83 @@ export type ChatHistoryResponse = { messages: ChatMessage[] };
 export type ChatReplyResponse = { messages: ChatMessage[] };
 export type ApplyProposalResponse = { message: ChatMessage; revision: number; updatedAt: string; graph: WorkflowGraph };
 export type AssumptionsResponse = { assumptions: Assumption[] };
+
+// ---------- Analysis (Milestone 4) ----------
+
+export type RecommendationCategory = 'quick_win' | 'strategic' | 'complex';
+export type Level = 'low' | 'medium' | 'high';
+/** Evidence labels (spec §11): supported by the workflow, based on assumptions, or requires verification. */
+export type Evidence = 'supported' | 'assumption' | 'verify';
+export type ReviewStatus = 'pending' | 'accepted' | 'rejected';
+
+export type Recommendation = {
+  id: string;
+  title: string;
+  problem: string;
+  proposal: string;
+  reason: string;
+  category: RecommendationCategory;
+  impact: Level;
+  effort: Level;
+  evidence: Evidence;
+  benefits: string;
+  risks: string;
+  assumptions: string;
+  verification: string;
+  /** Other recommendations this one relies on. */
+  dependsOn: string[];
+  operations: ProposalOperation[];
+  status: ReviewStatus;
+};
+
+export type AnalysisMode = 'quick' | 'guided';
+export type AnalysisSlot = 'initial' | 'latest';
+
+export type Analysis = {
+  id: string;
+  workflowId: string;
+  slot: AnalysisSlot;
+  mode: AnalysisMode;
+  source: AiSource;
+  /** Workflow revision and graph the analysis was made from (the preserved original). */
+  baseRevision: number;
+  snapshot: WorkflowGraph;
+  headline: string;
+  summary: string;
+  outcome: 'improvements' | 'no_improvements';
+  assumptions: string[];
+  answers: { question: string; answer: string }[];
+  recommendations: Recommendation[];
+  createdAt: string;
+  appliedAt: string | null;
+};
+
+export type AnalysisQuestion = { id: string; question: string; hint: string };
+export type AnalysisQuestionsResponse = { questions: AnalysisQuestion[]; source: AiSource };
+
+export type AnalysisRunStage = 'checking' | 'reviewing' | 'validating' | 'saving';
+export type AnalysisRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type AnalysisRun = {
+  id: string;
+  workflowId: string;
+  status: AnalysisRunStatus;
+  stage: AnalysisRunStage;
+  error: string | null;
+  analysisId: string | null;
+};
+export type StartAnalysisRequest = {
+  mode: AnalysisMode;
+  baseRevision: number;
+  /** Client-generated per attempt: retrying the same request never charges twice. */
+  idempotencyKey: string;
+  answers?: { questionId: string; question: string; answer: string }[];
+};
+export type AnalysisRunResponse = { run: AnalysisRun };
+export type AnalysesResponse = { analyses: Analysis[] };
+export type AnalysisResponse = { analysis: Analysis };
+export type CreditsResponse = { balance: number; initial: number };
+export type ApplyAnalysisResponse = { analysis: Analysis; graph: WorkflowGraph; revision: number; updatedAt: string };
+export const ANALYSIS_ANSWER_MAX = 500;
 
 export type DevOutboxMessage = {
   id: string;

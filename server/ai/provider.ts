@@ -2,7 +2,7 @@
 // database. Everything it returns is untrusted and is parsed and validated by the caller.
 import type { AiSource } from '../../shared/api.js';
 
-export type AiTask = 'draft' | 'quick_add' | 'chat';
+export type AiTask = 'draft' | 'quick_add' | 'chat' | 'analysis' | 'questions';
 
 export type AiMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -16,6 +16,8 @@ export type AiRequest = {
   maxTokens: number;
   effort: 'low' | 'medium' | 'high';
   timeoutMs: number;
+  /** Aborts the request (analysis cancellation). */
+  signal?: AbortSignal;
 };
 
 export type AiResponse = { text: string; usage: { inputTokens: number; outputTokens: number } };
@@ -25,7 +27,7 @@ export interface AiProvider {
   generate(request: AiRequest): Promise<AiResponse>;
 }
 
-export type AiErrorKind = 'timeout' | 'unavailable' | 'rate_limited' | 'refused' | 'misconfigured';
+export type AiErrorKind = 'timeout' | 'unavailable' | 'rate_limited' | 'refused' | 'misconfigured' | 'cancelled';
 
 /** Provider failure with a safe, user-readable message. Never carries prompt or response content. */
 export class AiError extends Error {
@@ -44,4 +46,5 @@ export const AI_ERROR_MESSAGES: Record<AiErrorKind, string> = {
   rate_limited: "Flico's AI service is busy right now. Please wait a moment and try again.",
   refused: "Flico couldn't help with that request. Try rephrasing it.",
   misconfigured: "AI isn't set up correctly on this server. Ask your Flico administrator to check the AI settings.",
+  cancelled: 'Cancelled.',
 };

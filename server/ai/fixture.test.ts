@@ -3,7 +3,9 @@ import { applyOperations } from '../../shared/aiOps.js';
 import { validateWorkflow } from '../../shared/validation.js';
 import { FixtureProvider } from './fixture.js';
 import { AiError } from './provider.js';
-import { answerAssistant, generateWorkflow, quickAdd } from './service.js';
+import { analyzeWorkflow, answerAssistant, generateWorkflow, quickAdd, suggestQuestions } from './service.js';
+import { findConflicts, planApply } from '../../shared/analysis.js';
+import type { WorkflowGraph } from '../../shared/graph.js';
 
 const fixture = new FixtureProvider();
 const DESCRIPTION = 'A supplier emails an invoice. Finance checks the details. If the amount is over 5000, the manager approves it. Finance pays the supplier.';
@@ -51,5 +53,45 @@ describe('FixtureProvider (development and tests only)', () => {
     const plain = await answerAssistant(fixture, { graph, history: [], content: 'Summarize this workflow', fix: false }, 1000);
     expect(plain.proposal).toBeNull();
     expect(plain.reply).toMatch(/5 steps after Start/);
+  });
+});
+
+describe('FixtureProvider analysis (development and tests only)', () => {
+  const graph: WorkflowGraph = {
+    nodes: [
+      { id: 'a', type: 'start', label: 'Start', position: { x: 0, y: 0 } },
+      { id: 'b', type: 'action', label: 'Receive order', position: { x: 0, y: 0 } },
+      { id: 'c', type: 'action', label: 'Check order', position: { x: 0, y: 0 } },
+      { id: 'd', type: 'approval', label: 'Manager approves', position: { x: 0, y: 0 } },
+      { id: 'e', type: 'finish', label: 'Shipped', position: { x: 0, y: 0 } },
+    ],
+    edges: [
+      { id: '1', sourceId: 'a', targetId: 'b', type: 'normal' },
+      { id: '2', sourceId: 'b', targetId: 'c', type: 'normal' },
+      { id: '3', sourceId: 'c', targetId: 'd', type: 'normal' },
+      { id: '4', sourceId: 'd', targetId: 'e', type: 'normal' },
+    ],
+  };
+  const withNote = (note: string): WorkflowGraph => ({ ...graph, nodes: graph.nodes.map((n) => (n.id === 'e' ? { ...n, notes: note } : n)) });
+
+  it('produces three compatible, valid recommendations', async () => {
+    const result = await analyzeWorkflow(fixture, { graph, answers: [] }, 1000);
+    expect(result.recommendations.map((r) => r.category)).toEqual(['quick_win', 'strategic', 'complex']);
+    expect(findConflicts(graph, result.recommendations)).toEqual([]);
+    expect(planApply(graph, result.recommendations, result.recommendations.map((r) => r.id)).ok).toBe(true);
+  });
+
+  it('simulates no improvements, invented figures and a conflict', async () => {
+    expect((await analyzeWorkflow(fixture, { graph: withNote('[fixture:none]'), answers: [] }, 1000)).outcome).toBe('no_improvements');
+    const roi = await analyzeWorkflow(fixture, { graph: withNote('[fixture:roi]'), answers: [] }, 1000);
+    expect(roi.summary).not.toMatch(/30%|\$/);
+    const conflict = await analyzeWorkflow(fixture, { graph: withNote('[fixture:conflict]'), answers: [] }, 1000);
+    expect(findConflicts(graph, conflict.recommendations)).toHaveLength(1);
+  });
+
+  it('asks up to three questions about the workflow', async () => {
+    const { questions } = await suggestQuestions(fixture, graph, 1000);
+    expect(questions).toHaveLength(3);
+    expect(questions[2]!.question).toContain('Manager approves');
   });
 });

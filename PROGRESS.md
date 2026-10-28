@@ -7,7 +7,7 @@
 | 0 | **Foundation:** scripts, SQLite + migrations, invite-only magic-link auth, sessions, tokens + logo, error boundary, health/status | **Approved by owner 2026-10-26; merged to `main`.** |
 | 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | **Approved by owner 2026-10-26; merged to `main`.** |
 | 2 | Manual editor: organic graph editor, branches/loops/parallel/exceptions, validation, autosave, undo/redo | **Approved by owner 2026-10-28; merged to `main`.** |
-| 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | **Built on `milestone-3-ai`; waiting for owner review.** Live Claude demo pending the API key. |
+| 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | **Approved by owner 2026-10-28; merged to `main`.** |
 | 4 | Analysis: credits, Quick/Guided, one-diagram change review, recommendations and application | Not started |
 | 5 | Pilot-ready: export, privacy-aware telemetry, feedback, audits, accessibility, deployment | Not started |
 | 6 | Pilot fixes only | Not started |

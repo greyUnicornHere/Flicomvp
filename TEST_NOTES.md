@@ -242,3 +242,8 @@ New coverage, by the prompt's required test list:
 - **The SDK silently uses `ANTHROPIC_BASE_URL` from the environment** (set in this cloud environment for its own purposes). The API address is now explicit so the key can't be sent elsewhere (test added).
 - **The full E2E suite hit the fixed sign-in verification limit** (30 per 15 minutes) once it grew past 30 sign-ins; that limit now follows `AUTH_RATE_LIMIT` when set higher (default unchanged).
 - Proposal previews could sit behind the Ask Flico window; previews now keep the changed steps clear of it where possible.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of Milestone 3, including the switch to Claude Haiku 5.5 | Pass | Product owner approved Milestone 3 on 2026-10-28. The live Claude run in this cloud environment (row above) was not performed here; no key was added to this environment. |

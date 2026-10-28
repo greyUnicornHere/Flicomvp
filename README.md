@@ -49,7 +49,7 @@ All settings live in `.env` (created from [`.env.example`](.env.example), never 
 
 AI drafting, Quick Add and Ask Flico use Anthropic Claude on the server. The key is never sent to the browser.
 
-- **Live AI:** put your key in `.env` as `ANTHROPIC_API_KEY=…` (never commit it), then restart `npm run dev`. The default model is `claude-opus-5-5` (`AI_MODEL`).
+- **Live AI:** put your key in `.env` as `ANTHROPIC_API_KEY=…` (never commit it), then restart `npm run dev`. The default model is Claude Haiku 5.5, `claude-haiku-5-5` (`AI_MODEL`).
 - **No key:** Flico works normally and the AI features say "AI isn't set up on this server". Nothing is sent.
 - **Test mode:** `AI_PROVIDER=fixture` gives fixed, clearly labelled test responses (used by the automated tests). It's refused in production.
 - Daily limits per person (reset at midnight UTC): `AI_DAILY_DRAFTS`, `AI_DAILY_QUICK_ADDS`, `AI_DAILY_CHAT`. AI never uses analysis credits.

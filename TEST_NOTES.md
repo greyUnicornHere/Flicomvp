@@ -183,7 +183,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **AI respo
 |---|---|---|
 | Lint | `npm run lint` | Pass |
 | Typecheck | `npm run typecheck` | Pass |
-| Unit + API (server + shared: 118, client: 107) | `npm test` | **225 / 225 pass** |
+| Unit + API (server + shared: 119, client: 107) | `npm test` | **226 / 226 pass** |
 | Production build (client + compiled server boots with the Claude provider configured) | `npm run build`, `npm start` smoke test | Pass |
 | Browser E2E (all milestones) | `npm run test:e2e` | **41 / 41 pass** (10 new AI tests) |
 | Dependency audit | `npm audit` | 0 vulnerabilities |
@@ -207,7 +207,7 @@ New coverage, by the prompt's required test list:
 | Clear History | API and E2E: chat empty, graph identical |
 | No raw content in logs / analytics | request log captured during drafts and chats: paths only, error class only; `ai_usage` holds counts only |
 | No AI response crosses users | another person gets 404 for chat, apply, cancel, clear, Quick Add and assumptions |
-| Claude adapter | `server/ai/anthropic.test.ts` (stubbed API): exact request (model, structured output schema, effort, refusal fallback header, no thinking budget), fixed API address even when `ANTHROPIC_BASE_URL` is set, retry without fallback if rejected, refusal / 401 / 429 / 529 / 400 mapped to safe messages without echoing content or key |
+| Claude adapter | `server/ai/anthropic.test.ts` (stubbed API): exact request (default model Haiku 5.5 with structured output schema and effort, no thinking budget, no sampling parameters, no fallback; refusal fallback header only for Opus/Fable models), answer read by block type when thinking comes first, fixed API address even when `ANTHROPIC_BASE_URL` is set, retry without fallback if rejected, refusal / 401 / 429 / 529 / 400 mapped to safe messages without echoing content or key |
 | Configuration | fixture refused in production; anthropic requires a key; no key → "not set up" (API 503, Create page, Ask Flico, Quick Add) |
 | Limits | daily draft and chat limits (429 with reset time), reset the next UTC day |
 | Autosave | `flushNow` saves pending edits and returns the revision; `rebase` adopts a server-saved graph without saving again |

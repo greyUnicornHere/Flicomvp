@@ -37,7 +37,7 @@ const schema = z
      */
     AI_PROVIDER: z.enum(['anthropic', 'fixture', 'none', '']).default(''),
     ANTHROPIC_API_KEY: optionalString,
-    AI_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
+    AI_MODEL: z.string().trim().min(1).default('claude-haiku-5-5'),
     /** Claude API address. Only change it for an approved gateway; the key is sent there. */
     AI_BASE_URL: z.url().default('https://api.anthropic.com'),
     /** Longest a single AI request may take before Flico gives up (seconds). */

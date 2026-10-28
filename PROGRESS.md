@@ -51,7 +51,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Milestone 3: what works
 
-- **AI adapter** with a live Anthropic Claude provider (`claude-opus-5-5`, structured output, refusal fallback enabled) and a labelled test fixture for development and tests. Without a key, every AI feature says it isn't set up and sends nothing.
+- **AI adapter** with a live Anthropic Claude provider (Claude Haiku 5.5 `claude-haiku-5-5`, structured output) and a labelled test fixture for development and tests. Without a key, every AI feature says it isn't set up and sends nothing.
 - **Create with AI**: describe a process and get a named, laid-out draft immediately. Inferred steps are tagged and can be confirmed; assumptions can be confirmed, edited or removed. Invalid output gets one correction; if still invalid, the valid part is kept with Retry / Continue editing manually; a failure never creates anything or loses the description.
 - **AI Quick Add** in the + menu: type what happens next, press Enter; the step is inserted at once (marked Inferred) with Undo.
 - **Ask Flico**: movable floating window (compact, expand, minimize, close; always on screen; arrow-key moving), one saved conversation per workflow, Clear History, fixed contextual prompts, "Ask Flico about this step".

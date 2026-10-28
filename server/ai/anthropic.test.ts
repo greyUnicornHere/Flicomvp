@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { loadConfig } from '../config.js';
 import { AnthropicProvider } from './anthropic.js';
 import { AiError, type AiRequest } from './provider.js';
 
@@ -71,10 +72,21 @@ describe('AnthropicProvider', () => {
     }
   });
 
-  it('omits the fallback for other models', async () => {
+  it('uses the default model Haiku 5.5 without a fallback (it has none) or a thinking budget', async () => {
     const { sent, fetch } = stub([{ status: 200, body: message('{}') }]);
-    await new AnthropicProvider('sk-test', 'claude-sonnet-5-5', { fetch, maxRetries: 0 }).generate(request);
+    await new AnthropicProvider('sk-test', loadConfig({ NODE_ENV: 'test' }).AI_MODEL, { fetch, maxRetries: 0 }).generate(request);
+    expect(sent[0]!.body).toMatchObject({ model: 'claude-haiku-5-5', output_config: { effort: 'low', format: { type: 'json_schema' } } });
     expect(sent[0]!.body).not.toHaveProperty('fallbacks');
+    expect(sent[0]!.body).not.toHaveProperty('thinking');
+    expect(sent[0]!.body).not.toHaveProperty('temperature');
+    expect(sent[0]!.headers.get('anthropic-beta') ?? '').not.toContain('server-side-fallback');
+  });
+
+  it('reads the answer by block type when thinking blocks come first', async () => {
+    const withThinking = { ...message('{"label":"x"}'), content: [{ type: 'thinking', thinking: '', signature: 'sig' }, { type: 'text', text: '{"label":"x"}' }] };
+    const { fetch } = stub([{ status: 200, body: withThinking }]);
+    const result = await new AnthropicProvider('sk-test', 'claude-haiku-5-5', { fetch, maxRetries: 0 }).generate(request);
+    expect(result.text).toBe('{"label":"x"}');
   });
 
   it('asks once more without the fallback if the API rejects it', async () => {

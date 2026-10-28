@@ -24,6 +24,11 @@ type Props = {
   chatOpen: boolean;
   onToggleChat: () => void;
   onSuggestFix: () => void;
+  /** Editor/Analysis tabs, shown once an analysis exists. */
+  view: 'editor' | 'analysis';
+  hasAnalysis: boolean;
+  onViewChange: (view: 'editor' | 'analysis') => void;
+  analyze: { credits: number | null; initialCredits: number | null; disabledReason: string | null; onQuick: () => void; onGuided: () => void };
 };
 
 const soon = 'Available in a later update';
@@ -47,6 +52,22 @@ export function EditorHeader(props: Props) {
       <SaveIndicator {...save} />
 
       <div className="ml-auto flex flex-none items-center gap-2">
+        {props.hasAnalysis && (
+          <div role="tablist" aria-label="View" className="mr-2 flex h-11 items-stretch gap-1">
+            {(['editor', 'analysis'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={props.view === v}
+                className={`border-b-2 px-3 text-[14px] font-semibold ${props.view === v ? 'border-fl-brand text-fl-brand' : 'border-transparent text-fl-text-secondary hover:text-fl-text'}`}
+                onClick={() => props.onViewChange(v)}
+              >
+                {v === 'editor' ? 'Editor' : 'Analysis'}
+              </button>
+            ))}
+          </div>
+        )}
         <button type="button" className={iconBtn} aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!props.canUndo} onClick={props.onUndo}>
           <Undo2 size={18} aria-hidden="true" />
         </button>
@@ -82,7 +103,7 @@ export function EditorHeader(props: Props) {
         >
           <Sparkles size={15} aria-hidden="true" /> Ask Flico
         </button>
-        <AnalyzeMenu check={props.analysisCheck} />
+        <AnalyzeMenu check={props.analysisCheck} {...props.analyze} />
         <button type="button" className={soonBtn} disabled title={soon} aria-describedby="fl-soon">
           <Download size={15} aria-hidden="true" /> Export
         </button>
@@ -196,13 +217,14 @@ function SaveIndicator({ status, error, retry }: Props['save']) {
   );
 }
 
-/** Analyze: runs the real pre-analysis check now; Quick/Guided analysis are shown as coming soon. */
-function AnalyzeMenu({ check }: { check: PreAnalysisResult }) {
+/** Analyze: the pre-analysis check, remaining credits, and Quick or Guided analysis. */
+function AnalyzeMenu({ check, credits, initialCredits, disabledReason, onQuick, onGuided }: { check: PreAnalysisResult } & Props['analyze']) {
   const summary = check.canAnalyze
     ? check.warnings.length
       ? `Ready, with ${check.warnings.length} ${check.warnings.length === 1 ? 'warning' : 'warnings'} you may want to fix first.`
       : 'This workflow is ready for analysis.'
     : `Fix before analysis: ${check.blockers.map((b) => b.message).join(' ')}`;
+  const reason = disabledReason ?? (!check.canAnalyze ? 'Fix the problems above first' : credits === 0 ? 'No credits left' : null);
   return (
     <Menu
       label="Analyze"
@@ -212,18 +234,24 @@ function AnalyzeMenu({ check }: { check: PreAnalysisResult }) {
           <Sparkles size={15} aria-hidden="true" /> Analyze <ChevronDown size={14} aria-hidden="true" />
         </>
       }
-      width={300}
+      width={320}
       header={
         <div className="px-3 pb-2 pt-2">
           <p className="text-[13px] font-semibold text-fl-text">Workflow check</p>
           <p className={`mt-1 text-[13px] leading-5 ${check.canAnalyze ? 'text-fl-text-secondary' : 'text-fl-error'}`}>{summary}</p>
-          <p className="mt-2 text-[12px] leading-[18px] text-fl-text-muted">Analysis itself arrives in a later update.</p>
+          {credits !== null && (
+            <p className="mt-2 text-[12px] leading-[18px] text-fl-text-muted">
+              {credits === 0
+                ? "You've used all your analysis credits. Ask the Flico team for more."
+                : `${credits}${initialCredits ? ` of ${initialCredits}` : ''} ${credits === 1 ? 'analysis' : 'analyses'} left. Each completed analysis uses one; failed or cancelled ones are free.`}
+            </p>
+          )}
           <div className="mx-[-4px] mt-2 border-t border-fl-border" role="separator" />
         </div>
       }
       items={[
-        { label: 'Quick Analysis', disabled: true, hint: 'Coming soon' },
-        { label: 'Guided Analysis', disabled: true, hint: 'Coming soon' },
+        { label: 'Quick Analysis', ...(reason ? { disabled: true, hint: reason } : { onSelect: onQuick }) },
+        { label: 'Guided Analysis', ...(reason ? { disabled: true, hint: reason } : { onSelect: onGuided, hint: 'Up to 3 optional questions' }) },
       ]}
     />
   );

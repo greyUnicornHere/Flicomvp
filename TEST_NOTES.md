@@ -247,3 +247,67 @@ New coverage, by the prompt's required test list:
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of Milestone 3, including the switch to Claude Haiku 5.5 | Pass | Product owner approved Milestone 3 on 2026-10-28. The live Claude run in this cloud environment (row above) was not performed here; no key was added to this environment. |
+
+## Milestone 4 — 2026-10-28 (branch `milestone-4-analysis`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Analyses in all automated tests and screenshots come from Flico's test fixture (`AI_PROVIDER=fixture`), not a live model**; screenshot names say so where AI output is visible.
+
+### Automated
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `npm run lint` | Pass |
+| Typecheck | `npm run typecheck` | Pass |
+| Unit + API | `npm test` | **259 / 259 pass** |
+| Production build | `npm run build` | Pass |
+| Browser E2E (all milestones) | `npm run test:e2e` | **50 / 50 pass** (9 new analysis tests; the analysis spec also passed twice more in a row) |
+| Credits script | `npm run credits` on a scratch database | Shows balance and history; adds/removes; refuses going below 0; unknown person refused |
+
+Required tests from the milestone prompt:
+
+| Required test | Where |
+|---|---|
+| Result graph invariants | `shared/analysis.test.ts` (combined plan passes all integrity rules; invalid combinations refused); API: every stored recommendation applies cleanly to its snapshot |
+| Select / reject / apply / undo | API "applies accepted recommendations only…"; E2E R06/R07/R08 (reject, reconsider, accept, final preview, apply, one Undo restores the stored graph exactly) |
+| Stale revision | API: start with an old revision → 409 before any model call; apply after a rename → 409 and graph unchanged; moved steps still apply |
+| Two conflicting recommendations | `findConflicts`/`planApply` unit tests; API conflict → 409 "Accept only one", nothing applied; E2E R09 (Accept all → conflict listed, Confirm disabled, resolve by rejecting one) |
+| All rejected | API: no accepted recommendation → "Accept at least one", nothing applied; screen keeps Apply disabled |
+| No improvements | API (stored, charged once); E2E R14 (no forced recommendations, no Apply, unchanged diagram) |
+| Guided unanswered questions | API (empty answers → full analysis); E2E R02 (skip → same number of recommendations as with answers) |
+| No double charge on API retries | API: same idempotency key while running and after success → same run, one model call, one debit; ledger has exactly one `analysis` row |
+| Expired / no credits | API: 0 credits → 402 `no_credits`, model never called; failed, timed-out and cancelled runs leave the balance unchanged; cancel aborts the model request |
+| Owner isolation | API: another person gets 404 for analyses, runs, cancel, review, apply and start; credits are per person |
+| No made-up ROI | `unsupportedFigures` unit tests; API: invented %, $, "cut 4 hours", ROI → one correction, then removed; E2E R13 |
+| Initial / Latest | API (first = initial; later ones replace latest; three runs → two records, 7 credits left); E2E R10 (no switcher with one analysis, switcher with two) |
+| Ask Flico uses the latest analysis | API: chat prompt contains the recommendation titles and review states |
+
+### Acceptance cases (05_QA M4)
+
+| ID | Case | Result | Evidence (E2E `tests/e2e/analysis.spec.ts`; screenshots `docs/evidence/m4/`) |
+|---|---|---|---|
+| R01 | Analyze menu: Quick / Guided | Pass | `01-analyze-menu-1536.png` (check, "10 of 10 analyses left") |
+| R02 | Guided, skip questions | Pass (fixture) | Equally detailed; `08-guided-questions-1536-test-fixture.png` |
+| R03 | Genuine stages, auto-opens summary | Pass (fixture) | Stage marked current in the overlay; `07-progress-1536-test-fixture.png`; Analysis tab opens on success |
+| R04 | One diagram with added/modified/removed and route changes | Pass (fixture) | One added, one updated, one removed step plus removed/added connections; `02-results-1536-test-fixture.png` |
+| R05 | Select recommendation ↔ diagram | Pass | Card → its steps focused, unrelated steps dimmed; step click → its card selected; `03-selected-recommendation-1536.png` |
+| R06 | Reject → collapsed section, reconsider | Pass | Count updates, collapsed by default, Undecide returns it |
+| R07 | Final preview of accepted only, conflict checks | Pass (fixture) | Rejected change absent from the preview; `04-final-preview-1536-test-fixture.png` |
+| R08 | Confirm & Apply, original kept, Undo | Pass | Revision +1, snapshot equals the original, one Undo restores it; `05-applied-editor-1536.png` |
+| R09 | Apply All with incompatible recommendations | Pass (fixture) | Conflict explained, Confirm disabled, nothing saved; `06-conflict-1536-test-fixture.png` |
+| R10 | Run twice: Initial/Latest | Pass | Dropdown only with two analyses |
+| R11 | Failed / cancelled / duplicate → no charge | Pass | E2E cancel and outage keep 10 credits; API duplicate key |
+| R12 | One analysis with 10 credits → 9, one debit | Pass | E2E and API ledger check |
+| R13 | No imaginary percentages | Pass (fixture) | No %, currency or ROI in headline, summary or recommendations |
+| R14 | Sound workflow → no forced recommendations | Pass (fixture) | `09-no-improvements-1536-test-fixture.png` |
+| — | 1280 px and keyboard | Pass | No horizontal scroll; select a card with Enter, Tab to Accept, tabs operable; `10-results-1280-test-fixture.png` |
+| — | Live Claude analysis | **Blocked: no API key in this environment** | Same flows pass with the fixture |
+
+### Design comparison with `03-analysis-approved.png`
+Matches: header with Editor/Analysis tabs, Ask Flico, Export; "WORKFLOW ASSESSMENT" overline, headline and subtitle; Latest Analysis dropdown and gradient "Apply reviewed changes →"; executive summary card with the counts and "No numerical savings assumed"; "Proposed workflow changes" with the change-preview diagram (legend, + Added / ↗ Updated / − Removed badges, dashed old route) beside the "Recommendations (N)" list with category filter, numbered cards, category tags, evidence label, Details ▾, status pill, collapsed "Rejected recommendations", "Review & confirm" and "Accept all"; footer "Proposals only; your original workflow is preserved." and "Back to editor →".
+Intentional differences: Accept/Reject buttons on each card (the mockup has no visible way to accept or reject); the version dropdown appears only when there are two analyses; the evidence chip is shown per recommendation rather than one for the summary; mockup figures and dates are not reproduced; the dropdown is a native select for keyboard and screen-reader reliability.
+
+### Bugs found and fixed during Milestone 4
+- The full-page screenshot captured the diagram mid-resize (arrows missing); evidence now uses normal screenshots.
+- Selecting a recommendation zoomed the diagram in on a single step; it now only pans (or zooms out when needed).
+- The review diagram opened very small for wide workflows; the page is wider and the diagram opens at a readable minimum zoom.
+- Recommendations that only contained invented figures were dropped instead of cleaned; they're now kept with those sentences removed.

@@ -113,3 +113,9 @@
 .fl-dots span:nth-child(2) { animation-delay: .15s; }
 .fl-dots span:nth-child(3) { animation-delay: .3s; }
 @media (prefers-reduced-motion: reduce) { .fl-dots span { animation: none; opacity: .6; } }
+
+/* ---------- Analysis review (Milestone 4) ---------- */
+/* Selecting a recommendation focuses its steps; the rest of the diagram steps back. */
+.fl-node[data-focus="dim"] { opacity: .35; }
+.fl-node[data-focus="on"] { outline: 2.5px solid var(--fl-brand); outline-offset: 3px; }
+.react-flow__edgelabel-renderer [data-edge-focus="dim"] { opacity: .3; }

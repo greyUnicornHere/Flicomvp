@@ -393,10 +393,10 @@ test('E15: validation marker and header summary point to the same problem', asyn
   await page.keyboard.press('Enter');
   await expect(summary).toHaveCount(0);
 
-  // Pre-analysis check behind Analyze; analysis itself is clearly not available yet.
+  // Pre-analysis check behind Analyze; Quick and Guided analysis are offered once it passes (Milestone 4).
   await page.getByRole('button', { name: 'Analyze' }).click();
   await expect(page.getByRole('menu', { name: 'Analyze' })).toContainText('This workflow is ready for analysis.');
-  await expect(page.getByRole('menuitem', { name: 'Quick Analysis, Coming soon' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('menuitem', { name: 'Quick Analysis' })).not.toHaveAttribute('aria-disabled', 'true');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Ask Flico' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();

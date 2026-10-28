@@ -8,7 +8,7 @@
 | 1 | Dashboard: welcome, two creation paths, real workflow persistence, search, rename/delete | **Approved by owner 2026-10-26; merged to `main`.** |
 | 2 | Manual editor: organic graph editor, branches/loops/parallel/exceptions, validation, autosave, undo/redo | **Approved by owner 2026-10-28; merged to `main`.** |
 | 3 | AI: provider adapter, AI create/Quick Add, floating Ask Flico, validated previews | **Approved by owner 2026-10-28; merged to `main`.** |
-| 4 | Analysis: credits, Quick/Guided, one-diagram change review, recommendations and application | Not started |
+| 4 | Analysis: credits, Quick/Guided, one-diagram change review, recommendations and application | **Built on `milestone-4-analysis`; waiting for owner review.** |
 | 5 | Pilot-ready: export, privacy-aware telemetry, feedback, audits, accessibility, deployment | Not started |
 | 6 | Pilot fixes only | Not started |
 
@@ -58,14 +58,26 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **AI edits and Suggest Fix**: explanation in chat plus a simultaneous canvas overlay (green added, amber updated, red struck-through removed, changed connections marked); Apply is checked on the server against the revision, all-or-nothing, and is one undoable step; Cancel changes nothing.
 - Daily AI limits per person (no analysis credits), rate limit, timeouts, input and output size limits; no workflow text or chat in logs.
 
+## Milestone 4: what works
+
+- **Analyze → Quick or Guided** (up to three optional, AI-picked questions; skipping still gives a full analysis). The menu shows the workflow check and "N of 10 analyses left".
+- Centered progress overlay with the real stages and Cancel. The Analysis tab opens automatically when the assessment is saved.
+- **Credits:** 10 to start; one used per saved analysis; failed, cancelled and duplicate requests are free; `npm run credits` for top-ups.
+- **Results:** headline, executive summary, evidence labels, "No numerical savings assumed", one diagram with added/updated/removed changes and route changes, and the synchronized recommendation list (filter, details, Pending/Accepted/Rejected, collapsed rejected section, Accept all).
+- **Final preview** of accepted changes only, with conflict and dependency checks, then **Confirm & apply**: one server-checked save, one Undo, original snapshot kept.
+- Initial and Latest analysis with a dropdown (no duplicate when there's one). An honest "no improvements" result. No invented numbers. Ask Flico knows the latest analysis.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
 - Real SMTP delivery is implemented but **not yet tested** against a live provider.
 - E2E has run in Chromium only. Edge needs a machine with Edge installed.
 - Feedback in the account menu is disabled ("Coming soon") until Milestone 5.
-- Status is always Draft until analysis exists (Milestone 4).
-- Export and analysis are visibly disabled until their milestones.
+- Export is visibly disabled until Milestone 5.
+- **Live analysis not yet demonstrated:** like Milestone 3, analyses in tests and screenshots come from the labelled test fixture. Analysis quality with Claude Haiku 5.5 needs a live check once a key is available.
+- Long workflows are drawn small in the review diagram (it shares the width with the list). It opens at a readable zoom; use pan, zoom or fit-to-screen to see the rest.
+- An analysis can't be applied after steps or connections changed (moving steps is fine); run a new analysis.
+- Applying is once per analysis. To apply more of it later, run a new analysis.
 - **Live AI not yet demonstrated:** no `ANTHROPIC_API_KEY` in this environment yet. All AI features are tested end to end with the test fixture, and the Claude adapter's request format and error handling are unit-tested against a stubbed API. The first live run happens once the key is added (see TEST_NOTES.md).
 - The test fixture follows a simple fixed pattern (one step per sentence, approval/removal/fix suggestions on keywords). It exists to test the app, not to judge AI quality.
 - Ask Flico doesn't use analysis results yet (there are none until Milestone 4).
@@ -79,4 +91,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/` and `docs/evidence/m3/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/` and `docs/evidence/m4/`.

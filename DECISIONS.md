@@ -181,3 +181,54 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - Daily limits as above; `AI_RATE_LIMIT` (default 20 per minute per client address) on AI requests; text limits: description 4,000, chat message 2,000, Quick Add 300 characters; model output bounded (max tokens per task, at most 60 draft steps).
 - `ai_usage` records counts and token totals per person and day (no content), so costs can be monitored.
 - The sign-in link verification limit now follows `AUTH_RATE_LIMIT` when that is set above 30 (default unchanged at 30 per 15 minutes). The longer E2E suite signs in more than 30 times.
+
+## Milestone 4 — Analysis and recommendations (2026-10-28)
+
+### Owner decisions (asked before building)
+- **Model:** Claude Haiku 5.5 for everything, analysis included (no separate analysis model).
+- **Guided questions:** picked by AI for each workflow (up to three, all optional). Preparing them is free (no credit) and counts as one Ask Flico message toward the daily limit.
+- **Numbers:** strictly qualitative. No savings, percentages, money, time savings or ROI in this milestone.
+- **Credits display:** in the Analyze menu only ("9 of 10 analyses left"). Acceptance case D08 keeps the account menu to Email, Feedback and Sign Out, so credits aren't added there.
+
+### Credits (spec §10; contract §4)
+- Append-only `credit_ledger`; the balance is the sum. Everyone gets `ANALYSIS_INITIAL_CREDITS` (10) once, recorded as an `initial_grant` with a unique key.
+- One credit is debited **in the same transaction that saves the completed analysis**. The debit row carries the run id, which is unique, so a run can never be charged twice. Failed, cancelled, interrupted and duplicate requests are never charged.
+- Each attempt has a client-generated idempotency key. Repeating it returns the same run (still running, or already done) instead of starting a new one. After a lost request the editor retries with the same key.
+- One running analysis per person at a time. With no credits left, starting is refused before anything is sent to the model.
+- Top-ups use a script (no admin UI): `npm run credits -- person@example.com 5` (negative numbers for corrections, with an optional note); without a number it shows the balance and history.
+
+### Running an analysis
+- Analyze → **Quick** or **Guided**. Blockers from the pre-analysis check prevent starting; warnings don't. Pending edits are saved first and the run names that revision.
+- Runs happen in the background with **real stages**, shown in a centered overlay above the canvas: Checking the workflow → Reviewing steps, hand-offs and waits → Checking the proposed changes → Saving your assessment. No percentages.
+- **Cancel** works until saving begins. It aborts the model request; if the result arrives anyway, the save transaction sees the cancellation and stores nothing.
+- Runs interrupted by a server restart are marked failed on start-up (uncharged).
+- On success the editor switches to the **Analysis** tab automatically.
+
+### What the analysis contains (spec §11; contract §3)
+- A short headline, an executive summary, overall assumptions and the person's Guided answers, plus up to 8 recommendations. Each recommendation has title, problem, proposal, reason, benefits, effort, impact, risks, assumptions, verification, dependencies, a category (Quick Win / Strategic Improvement / Complex Change), an evidence label (Supported by your workflow / Based on assumptions / Requires verification) and the diagram operations that implement it.
+- **Validation** (same rules as Ask Flico proposals): every recommendation's operations must apply cleanly to the analysed workflow on their own. Refs are translated to IDs, unknown refs are errors, dependencies must exist, and the outcome must match (recommendations ⇔ "improvements").
+- **No invented figures:** percentages, money amounts, "save N hours", "N× faster" and ROI are rejected unless that exact figure appears in the workflow or the person's answers.
+- One correction attempt with the problems listed. After it, invalid recommendations are dropped and sentences with unsupported figures are removed. If no valid recommendation remains, the run fails (uncharged). An honest "no improvements" result is accepted and charged as a normal completed analysis.
+- **Initial and Latest only:** the first analysis of a workflow is kept as Initial; each later one replaces Latest. With a single analysis there is one record and no version switcher. The workflow's status becomes **Analyzed**.
+- Each analysis keeps the exact snapshot it assessed: the original is preserved.
+
+### Review screen (spec §12; design §7.5)
+- Editor/Analysis tabs in the header (once an analysis exists). Both stay mounted, so switching keeps the canvas view, the selected recommendation, filters and expanded details.
+- Page: overline, headline, Initial/Latest dropdown, "Apply reviewed changes"; executive summary card with the counts and "No numerical savings assumed"; then **one diagram (≈62%)** and the **recommendation list (≈38%)**. The page is up to 1,360 px wide so the diagram has room.
+- The diagram draws every recommendation still in play on the analysed workflow: added green, updated amber, removed red with dashed outline and struck-through label, changed connections coloured and badged. A recommendation that clashes with another is left out of the combined picture and shown on its own when selected. It never shows a side-by-side or an "optimized vs original" toggle.
+- **Synchronized:** selecting a card focuses its steps and connections (and the steps they connect to); the rest dims and the view pans to them without zooming in. Clicking a highlighted step selects its card and scrolls to it. Steps can be selected with Enter.
+- Ordering: highest impact first, then least effort (no scores shown). Category filter. Cards show a short proposal; Details expands problem, why, benefits, effort/impact, risks, assumptions and verification.
+- Accept / Reject per card with explicit Pending / Accepted / Rejected labels. Rejected cards move to a collapsed "Rejected recommendations" section and can be reconsidered. Review choices are saved on the server.
+- **Accept all** accepts everything still in play and opens the final preview.
+
+### Final preview and Apply
+- "Review & confirm" (or Apply reviewed changes) opens a combined preview of the **accepted recommendations only**, with conflict and dependency checks. Overlapping choices ("both change “Check order”. Accept only one of them."), missing dependencies and integrity problems are listed, and Confirm & apply stays disabled until resolved.
+- Apply on the server re-checks owner, conflicts, dependencies and graph integrity, then saves in one transaction. It is refused if steps or connections changed since the analysis (moving steps is fine), and the screen says so.
+- New steps are placed like manual edits; existing steps keep their positions. The editor adopts the result as **one undoable step** and returns to the Editor tab. The analysis records when it was applied, and its snapshot remains the original.
+
+### Ask Flico
+- Ask Flico now receives the current analysis (headline, summary, recommendation titles, categories and review states), as spec §9 requires.
+
+### Implementation notes
+- `shared/analysis.ts` holds the review rules (touched steps, conflicts, dependencies, combined plan, overlay, ordering, figure check) so the screen and the server agree exactly.
+- The diagram drawing code is shared between the editor canvas and the review diagram (`client/src/editor/flowElements.ts`).

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
-  MarkerType,
   ReactFlow,
   useReactFlow,
   type Edge,
@@ -10,7 +9,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import { useLocation, useNavigate } from 'react-router';
-import type { AiSource, Assumption, ChatMessage, ChatMode, WorkflowDetail } from '../../../shared/api';
+import type { AiSource, Analysis, AnalysisMode, ApplyAnalysisResponse, Assumption, ChatMessage, ChatMode, StartAnalysisRequest, WorkflowDetail } from '../../../shared/api';
 import { applyOperations, diffGraphs, type GraphChanges } from '../../../shared/aiOps';
 import type { WorkflowGraph } from '../../../shared/graph';
 import { preAnalysisCheck, validateWorkflow, type Issue } from '../../../shared/validation';
@@ -21,6 +20,9 @@ import { applyProposal, cancelProposal, createAiDraft, fetchAiStatus, quickAddSt
 import { AskFlico } from './AskFlico';
 import { AssumptionsPanel, DraftNotice, PreviewBar } from './AiPanels';
 import { useChat, type ChatRequest } from './useChat';
+import { cancelRun, fetchAnalyses, fetchCredits, fetchQuestions, fetchRun, startAnalysis } from '../lib/analysis';
+import { AnalysisView } from './analysis/AnalysisView';
+import { AnalysisProgress, GuidedQuestions, type ProgressState } from './analysis/AnalysisDialogs';
 import { CanvasControls } from './CanvasControls';
 import { ConnectDialog, DecisionDialog, DeleteStepDialog, ExceptionDialog, LoopDialog, ParallelDialog } from './dialogs';
 import { EditorHeader } from './EditorHeader';
@@ -29,8 +31,8 @@ import { FlowEdge, type FlowEdgeType } from './FlowEdge';
 import { useGraphHistory } from './history';
 import { InsertMenu, type InsertChoice } from './InsertMenu';
 import { autoLayout, NODE_HEIGHT, NODE_WIDTH, placeNewSteps } from './layout';
-import { curveCrosses, detour, type Box } from './routing';
 import { focusWhenReady } from './focus';
+import { flowEdges, flowNodes, withChanges } from './flowElements';
 import { motionDuration } from './motion';
 import {
   addDecision,
@@ -56,10 +58,8 @@ import {
   type OpResult,
   type Slot,
 } from './ops';
-import { CHANGE_BADGE, type Change } from './changes';
 import { StepNode, type StepFlowNode } from './StepNode';
 import { StepPopover } from './StepPopover';
-import { STEP_META } from './stepMeta';
 import { StepToolbar, type ToolbarAction } from './StepToolbar';
 import { TOOLBAR_ICONS } from './toolbarIcons';
 import { finishCandidate } from './finish';
@@ -87,7 +87,6 @@ type Preview = { messageId: string; graph: WorkflowGraph; changes: GraphChanges 
 export type AiDraftState = { aiDraft?: { partial: boolean; source: AiSource; description: string } };
 
 const PREVIEW_REASON = 'Apply or cancel the suggestion first.';
-const CHANGE_COLOUR: Record<Change, string> = { added: 'var(--fl-diff-add)', modified: 'var(--fl-diff-change)', removed: 'var(--fl-diff-remove)' };
 
 /** Lay out a loaded graph only if it has never been arranged (every step at the same spot). */
 function initialGraph(g: WorkflowGraph): WorkflowGraph {
@@ -152,6 +151,32 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       active = false;
     };
   }, []);
+
+  // ---------- analysis ----------
+  const [view, setView] = useState<'editor' | 'analysis'>('editor');
+  const [analyses, setAnalyses] = useState<Analysis[]>([]);
+  const [credits, setCredits] = useState<{ balance: number; initial: number } | null>(null);
+  const [progress, setProgress] = useState<ProgressState | null>(null);
+  const [guidedOpen, setGuidedOpen] = useState(false);
+  const run = useRef<{ id: string | null; request: Omit<StartAnalysisRequest, 'baseRevision'> } | null>(null);
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    let active = true;
+    fetchAnalyses(workflow.id).then(
+      (list) => active && setAnalyses(list),
+      () => {},
+    );
+    fetchCredits().then(
+      (c) => active && setCredits(c),
+      () => {},
+    );
+    return () => {
+      active = false;
+      alive.current = false;
+    };
+  }, [workflow.id]);
 
   useEffect(() => {
     if (!toast) return;
@@ -325,96 +350,17 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   // ---------- React Flow view of the graph ----------
 
   /** What the canvas shows: the graph, or during an AI preview the proposed graph plus what it removes. */
-  const display = useMemo(() => {
-    const nodeChange = new Map<string, Change>();
-    const edgeChange = new Map<string, Change>();
-    if (!preview) return { graph, nodeChange, edgeChange };
-    const { changes } = preview;
-    for (const id of changes.addedNodes) nodeChange.set(id, 'added');
-    for (const id of changes.modifiedNodes) nodeChange.set(id, 'modified');
-    for (const id of changes.removedNodes) nodeChange.set(id, 'removed');
-    for (const id of changes.addedEdges) edgeChange.set(id, 'added');
-    for (const id of changes.modifiedEdges) edgeChange.set(id, 'modified');
-    for (const id of changes.removedEdges) edgeChange.set(id, 'removed');
-    return {
-      graph: {
-        nodes: [...preview.graph.nodes, ...graph.nodes.filter((n) => nodeChange.get(n.id) === 'removed')],
-        edges: [...preview.graph.edges, ...graph.edges.filter((e) => edgeChange.get(e.id) === 'removed')],
-      },
-      nodeChange,
-      edgeChange,
-    };
-  }, [graph, preview]);
+  const display = useMemo(
+    () => (preview ? withChanges(graph, preview.graph, preview.changes) : { graph, nodeChange: new Map(), edgeChange: new Map() }),
+    [graph, preview],
+  );
 
   const rfNodes: StepFlowNode[] = useMemo(
-    () =>
-      display.graph.nodes.map((n) => {
-        const problems = preview ? [] : (issuesByNode.get(n.id) ?? []);
-        const change = display.nodeChange.get(n.id);
-        return {
-          id: n.id,
-          type: 'step',
-          position: dragging[n.id] ?? n.position,
-          data: change ? { step: n, change } : { step: n },
-          selected: n.id === selected && !preview,
-          measured: dims[n.id],
-          ariaLabel: `${change ? `Proposed: ${CHANGE_BADGE[change].slice(2).toLowerCase()}. ` : ''}${STEP_META[n.type].name} step: ${n.label || 'Untitled step'}${problems.length ? `. ${problems.map((p) => p.message).join(' ')}` : ''}${n.origin === 'ai-inferred' && n.assumptionStatus === 'unconfirmed' ? '. Inferred by Flico, not yet confirmed' : ''}`,
-        };
-      }),
+    () => flowNodes(display, { dims, dragging, selected: preview ? null : selected, ...(preview ? {} : { issuesByNode }) }),
     [display, preview, selected, dims, dragging, issuesByNode],
   );
 
-  const rfEdges: FlowEdgeType[] = useMemo(() => {
-    // Current on-screen boxes of every step (including one being dragged).
-    const shown = display.graph;
-    const labelIn = (id: string) => findNode(shown, id)?.label || 'Untitled step';
-    const boxes = new Map<string, Box>(
-      shown.nodes.map((n) => {
-        const p = dragging[n.id] ?? n.position;
-        const size = dims[n.id] ?? { width: NODE_WIDTH, height: NODE_HEIGHT };
-        return [n.id, { left: p.x, top: p.y, right: p.x + size.width, bottom: p.y + size.height }];
-      }),
-    );
-    return shown.edges.map((e): FlowEdgeType => {
-      const change = display.edgeChange.get(e.id);
-      const isLoop = e.type === 'loop';
-      const s = boxes.get(e.sourceId);
-      const t = boxes.get(e.targetId);
-      let loopBottom: number | undefined;
-      let route: ReturnType<typeof detour> = null;
-      if (s && t && isLoop) {
-        const [minX, maxX] = [Math.min(s.left, t.left) - 40, Math.max(s.right, t.right) + 40];
-        const between = [...boxes.values()].filter((b) => b.right > minX && b.left < maxX);
-        loopBottom = Math.max(...between.map((b) => b.bottom)) + 40;
-      } else if (s && t) {
-        // Arrows normally curve; only when the curve would pass over a step do they go around it.
-        const from = { x: s.right, y: (s.top + s.bottom) / 2 };
-        const to = { x: t.left, y: (t.top + t.bottom) / 2 };
-        const others = [...boxes.entries()].filter(([id]) => id !== e.sourceId && id !== e.targetId).map(([, b]) => b);
-        if (curveCrosses(from, to, others)) route = detour(from, to, others);
-      }
-      const colour = change ? CHANGE_COLOUR[change] : e.type === 'exception' ? 'var(--fl-exception-stroke)' : 'var(--fl-edge)';
-      const kind = e.type === 'yes' || e.type === 'no' ? `, ${e.label ?? e.type}` : e.type === 'loop' ? ', repeats' : e.type === 'exception' ? ', exception path' : '';
-      return {
-        id: e.id,
-        source: e.sourceId,
-        target: e.targetId,
-        type: 'flow',
-        sourceHandle: isLoop ? 'loop-out' : 'out',
-        targetHandle: isLoop ? 'loop-in' : 'in',
-        markerEnd: { type: MarkerType.Arrow, color: colour, width: 18, height: 18, strokeWidth: 1.6 },
-        ariaLabel: `${change ? `Proposed: ${CHANGE_BADGE[change].slice(2).toLowerCase()} connection. ` : ''}Connection from ${labelIn(e.sourceId)} to ${labelIn(e.targetId)}${kind}`,
-        data: {
-          edge: e,
-          sourceLabel: labelIn(e.sourceId),
-          targetLabel: labelIn(e.targetId),
-          ...(change ? { change } : {}),
-          ...(loopBottom !== undefined ? { loopBottom } : {}),
-          ...(route ? { detour: route } : {}),
-        },
-      };
-    });
-  }, [display, dims, dragging]);
+  const rfEdges: FlowEdgeType[] = useMemo(() => flowEdges(display, { dims, dragging }), [display, dims, dragging]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<StepFlowNode>[]) => {
@@ -612,6 +558,81 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   const assumptionAction = (action: () => Promise<Assumption[]>) => async () => setAssumptions(await action());
 
+  // ---------- analysis runs ----------
+
+  /**
+   * Run an analysis: save pending edits, start it, and follow its real stages until it finishes.
+   * Retrying after a lost request reuses the same key, so the server never runs or charges twice.
+   */
+  const runAnalysis = async (request: Omit<StartAnalysisRequest, 'baseRevision'>) => {
+    run.current = { id: null, request };
+    setProgress({ kind: 'running', stage: 'checking', cancelling: false });
+    try {
+      const baseRevision = await save.flushNow();
+      let current = await startAnalysis(workflow.id, { ...request, baseRevision });
+      run.current = { id: current.id, request };
+      while (current.status === 'running') {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        if (!alive.current) return;
+        current = await fetchRun(current.id);
+        const stage = current.stage;
+        if (current.status === 'running') setProgress((p) => (p?.kind === 'running' ? { ...p, stage } : p));
+      }
+      if (current.status === 'succeeded') {
+        const [list, balance] = await Promise.all([fetchAnalyses(workflow.id), fetchCredits()]);
+        setAnalyses(list);
+        setCredits(balance);
+        setProgress(null);
+        setView('analysis');
+      } else if (current.status === 'cancelled') {
+        setProgress({ kind: 'cancelled' });
+      } else {
+        setProgress({ kind: 'failed', message: current.error ?? 'The analysis did not finish. No credit was used.' });
+      }
+      void fetchCredits().then(setCredits, () => {});
+    } catch (error) {
+      setProgress({ kind: 'failed', message: (error as Error).message });
+    }
+  };
+
+  const startNew = (mode: AnalysisMode, answers: StartAnalysisRequest['answers'] = []) =>
+    void runAnalysis({ mode, idempotencyKey: crypto.randomUUID(), ...(mode === 'guided' ? { answers } : {}) });
+
+  const retryAnalysis = () => {
+    const last = run.current;
+    if (!last) return;
+    // The server never saw a run id: the request may have been lost, so retry it as the same request.
+    if (last.id === null) void runAnalysis(last.request);
+    else startNew(last.request.mode, last.request.answers);
+  };
+
+  const cancelAnalysis = async () => {
+    const id = run.current?.id;
+    setProgress((p) => (p?.kind === 'running' ? { ...p, cancelling: true } : p));
+    if (!id) return;
+    try {
+      await cancelRun(id);
+    } catch (error) {
+      setNotice((error as Error).message);
+    }
+  };
+
+  const onAnalysisApplied = (result: ApplyAnalysisResponse) => {
+    save.rebase(result.graph, result.revision);
+    commit(result.graph);
+    setAnalyses((list) => list.map((a) => (a.id === result.analysis.id ? result.analysis : a)));
+    setView('editor');
+    const added = result.graph.nodes.filter((n) => !findNode(graph, n.id)).map((n) => n.id);
+    if (added.length) reveal(added);
+  };
+
+  const { flushNow } = save;
+  // Stable, so the questions are fetched once per opening of the dialog.
+  const guidedQuestions = useCallback(async () => fetchQuestions(workflow.id, await flushNow()), [workflow.id, flushNow]);
+
+  const analyzeBlocked =
+    ai === null ? 'Checking AI…' : !ai.available ? 'AI not set up' : progress?.kind === 'running' ? 'An analysis is running' : preview ? 'Apply or cancel the suggestion first' : null;
+
   const closeDialog = () => setDialog(null);
   const finishAfter = preview ? null : finishCandidate(graph);
 
@@ -636,13 +657,34 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           aiAvailable={ai?.available ?? false}
           chatOpen={chatOpen}
           onToggleChat={() => (chatOpen ? closeChat() : openChat())}
+          view={view}
+          hasAnalysis={analyses.length > 0}
+          onViewChange={setView}
+          analyze={{
+            credits: credits?.balance ?? null,
+            initialCredits: credits?.initial ?? null,
+            disabledReason: analyzeBlocked,
+            onQuick: () => startNew('quick'),
+            onGuided: () => setGuidedOpen(true),
+          }}
           onSuggestFix={() => {
             openChat();
             void askFlico({ content: 'Fix the issues in this workflow', mode: 'fix' });
           }}
         />
 
-        <div className="relative flex-1" onKeyDown={onCanvasKeyDown}>
+        {analyses.length > 0 && (
+          <div className={view === 'analysis' ? 'min-h-0 flex-1' : 'hidden'}>
+            <AnalysisView
+              analyses={analyses}
+              currentGraph={graph}
+              onAnalysisChange={(a) => setAnalyses((list) => list.map((x) => (x.id === a.id ? a : x)))}
+              onApplied={onAnalysisApplied}
+              onBackToEditor={() => setView('editor')}
+            />
+          </div>
+        )}
+        <div className={view === 'analysis' ? 'hidden' : 'relative flex-1'} onKeyDown={onCanvasKeyDown}>
           <ReactFlow<StepFlowNode, FlowEdgeType>
             nodes={rfNodes}
             edges={rfEdges}
@@ -742,6 +784,14 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               </button>
             </div>
           )}
+          {progress && (
+            <AnalysisProgress
+              state={progress}
+              onCancel={() => void cancelAnalysis()}
+              onRetry={retryAnalysis}
+              onClose={() => setProgress(null)}
+            />
+          )}
           {notice && (
             <div role="alert" className="absolute bottom-6 left-1/2 z-20 flex max-w-[520px] -translate-x-1/2 items-center gap-3 rounded-[12px] border border-[var(--fl-exception-stroke)] bg-[var(--fl-exception-fill)] px-4 py-2.5 text-[13px] text-[var(--fl-exception-ink)] shadow-fl-card">
               {notice}
@@ -783,6 +833,17 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           onAsk={() => {
             setDetailsId(null);
             openChat({ stepId: detailsNode.id, stepLabel: detailsNode.label });
+          }}
+        />
+      )}
+
+      {guidedOpen && (
+        <GuidedQuestions
+          load={guidedQuestions}
+          onCancel={() => setGuidedOpen(false)}
+          onAnalyze={(answers) => {
+            setGuidedOpen(false);
+            startNew('guided', answers);
           }}
         />
       )}

@@ -32,6 +32,7 @@ Stop Flico with `Ctrl+C` in the terminal.
 | `npm run invite -- person@example.com` | Invite someone (there is no open sign-up) |
 | `npm run invite -- --revoke person@example.com` | Revoke an invitation and sign that person out everywhere |
 | `npm run invite -- --list` | List invitations |
+| `npm run credits -- person@example.com 5` | Add analysis credits (no number: show balance and history) |
 | `npm run db:migrate` | Apply database migrations (also applied automatically on start) |
 | `npm test` | Unit and API tests |
 | `npm run test:e2e` | Browser tests (first time: `npx playwright install chromium`) |
@@ -52,7 +53,8 @@ AI drafting, Quick Add and Ask Flico use Anthropic Claude on the server. The key
 - **Live AI:** put your key in `.env` as `ANTHROPIC_API_KEY=…` (never commit it), then restart `npm run dev`. The default model is Claude Haiku 5.5, `claude-haiku-5-5` (`AI_MODEL`).
 - **No key:** Flico works normally and the AI features say "AI isn't set up on this server". Nothing is sent.
 - **Test mode:** `AI_PROVIDER=fixture` gives fixed, clearly labelled test responses (used by the automated tests). It's refused in production.
-- Daily limits per person (reset at midnight UTC): `AI_DAILY_DRAFTS`, `AI_DAILY_QUICK_ADDS`, `AI_DAILY_CHAT`. AI never uses analysis credits.
+- Daily limits per person (reset at midnight UTC): `AI_DAILY_DRAFTS`, `AI_DAILY_QUICK_ADDS`, `AI_DAILY_CHAT`. Drafts, Quick Add and chat never use analysis credits.
+- **Analysis credits:** everyone starts with `ANALYSIS_INITIAL_CREDITS` (10). Each saved analysis uses one; failed or cancelled ones are free. Add more with `npm run credits`.
 
 ## Project layout
 

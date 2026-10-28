@@ -2,13 +2,13 @@ import { useReactFlow, useStore } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { motionDuration } from './motion';
 
-/** Bottom-right canvas utilities: zoom, fit to screen, auto-arrange. */
-export function CanvasControls({ onAutoArrange }: { onAutoArrange: () => void }) {
+/** Bottom-right canvas utilities: zoom, fit to screen, auto-arrange (editor only). */
+export function CanvasControls({ onAutoArrange, compact = false }: { onAutoArrange?: () => void; compact?: boolean }) {
   const rf = useReactFlow();
   const zoom = useStore((s) => s.transform[2]);
   const btn = 'grid h-11 w-11 place-items-center text-fl-text-secondary hover:bg-fl-brand-pale hover:text-fl-brand';
   return (
-    <div className="absolute bottom-6 right-6 z-10 flex items-center gap-3" role="group" aria-label="Canvas controls">
+    <div className={`absolute z-10 flex items-center gap-3 ${compact ? 'bottom-4 right-4' : 'bottom-6 right-6'}`} role="group" aria-label="Canvas controls">
       <div className="flex items-center overflow-hidden rounded-[12px] border border-fl-border bg-fl-surface shadow-fl-card">
         <button type="button" className={btn} aria-label="Zoom out" onClick={() => rf.zoomOut({ duration: motionDuration(150) })}>
           <Minus size={16} aria-hidden="true" />
@@ -29,9 +29,11 @@ export function CanvasControls({ onAutoArrange }: { onAutoArrange: () => void })
       >
         <Maximize size={16} aria-hidden="true" />
       </button>
-      <button type="button" className="fl-btn !text-fl-text-secondary shadow-fl-card" onClick={onAutoArrange}>
-        Auto-arrange
-      </button>
+      {onAutoArrange && (
+        <button type="button" className="fl-btn !text-fl-text-secondary shadow-fl-card" onClick={onAutoArrange}>
+          Auto-arrange
+        </button>
+      )}
     </div>
   );
 }

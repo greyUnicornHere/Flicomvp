@@ -8,14 +8,14 @@ import { BRANCH_LABEL, flowOut, openBranches, type Slot } from './ops';
 import { focusWhenReady } from './focus';
 import { STEP_META } from './stepMeta';
 
-export type StepFlowNode = Node<{ step: WorkflowNode; change?: Change }, 'step'>;
+export type StepFlowNode = Node<{ step: WorkflowNode; change?: Change; focus?: 'on' | 'dim' }, 'step'>;
 
 const hiddenHandle = '!h-2 !w-2 !min-h-0 !min-w-0 !border-0 !bg-transparent';
 
 /** Organic step block: icon + up to two lines of name. Selection is an outline only; nodes never move or morph. */
 export function StepNode({ id, data, selected }: NodeProps<StepFlowNode>) {
   const ui = useEditorUi();
-  const { step, change } = data;
+  const { step, change, focus } = data;
   const Icon = STEP_META[step.type].icon;
   const issues = ui.issuesByNode.get(id) ?? [];
   const editing = ui.editingId === id;
@@ -35,6 +35,7 @@ export function StepNode({ id, data, selected }: NodeProps<StepFlowNode>) {
       data-type={step.type}
       data-selected={selected ? 'true' : undefined}
       data-diff={change}
+      data-focus={focus}
       title={step.label}
     >
       {change && (

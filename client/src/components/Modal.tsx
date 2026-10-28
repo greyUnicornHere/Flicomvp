@@ -10,12 +10,14 @@ type ModalProps = {
   initialFocusRef?: RefObject<HTMLElement | null>;
   /** Called on close when the element that opened the dialog no longer exists (e.g. a deleted row). */
   onFocusFallback?: () => void;
+  /** Wide dialogs hold a diagram (analysis final preview). */
+  wide?: boolean;
 };
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** Modal dialog: traps Tab focus, closes on Escape or backdrop click, and returns focus where it came from. */
-export function Modal({ title, children, footer, onClose, initialFocusRef, onFocusFallback }: ModalProps) {
+export function Modal({ title, children, footer, onClose, initialFocusRef, onFocusFallback, wide = false }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
@@ -78,7 +80,7 @@ export function Modal({ title, children, footer, onClose, initialFocusRef, onFoc
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="fl-popover w-full max-w-[440px] !p-6"
+        className={`fl-popover w-full !p-6 ${wide ? 'max-w-[1040px]' : 'max-w-[440px]'}`}
         onKeyDown={onKeyDown}
       >
         <h2 id={titleId} className="text-[18px] font-bold leading-[26px]">

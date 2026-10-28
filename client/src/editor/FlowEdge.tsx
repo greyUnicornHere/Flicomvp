@@ -6,7 +6,7 @@ import { CHANGE_BADGE, type Change } from './changes';
 import { cubic, curvePoints, roundedPath, type Detour, type Point } from './routing';
 
 export type FlowEdgeType = Edge<
-  { edge: WorkflowEdge; sourceLabel: string; targetLabel: string; loopBottom?: number; detour?: Detour; change?: Change },
+  { edge: WorkflowEdge; sourceLabel: string; targetLabel: string; loopBottom?: number; detour?: Detour; change?: Change; focus?: 'on' | 'dim' },
   'flow'
 >;
 
@@ -71,13 +71,14 @@ export function FlowEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, da
         path={path}
         markerEnd={markerEnd}
         interactionWidth={22}
-        style={{ stroke, strokeWidth: selected || change ? 2.25 : 1.85, strokeDasharray: dashed, opacity: change === 'removed' ? 0.75 : undefined }}
+        style={{ stroke, strokeWidth: selected || change ? 2.25 : 1.85, strokeDasharray: dashed, opacity: data.focus === 'dim' ? 0.25 : change === 'removed' ? 0.75 : undefined }}
       />
       <EdgeLabelRenderer>
         {change && (
           <span
             className="fl-diff-badge pointer-events-none"
             data-diff={change}
+            data-edge-focus={data.focus}
             style={{ top: 0, left: 0, transform: `translate(-50%, -50%) translate(${labelAt.x}px, ${labelAt.y + (edge.label ? -20 : 0)}px)` }}
             aria-hidden="true"
           >
@@ -88,6 +89,7 @@ export function FlowEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, da
           <span
             className={`pointer-events-none absolute inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-[650] leading-4 ${chipClass[edge.type] ?? chipClass.loop}`}
             style={{ transform: `translate(-50%, -50%) translate(${labelAt.x}px, ${labelAt.y}px)` }}
+            data-edge-focus={data.focus}
             aria-hidden="true"
           >
             {isLoop && <Repeat size={11} />}

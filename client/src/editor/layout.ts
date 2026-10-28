@@ -3,8 +3,8 @@ import type { WorkflowEdge, WorkflowGraph } from '../../../shared/graph';
 
 export const NODE_WIDTH = 184;
 export const NODE_HEIGHT = 72;
-const COLUMN = NODE_WIDTH + 104; // horizontal distance between columns
-const ROW = NODE_HEIGHT + 56; // vertical distance between stacked steps
+export const COLUMN = NODE_WIDTH + 104; // horizontal distance between columns
+export const ROW = NODE_HEIGHT + 56; // vertical distance between stacked steps
 
 /** Order of paths leaving one step, top to bottom: Yes above No, exceptions at the bottom. */
 const TYPE_ORDER: Record<WorkflowEdge['type'], number> = { yes: 0, normal: 1, parallel: 1, no: 2, exception: 3, loop: 4 };
@@ -71,4 +71,97 @@ function byType(a: WorkflowEdge, b: WorkflowEdge) {
 function startFirst(g: WorkflowGraph, a: string, b: string, index: Map<string, number>) {
   const isStart = (id: string) => (g.nodes[index.get(id)!]!.type === 'start' ? 0 : 1);
   return isStart(a) - isStart(b) || index.get(a)! - index.get(b)!;
+}
+
+type XY = { x: number; y: number };
+
+/** Steps closer than this (beyond their own size) count as overlapping. */
+const GAP = 16;
+const overlaps = (a: XY, b: XY) => Math.abs(a.x - b.x) < NODE_WIDTH + GAP && Math.abs(a.y - b.y) < NODE_HEIGHT + GAP;
+
+/**
+ * Place the steps an edit added, without tidying anything else (Auto-arrange does that on request).
+ * - Existing steps keep their positions.
+ * - A new step sits one column to the right of the step it comes from: Yes above, No below,
+ *   parallel activities stacked, exceptions underneath; a join sits level with what it joins.
+ * - If that spot is taken, the nearest free spot above or below is used.
+ * - When steps were inserted into an existing path, only the steps after them on that path
+ *   slide right, and only as far as needed to make room.
+ */
+export function placeNewSteps(before: WorkflowGraph, after: WorkflowGraph): WorkflowGraph {
+  const existing = new Map(before.nodes.map((n) => [n.id, n.position]));
+  const added = after.nodes.filter((n) => !existing.has(n.id));
+  if (added.length === 0) return after;
+
+  const forward = after.edges.filter((e) => e.type !== 'loop');
+  const addedIds = new Set(added.map((n) => n.id));
+
+  // Existing steps that follow the new ones: they may need to slide right, so they don't block placement.
+  const downstream = new Set<string>();
+  const queue = forward.filter((e) => addedIds.has(e.sourceId) && existing.has(e.targetId)).map((e) => e.targetId);
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (downstream.has(id)) continue;
+    downstream.add(id);
+    for (const e of forward) if (e.sourceId === id && existing.has(e.targetId)) queue.push(e.targetId);
+  }
+
+  const placed = new Map<string, XY>();
+  for (const [id, p] of existing) if (!downstream.has(id)) placed.set(id, p);
+  const position = (id: string) => placed.get(id) ?? existing.get(id);
+
+  const pending = [...added];
+  while (pending.length) {
+    // Next: a new step whose predecessors that are already known have positions.
+    const index = Math.max(0, pending.findIndex((n) => forward.some((e) => e.targetId === n.id && position(e.sourceId))));
+    const node = pending.splice(index, 1)[0]!;
+    const parents = forward.filter((e) => e.targetId === node.id && position(e.sourceId));
+    let want: XY;
+    if (parents.length === 0) {
+      const rightmost = Math.max(0, ...[...placed.values()].map((p) => p.x));
+      want = { x: rightmost + COLUMN, y: 0 };
+    } else {
+      const x = Math.max(...parents.map((e) => position(e.sourceId)!.x)) + COLUMN;
+      const ys = parents.map((e) => position(e.sourceId)!.y + offsetFor(e, after, addedIds));
+      want = { x, y: Math.round(ys.reduce((a, b) => a + b, 0) / ys.length) };
+    }
+    placed.set(node.id, freeSpot(want, [...placed.entries()].filter(([id]) => id !== node.id).map(([, p]) => p)));
+  }
+
+  // Make room: slide the following steps right by the largest amount any of them needs.
+  let shift = 0;
+  for (const e of forward) {
+    if (!addedIds.has(e.sourceId) || !downstream.has(e.targetId)) continue;
+    shift = Math.max(shift, placed.get(e.sourceId)!.x + COLUMN - existing.get(e.targetId)!.x);
+  }
+  for (const id of downstream) {
+    const p = existing.get(id)!;
+    placed.set(id, shift > 0 ? { x: p.x + shift, y: p.y } : p);
+  }
+
+  return { nodes: after.nodes.map((n) => ({ ...n, position: placed.get(n.id) ?? n.position })), edges: after.edges };
+}
+
+/** Vertical offset of a new step relative to the step it comes from. */
+function offsetFor(e: WorkflowEdge, g: WorkflowGraph, addedIds: Set<string>): number {
+  if (e.type === 'yes') return -ROW / 2;
+  if (e.type === 'no') return ROW / 2;
+  if (e.type === 'exception') return ROW;
+  if (e.type === 'parallel') {
+    const siblings = g.edges.filter((x) => x.sourceId === e.sourceId && x.type === 'parallel' && addedIds.has(x.targetId));
+    const i = siblings.findIndex((x) => x.id === e.id);
+    return (i - (siblings.length - 1) / 2) * ROW;
+  }
+  return 0;
+}
+
+/** The wanted spot if free, otherwise the nearest free spot above or below it. */
+function freeSpot(want: XY, taken: XY[]): XY {
+  for (let step = 0; step < 40; step++) {
+    for (const dir of step === 0 ? [0] : [1, -1]) {
+      const candidate = { x: want.x, y: want.y + dir * step * (ROW / 2) };
+      if (!taken.some((p) => overlaps(p, candidate))) return candidate;
+    }
+  }
+  return want;
 }

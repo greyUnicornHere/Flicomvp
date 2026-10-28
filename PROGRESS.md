@@ -57,9 +57,9 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Feedback in the account menu is disabled ("Coming soon") until Milestone 5.
 - Status is always Draft until analysis exists (Milestone 4).
 - Ask Flico, Export, AI Quick Add, Suggest Fix and analysis are visibly disabled until their milestones.
-- Structural changes re-arrange the diagram; manual drag positions are kept until the next structural change or Auto-arrange.
+- Adding steps never re-arranges the diagram (owner feedback); only Auto-arrange does. Inserted steps make room by sliding the later steps on that path to the right.
 - Undo history lasts for the browser session only.
-- Long forward connections that skip several columns use simple curves and can pass close to steps in between (repeat connections are fully routed around steps).
+- Arrows bend around a step that sits in their way. With very crowded hand-made layouts a detour can still touch a step; Auto-arrange tidies it.
 - No Customer Order Processing example (owner decision for now).
 - Search filters loaded workflows in the browser (fine for the 200-workflow limit).
 

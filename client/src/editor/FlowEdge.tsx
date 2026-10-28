@@ -2,22 +2,16 @@ import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps } from '@xyflow/
 import { Plus, Repeat } from 'lucide-react';
 import type { WorkflowEdge } from '../../../shared/graph';
 import { useEditorUi } from './EditorContext';
+import { cubic, curvePoints, roundedPath, type Detour, type Point } from './routing';
 
-export type FlowEdgeType = Edge<{ edge: WorkflowEdge; sourceLabel: string; targetLabel: string; loopBottom?: number }, 'flow'>;
-
-type Point = { x: number; y: number };
-
-function cubic(p0: Point, p1: Point, p2: Point, p3: Point, t: number): Point {
-  const u = 1 - t;
-  const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
-  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
-}
+export type FlowEdgeType = Edge<
+  { edge: WorkflowEdge; sourceLabel: string; targetLabel: string; loopBottom?: number; detour?: Detour },
+  'flow'
+>;
 
 /** Smooth left-to-right connector. */
 function curve(source: Point, target: Point) {
-  const dx = Math.max(Math.abs(target.x - source.x) / 2, 48);
-  const points = [source, { x: source.x + dx, y: source.y }, { x: target.x - dx, y: target.y }, target] as const;
-  const [p0, p1, p2, p3] = points;
+  const [p0, p1, p2, p3] = curvePoints(source, target);
   return {
     path: `M ${p0.x},${p0.y} C ${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`,
     at: (t: number) => cubic(p0, p1, p2, p3, t),
@@ -25,27 +19,12 @@ function curve(source: Point, target: Point) {
 }
 
 /**
- * Repeat connections go around the steps: out to the gap after the source's column, down to a lane
- * below every step they pass, back to the gap before the target, and into its left side.
- * The gaps between columns never contain steps, so the route doesn't cross any.
+ * Around the steps: out from the source, along a clear horizontal lane, and back in to the target
+ * from the left. Used for repeat connections (lane below) and for arrows a curve would draw over a step.
  */
-function loopRoute(source: Point, target: Point, lane: number) {
-  const out = source.x + 30;
-  const back = target.x - 30;
-  const r = 18;
-  const d = [
-    `M ${source.x},${source.y}`,
-    `L ${out - r},${source.y}`,
-    `Q ${out},${source.y} ${out},${source.y + r}`,
-    `L ${out},${lane - r}`,
-    `Q ${out},${lane} ${out - r},${lane}`,
-    `L ${back + r},${lane}`,
-    `Q ${back},${lane} ${back},${lane - r}`,
-    `L ${back},${target.y + r}`,
-    `Q ${back},${target.y} ${back + r},${target.y}`,
-    `L ${target.x},${target.y}`,
-  ].join(' ');
-  return { path: d, at: () => ({ x: (out + back) / 2, y: lane }) };
+function laneRoute(source: Point, target: Point, { out, back, lane }: Detour) {
+  const path = roundedPath([source, { x: out, y: source.y }, { x: out, y: lane }, { x: back, y: lane }, { x: back, y: target.y }, target]);
+  return { path, at: (t: number) => ({ x: out + (back - out) * t, y: lane }) };
 }
 
 const chipClass: Record<string, string> = {
@@ -61,7 +40,12 @@ export function FlowEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, da
   const { edge } = data;
   const source = { x: sourceX, y: sourceY };
   const target = { x: targetX, y: targetY };
-  const route = edge.type === 'loop' && data.loopBottom !== undefined ? loopRoute(source, target, data.loopBottom) : curve(source, target);
+  const route =
+    edge.type === 'loop' && data.loopBottom !== undefined
+      ? laneRoute(source, target, { out: source.x + 30, back: target.x - 30, lane: data.loopBottom })
+      : data.detour
+        ? laneRoute(source, target, data.detour)
+        : curve(source, target);
   const path = route.path;
 
   const isLoop = edge.type === 'loop';

@@ -22,7 +22,8 @@ import { EditorUiContext, type EditorUi } from './EditorContext';
 import { FlowEdge, type FlowEdgeType } from './FlowEdge';
 import { useGraphHistory } from './history';
 import { InsertMenu, type InsertChoice } from './InsertMenu';
-import { autoLayout, NODE_HEIGHT, NODE_WIDTH } from './layout';
+import { autoLayout, NODE_HEIGHT, NODE_WIDTH, placeNewSteps } from './layout';
+import { curveCrosses, detour, type Box } from './routing';
 import { focusWhenReady } from './focus';
 import { motionDuration } from './motion';
 import {
@@ -167,12 +168,12 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     [rf],
   );
 
-  /** Run a graph operation as one undoable step, re-arranging the layout afterwards. */
+  /** Run a graph operation as one undoable step. New steps are placed; nothing else is re-arranged. */
   const apply = useCallback(
     (op: (g: WorkflowGraph) => OpResult, options: { editName?: boolean; select?: boolean } = {}): string | null => {
       try {
         const result = op(graph);
-        commit(autoLayout(result.graph));
+        commit(placeNewSteps(graph, result.graph));
         setNotice(null);
         const added = result.graph.nodes.filter((n) => !findNode(graph, n.id)).map((n) => n.id);
         if (result.focusId && options.select !== false) {
@@ -247,17 +248,30 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   );
 
   const rfEdges: FlowEdgeType[] = useMemo(() => {
+    // Current on-screen boxes of every step (including one being dragged).
+    const boxes = new Map<string, Box>(
+      graph.nodes.map((n) => {
+        const p = dragging[n.id] ?? n.position;
+        const size = dims[n.id] ?? { width: NODE_WIDTH, height: NODE_HEIGHT };
+        return [n.id, { left: p.x, top: p.y, right: p.x + size.width, bottom: p.y + size.height }];
+      }),
+    );
     return graph.edges.map((e): FlowEdgeType => {
       const isLoop = e.type === 'loop';
+      const s = boxes.get(e.sourceId);
+      const t = boxes.get(e.targetId);
       let loopBottom: number | undefined;
-      if (isLoop) {
-        const s = findNode(graph, e.sourceId)?.position;
-        const t = findNode(graph, e.targetId)?.position;
-        if (s && t) {
-          const [minX, maxX] = [Math.min(s.x, t.x) - 40, Math.max(s.x, t.x) + NODE_WIDTH + 40];
-          const between = graph.nodes.filter((n) => n.position.x + NODE_WIDTH > minX && n.position.x < maxX);
-          loopBottom = Math.max(...between.map((n) => n.position.y + (dims[n.id]?.height ?? NODE_HEIGHT))) + 40;
-        }
+      let route: ReturnType<typeof detour> = null;
+      if (s && t && isLoop) {
+        const [minX, maxX] = [Math.min(s.left, t.left) - 40, Math.max(s.right, t.right) + 40];
+        const between = [...boxes.values()].filter((b) => b.right > minX && b.left < maxX);
+        loopBottom = Math.max(...between.map((b) => b.bottom)) + 40;
+      } else if (s && t) {
+        // Arrows normally curve; only when the curve would pass over a step do they go around it.
+        const from = { x: s.right, y: (s.top + s.bottom) / 2 };
+        const to = { x: t.left, y: (t.top + t.bottom) / 2 };
+        const others = [...boxes.entries()].filter(([id]) => id !== e.sourceId && id !== e.targetId).map(([, b]) => b);
+        if (curveCrosses(from, to, others)) route = detour(from, to, others);
       }
       const colour = e.type === 'exception' ? 'var(--fl-exception-stroke)' : 'var(--fl-edge)';
       const kind = e.type === 'yes' || e.type === 'no' ? `, ${e.label ?? e.type}` : e.type === 'loop' ? ', repeats' : e.type === 'exception' ? ', exception path' : '';
@@ -270,10 +284,16 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
         targetHandle: isLoop ? 'loop-in' : 'in',
         markerEnd: { type: MarkerType.Arrow, color: colour, width: 18, height: 18, strokeWidth: 1.6 },
         ariaLabel: `Connection from ${labelOf(e.sourceId)} to ${labelOf(e.targetId)}${kind}`,
-        data: { edge: e, sourceLabel: labelOf(e.sourceId), targetLabel: labelOf(e.targetId), ...(loopBottom !== undefined ? { loopBottom } : {}) },
+        data: {
+          edge: e,
+          sourceLabel: labelOf(e.sourceId),
+          targetLabel: labelOf(e.targetId),
+          ...(loopBottom !== undefined ? { loopBottom } : {}),
+          ...(route ? { detour: route } : {}),
+        },
       };
     });
-  }, [graph, dims, labelOf]);
+  }, [graph, dims, dragging, labelOf]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<StepFlowNode>[]) => {

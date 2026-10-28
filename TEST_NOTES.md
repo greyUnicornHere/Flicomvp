@@ -158,3 +158,12 @@ Intentional differences: Editor/Analysis tabs appear only once an analysis exist
 
 ### Bugs found and fixed during Milestone 2
 See DECISIONS.md: autosave saving on open (regression test proves the fix), new-step name focus, name box staying open, Escape dropping focus, repeat connections crossing steps, menu item naming. Each has a test that failed before its fix.
+
+### Owner review changes — 2026-10-28
+- **Feedback 1:** "Adding steps should not tidy up the layout automatically, until the user selects Auto-arrange." **Done.** Edits now place only the new steps: existing (and hand-placed) steps keep their positions, and an insertion slides only the steps after it on that path to the right (owner's choice). Auto-arrange is the only full tidy.
+- **Feedback 2:** the long-arrow limitation was unclear. Explained in plain words, and **fixed by owner choice**: an arrow whose curve would pass over a step now goes around it through clear space.
+- **Evidence:**
+  - Unit: `client/src/editor/placement.test.ts` (7: add at the end moves nothing, insertion slides only later steps by exactly the room needed, no slide when there's room, decision/parallel/exception placement with free-space search, rename/delete/connect move nothing) and `routing.test.ts` (5: curve kept when clear, crossing detected, detour lane avoids steps, backwards arrows untouched, rounded corners).
+  - E2E: "adding steps never tidies the layout" (hand-placed step unchanged after adding steps; insert on an arrow slides only Verify stock and Finish; Auto-arrange then re-arranges columns) and "a long arrow goes around a step" (the drawn path never passes over the step; it becomes a simple curve again once the step is moved away).
+  - Screenshots: `docs/evidence/m2/11-no-auto-tidy-1536.png`, `12-long-arrow-detour-1536.png`.
+- **Totals after these changes:** unit/API **162 / 162**, E2E **31 / 31**, lint, typecheck and build pass.

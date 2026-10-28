@@ -103,8 +103,12 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 
 ### Layout
 - **Deterministic left-to-right layout** (`client/src/editor/layout.ts`): columns follow the longest path from Start (repeat connections ignored), Yes above No, parallel activities stacked vertically, joins level with their parents. The same graph always gives the same picture.
-- **After any structural change** (add, decision, loop, parallel, exception, delete, connect) the diagram is re-arranged automatically, so it stays readable without manual tidying. Dragged positions are saved and kept until the next structural change or Auto-arrange. Layout never changes connections (tested).
-- **Repeat connections are routed around steps:** out through the empty gap after the source's column, along a lane below every step they pass, and back into the target's left side. Other connections are smooth curves with open arrowheads.
+- **No automatic tidying (owner feedback, 2026-10-28).** Edits never re-arrange the diagram; only the **Auto-arrange** button does. New steps are placed by `placeNewSteps`:
+  - Existing steps keep their positions, including ones you dragged.
+  - A new step sits one column to the right of the step it comes from: Yes above, No below, parallel activities stacked, exceptions underneath, a join level with what it joins. If that spot is taken, the nearest free spot above or below is used.
+  - **Making room (owner choice):** when steps are inserted into an existing path, only the steps after them on that path slide right, and only as far as needed. Nothing else moves.
+  - Deleting or connecting steps leaves every position unchanged.
+- **Arrows:** smooth curves with open arrowheads. **When a curve would pass over another step, the arrow goes around it instead** (owner choice): out from the source, along the nearest clear horizontal lane, and back in to the target. Only those arrows change. Repeat connections always use a lane below the steps they pass. (`client/src/editor/routing.ts`)
 - After a change, new steps are brought into view. Small workflows stay fully visible and centred in the free area; larger ones pan to the change, zooming out only when needed.
 
 ### Behaviour and accessibility

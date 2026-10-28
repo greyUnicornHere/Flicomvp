@@ -527,3 +527,88 @@ test('opening a workflow never saves it (no phantom edits, no false conflicts)',
   expect(saves).toEqual([]);
   expect((await (await page.request.get(`/api/workflows/${id}`)).json()).workflow.revision).toBe(2);
 });
+
+test('adding steps never tidies the layout; only Auto-arrange does (owner feedback)', async ({ page }) => {
+  const id = await openWithGraph(page, {
+    nodes: [
+      node('s', 'start', 'Start', 0, 0),
+      node('a', 'action', 'Receive order', 300, 20),
+      node('b', 'action', 'Verify stock', 620, 20),
+      node('f', 'finish', 'Finish', 940, 0),
+      node('x', 'action', 'Archive copy', 310, 400), // placed by hand, not connected to the main path
+    ],
+    edges: [
+      { id: 'e1', sourceId: 's', targetId: 'a', type: 'normal' },
+      { id: 'e2', sourceId: 'a', targetId: 'b', type: 'normal' },
+      { id: 'e3', sourceId: 'b', targetId: 'f', type: 'normal' },
+    ],
+  });
+  const positions = async () => Object.fromEntries((await stored(page, id)).nodes.map((n) => [n.label, n.position]));
+
+  // Add after the hand-placed step: nothing else moves.
+  await addAfter(page, 'Archive copy', 'Action', 'Notify finance');
+  await expect.poll(async () => (await positions())['Notify finance']).toEqual({ x: 310 + 288, y: 400 });
+  expect(await positions()).toMatchObject({
+    Start: { x: 0, y: 0 },
+    'Receive order': { x: 300, y: 20 },
+    'Verify stock': { x: 620, y: 20 },
+    Finish: { x: 940, y: 0 },
+    'Archive copy': { x: 310, y: 400 },
+  });
+
+  // Insert on the arrow Receive order → Verify stock: only the steps after it slide right.
+  await page.getByRole('button', { name: 'Fit to screen' }).click();
+  const a = (await step(page, 'Receive order').boundingBox())!;
+  const b = (await step(page, 'Verify stock').boundingBox())!;
+  await page.mouse.move((a.x + a.width + b.x) / 2, a.y + a.height / 2);
+  await page.getByRole('button', { name: 'Add a step between “Receive order” and “Verify stock”' }).click();
+  await page.getByRole('menuitem', { name: 'Approval' }).click();
+  await page.getByRole('textbox', { name: 'Step name' }).fill('Manager approves');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await positions())['Manager approves']).toEqual({ x: 588, y: 20 });
+  const after = await positions();
+  expect(after).toMatchObject({ Start: { x: 0, y: 0 }, 'Receive order': { x: 300, y: 20 }, 'Archive copy': { x: 310, y: 400 }, 'Notify finance': { x: 598, y: 400 } });
+  expect(after['Verify stock']).toEqual({ x: 876, y: 20 }); // slid right by exactly the room needed
+  expect(after.Finish).toEqual({ x: 1196, y: 0 });
+  await page.screenshot({ path: `${SHOTS}/11-no-auto-tidy-1536.png` });
+
+  // Auto-arrange is the only thing that tidies everything.
+  await page.getByRole('button', { name: 'Auto-arrange' }).click();
+  await expect
+    .poll(async () => {
+      const p = await positions();
+      return [p.Start!.x, p['Receive order']!.x, p['Manager approves']!.x, p['Verify stock']!.x, p.Finish!.x];
+    })
+    .toEqual([0, 288, 576, 864, 1152]); // evenly re-arranged columns
+});
+
+test('a long arrow goes around a step that sits in its way (owner feedback)', async ({ page }) => {
+  await openWithGraph(page, {
+    nodes: [node('s', 'start', 'Start', 0, 0), node('m', 'action', 'Unrelated step', 420, 0), node('f', 'finish', 'Finish', 900, 0)],
+    edges: [{ id: 'long', sourceId: 's', targetId: 'f', type: 'normal' }],
+  });
+  const path = page.locator('.react-flow__edge[data-id="long"] path.react-flow__edge-path');
+  await expect(path).toHaveAttribute('d', / Q /); // rounded detour, not a single curve
+  // The drawn arrow never passes over the step in between.
+  const crosses = await page.evaluate(() => {
+    const p = document.querySelector<SVGPathElement>('.react-flow__edge[data-id="long"] path.react-flow__edge-path')!;
+    const step = document.querySelector('.react-flow__node[data-id="m"]')!.getBoundingClientRect();
+    const m = p.getScreenCTM()!;
+    for (let i = 0; i <= 200; i++) {
+      const pt = p.getPointAtLength((p.getTotalLength() * i) / 200).matrixTransform(m);
+      if (pt.x > step.left && pt.x < step.right && pt.y > step.top && pt.y < step.bottom) return true;
+    }
+    return false;
+  });
+  expect(crosses).toBe(false);
+  await page.getByRole('button', { name: 'Fit to screen' }).click();
+  await page.screenshot({ path: `${SHOTS}/12-long-arrow-detour-1536.png` });
+
+  // Once the step is moved out of the way, the arrow is a simple curve again.
+  const box = (await step(page, 'Unrelated step').boundingBox())!;
+  await page.mouse.move(box.x + 40, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 40, box.y + 260, { steps: 8 });
+  await page.mouse.up();
+  await expect(path).not.toHaveAttribute('d', / Q /);
+});

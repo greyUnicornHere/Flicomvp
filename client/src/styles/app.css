@@ -56,6 +56,8 @@
 .fl-step[data-type="decision"] { border-radius: 36px; }
 .fl-step[data-type="exception"] { border-style: dashed; }
 .fl-step .fl-node-label { word-break: break-word; }
+/* Owner feedback (2026-10-31): show the whole name; blocks keep their width and grow taller. */
+.fl-step .fl-node-label { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .react-flow__node:focus-visible { outline: none; }
 .react-flow__node:focus-visible .fl-step { outline: 2px solid var(--fl-focus); outline-offset: 3px; }
 .fl-step[data-selected="true"] { outline: 2px solid var(--fl-brand); outline-offset: 2px; }

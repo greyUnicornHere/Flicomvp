@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, ChevronDown, ChevronUp, Info, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, ChevronUp, Info, Maximize2, Minimize2, X } from 'lucide-react';
 import type { Analysis, ApplyAnalysisResponse, Recommendation, RecommendationCategory, ReviewStatus } from '../../../../shared/api';
 import { diffGraphs } from '../../../../shared/aiOps';
 import { findConflicts, orderRecommendations, overlayGraph, planApply, touched } from '../../../../shared/analysis';
@@ -8,6 +8,7 @@ import { placeNewSteps } from '../../../../shared/layout';
 import { Modal } from '../../components/Modal';
 import { applyAnalysis, saveReview } from '../../lib/analysis';
 import { formatModifiedFull } from '../../lib/workflows';
+import { useFullscreen } from '../../lib/useFullscreen';
 import { withChanges, type Focus } from '../flowElements';
 import { ReviewDiagram } from './ReviewDiagram';
 
@@ -34,6 +35,24 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
   const [showRejected, setShowRejected] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Full screen (owner feedback 2026-10-31): the diagram and the recommendations fill the screen together.
+  const fullscreen = useFullscreen();
+  const [fullView, setFullView] = useState(false);
+  const [wasFullscreen, setWasFullscreen] = useState(false);
+  // Leaving browser full screen (Esc) also collapses the full view.
+  if (fullscreen.active !== wasFullscreen) {
+    setWasFullscreen(fullscreen.active);
+    if (!fullscreen.active && fullView) setFullView(false);
+  }
+  const toggleFullView = () => {
+    if (fullView) {
+      setFullView(false);
+      void fullscreen.exit();
+    } else {
+      setFullView(true);
+      void fullscreen.enter();
+    }
+  };
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -188,17 +207,26 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
           </ul>
         </section>
 
-        <div className="mt-8 flex items-end justify-between">
+        <div
+          className={fullView ? 'fixed inset-x-0 bottom-0 top-[var(--fl-header-height)] z-30 flex flex-col bg-[var(--fl-bg-results)] px-6 pb-5 pt-4' : 'mt-8'}
+          data-testid="review-section"
+          data-expanded={fullView || undefined}
+        >
+        <div className="flex items-end justify-between gap-4">
           <div>
             <h2 className="text-[18px] font-bold leading-[26px]">{noImprovements ? 'Your workflow' : 'Proposed workflow changes'}</h2>
             <p className="text-[13px] text-fl-text-secondary">
               {noImprovements ? 'Flico found no changes worth recommending. Your workflow is shown unchanged.' : 'Select a highlighted step or a recommendation to see how they relate.'}
             </p>
           </div>
+          <button type="button" className="fl-btn flex-none gap-1.5 !min-h-10 !text-[13px] !text-fl-text-secondary" aria-pressed={fullView} onClick={toggleFullView}>
+            {fullView ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
+            {fullView ? 'Exit full screen' : 'Full screen'}
+          </button>
         </div>
 
-        <div className={`mt-4 grid gap-5 ${noImprovements ? '' : 'grid-cols-[minmax(0,62fr)_minmax(0,38fr)]'}`}>
-          <div className="fl-card relative h-[560px] overflow-hidden !p-0">
+        <div className={`mt-4 grid gap-5 ${noImprovements ? '' : 'grid-cols-[minmax(0,62fr)_minmax(0,38fr)]'} ${fullView ? 'min-h-0 flex-1' : ''}`}>
+          <div className={`fl-card relative overflow-hidden !p-0 ${fullView ? 'h-full' : 'h-[560px]'}`}>
             <div className="pointer-events-none absolute left-5 right-5 top-4 z-10 flex items-center justify-between">
               <p className="text-[11px] font-bold uppercase tracking-[0.04em] text-fl-text-muted">{noImprovements ? 'Analysed workflow' : 'Change preview'}</p>
               {!noImprovements && (
@@ -222,7 +250,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
           </div>
 
           {!noImprovements && (
-            <section className="fl-card flex h-[560px] flex-col !p-0" aria-labelledby="recs-heading">
+            <section className={`fl-card flex flex-col !p-0 ${fullView ? 'h-full min-h-0' : 'h-[560px]'}`} aria-labelledby="recs-heading">
               <div className="flex items-center justify-between gap-3 border-b border-fl-border px-5 py-4">
                 <h2 id="recs-heading" className="text-[16px] font-bold">
                   Recommendations <span className="font-normal text-fl-text-muted">({inPlay.length})</span>
@@ -303,6 +331,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               )}
             </section>
           )}
+        </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between text-[12px] text-fl-text-secondary">
@@ -456,16 +485,40 @@ function FinalPreview(props: {
   onConfirm: () => void;
 }) {
   const { plan } = props;
+  const fullscreen = useFullscreen();
+  const [full, setFull] = useState(false);
+  const [wasFullscreen, setWasFullscreen] = useState(false);
+  if (fullscreen.active !== wasFullscreen) {
+    setWasFullscreen(fullscreen.active);
+    if (!fullscreen.active && full) setFull(false);
+  }
+  const close = () => {
+    if (full) void fullscreen.exit();
+    props.onCancel();
+  };
   const display = useMemo(() => withChanges(props.snapshot, plan.ok ? placeNewSteps(props.snapshot, plan.graph) : props.snapshot), [props.snapshot, plan]);
   const reasons = plan.ok ? [] : [...plan.conflicts.map((c) => c.message), ...plan.missing.map((m) => m.message), ...plan.problems];
   return (
     <Modal
       wide
+      fill={full}
       title="Review accepted changes"
-      onClose={props.onCancel}
+      onClose={close}
       footer={
         <>
-          <button type="button" className="fl-btn" onClick={props.onCancel}>
+          <button
+            type="button"
+            className="fl-btn mr-auto gap-1.5"
+            aria-pressed={full}
+            onClick={() => {
+              setFull(!full);
+              void (full ? fullscreen.exit() : fullscreen.enter());
+            }}
+          >
+            {full ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
+            {full ? 'Exit full screen' : 'Full screen'}
+          </button>
+          <button type="button" className="fl-btn" onClick={close}>
             Back to review
           </button>
           <button type="button" className="fl-btn fl-btn-gradient" disabled={!plan.ok || props.busy || props.stale} onClick={props.onConfirm}>
@@ -492,8 +545,8 @@ function FinalPreview(props: {
           {props.error}
         </p>
       )}
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_260px] gap-4">
-        <div className="relative h-[420px] overflow-hidden rounded-[12px] border border-fl-border">
+      <div className={`mt-4 grid grid-cols-[minmax(0,1fr)_260px] gap-4 ${full ? 'min-h-0 flex-1' : ''}`}>
+        <div className={`relative overflow-hidden rounded-[12px] border border-fl-border ${full ? 'h-full' : 'h-[420px]'}`}>
           <ReviewDiagram display={display} focus={() => undefined} revealIds={[]} label="Combined preview of accepted changes" onSelectElement={() => {}} />
         </div>
         <ol className="list-decimal space-y-2 pl-5 text-[13px] text-fl-text">

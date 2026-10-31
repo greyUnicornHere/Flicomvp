@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoLayout, NODE_HEIGHT, NODE_WIDTH } from './layout';
+import { autoLayout, NODE_HEIGHT, NODE_WIDTH, nodeHeight, placeNewSteps } from './layout';
 import { graph, sequential } from './test/fixtures';
 import type { WorkflowGraph } from '../../../shared/graph';
 
@@ -81,5 +81,51 @@ describe('autoLayout', () => {
     nodes.push(['n7', 'action', 'Alt 7'], ['n14', 'action', 'Alt 14'], ['f', 'finish', 'Finish']);
     edges.push(['a7', 'n7', 'no', 'No'], ['n7', 'a9'], ['a14', 'n14', 'no', 'No'], ['n14', 'a16'], [prev, 'f']);
     noOverlaps(autoLayout(graph({ nodes, edges })));
+  });
+});
+
+describe('long step names (owner feedback 2026-10-31)', () => {
+  const LONG = 'Check the customer purchase order against the signed framework agreement and the regional discount table';
+  const boxOverlap = (g: WorkflowGraph) => {
+    const h = (label: string) => nodeHeight(label);
+    for (const a of g.nodes)
+      for (const b of g.nodes) {
+        if (a.id >= b.id || Math.abs(a.position.x - b.position.x) >= NODE_WIDTH) continue;
+        const apart = a.position.y + h(a.label) <= b.position.y || b.position.y + h(b.label) <= a.position.y;
+        expect(apart, `${a.label} overlaps ${b.label}`).toBe(true);
+      }
+  };
+
+  it('estimates a taller block for a longer name', () => {
+    expect(nodeHeight('Start')).toBe(NODE_HEIGHT);
+    expect(nodeHeight('Receive the order')).toBe(NODE_HEIGHT); // two lines fit the standard block
+    expect(nodeHeight(LONG)).toBeGreaterThan(NODE_HEIGHT + 80);
+    expect(nodeHeight('x'.repeat(60))).toBeGreaterThan(NODE_HEIGHT); // one very long word wraps too
+  });
+
+  it('keeps steps of different heights level by their middles on a straight path', () => {
+    const g = autoLayout(graph({ nodes: [['s', 'start', 'Start'], ['a', 'action', LONG], ['f', 'finish', 'Finish']], edges: [['s', 'a'], ['a', 'f']] }));
+    const mid = (id: string) => pos(g, id).y + nodeHeight(g.nodes.find((n) => n.id === id)!.label) / 2;
+    expect(mid('a')).toBe(mid('s'));
+    expect(mid('f')).toBe(mid('s'));
+  });
+
+  it('stacks tall branches without overlapping', () => {
+    const g = autoLayout(
+      graph({
+        nodes: [['s', 'start', 'Start'], ['d', 'decision', 'In stock?'], ['y', 'action', LONG], ['n', 'action', LONG], ['f', 'finish', 'Finish']],
+        edges: [['s', 'd'], ['d', 'y', 'yes', 'Yes'], ['d', 'n', 'no', 'No'], ['y', 'f'], ['n', 'f']],
+      }),
+    );
+    boxOverlap(g);
+    expect(pos(g, 'y').y).toBeLessThan(pos(g, 'n').y);
+  });
+
+  it('places a new step clear of a tall neighbour', () => {
+    const before = autoLayout(
+      graph({ nodes: [['s', 'start', 'Start'], ['d', 'decision', 'In stock?'], ['y', 'action', LONG]], edges: [['s', 'd'], ['d', 'y', 'yes', 'Yes']] }),
+    );
+    const after = { ...before, nodes: [...before.nodes, { id: 'n', type: 'action' as const, label: LONG, position: { x: 0, y: 0 } }], edges: [...before.edges, { id: 'en', sourceId: 'd', targetId: 'n', type: 'no' as const, label: 'No' }] };
+    boxOverlap(placeNewSteps(before, after));
   });
 });

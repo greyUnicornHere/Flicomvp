@@ -232,3 +232,16 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 ### Implementation notes
 - `shared/analysis.ts` holds the review rules (touched steps, conflicts, dependencies, combined plan, overlay, ordering, figure check) so the screen and the server agree exactly.
 - The diagram drawing code is shared between the editor canvas and the review diagram (`client/src/editor/flowElements.ts`).
+
+## Owner feedback after Milestone 4 (2026-10-31)
+
+### Long step names (owner chose "Grow to fit")
+- The approved two-line limit is replaced: blocks keep their width (184 px) and grow taller so the **whole name always shows**, in the editor, the analysis diagram and the final preview. `tokens.css` is unchanged; the override is in `app.css`.
+- Layout knows each block's height (`nodeHeight` in `shared/layout.ts`, estimated from the name at about 14 characters per 18 px line, matching the rendered result). Auto-arrange and the placement of new steps line blocks up by their middles (arrows stay straight) and stack tall blocks without overlapping. Standard-size layouts don't move.
+- Positions already saved aren't changed (no automatic tidying, per the Milestone 2 decision). After renaming a step to a long name, its block grows downward from where it is; Auto-arrange re-aligns everything.
+
+### Full screen (owner chose "True full screen", and "Diagram + recommendations" on the Analysis tab)
+- **Editor:** a **Full screen** button next to the zoom controls puts the page in browser full screen (like F11). Flico's top bar, the toolbar, zoom, menus, step details and Ask Flico all keep working. **Exit full screen** or Esc returns. Leaving the editor also leaves full screen.
+- **Analysis tab:** a **Full screen** button beside "Proposed workflow changes" fills the screen with the diagram and the recommendation list side by side, so selecting, accepting and rejecting keep working.
+- **Review accepted changes** (final preview): a **Full screen** button enlarges the combined preview to the whole screen before Confirm & apply.
+- The whole page goes full screen (not just the canvas) so floating windows and dialogs stay visible. The existing four-corner button is still **Fit to screen** (zoom to show everything); the new button is labelled with text so the two aren't confused.

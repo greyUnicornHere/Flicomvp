@@ -67,6 +67,11 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Final preview** of accepted changes only, with conflict and dependency checks, then **Confirm & apply**: one server-checked save, one Undo, original snapshot kept.
 - Initial and Latest analysis with a dropdown (no duplicate when there's one). An honest "no improvements" result. No invented numbers. Ask Flico knows the latest analysis.
 
+## Owner feedback after Milestone 4 (branch `owner-feedback-m4`, waiting for owner review)
+
+- Long step names show in full: blocks grow taller instead of cutting the name off with "…".
+- Full screen for the editor, for the analysis review (diagram + recommendations) and for the final preview.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -85,6 +90,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - The Ask Flico window can cover part of the diagram; it can be moved, minimized or closed. Changes it previews are kept clear of it when possible.
 - Adding steps never re-arranges the diagram (owner feedback); only Auto-arrange does. Inserted steps make room by sliding the later steps on that path to the right.
 - Undo history lasts for the browser session only.
+- A step renamed to a long name grows downward where it stands (nothing is re-arranged automatically); Auto-arrange lines everything up again.
 - Arrows bend around a step that sits in their way. With very crowded hand-made layouts a detour can still touch a step; Auto-arrange tidies it.
 - No Customer Order Processing example (owner decision for now).
 - Search filters loaded workflows in the browser (fine for the 200-workflow limit).

@@ -15,6 +15,7 @@ import type { WorkflowGraph } from '../../../shared/graph';
 import { preAnalysisCheck, validateWorkflow, type Issue } from '../../../shared/validation';
 import { useAuth } from '../lib/auth';
 import { useAutosave } from '../lib/useAutosave';
+import { useFullscreen } from '../lib/useFullscreen';
 import { renameWorkflow, saveWorkflowGraph } from '../lib/workflows';
 import { applyProposal, cancelProposal, createAiDraft, fetchAiStatus, quickAddStep, removeAssumption, updateAssumption } from '../lib/ai';
 import { AskFlico } from './AskFlico';
@@ -151,6 +152,11 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       active = false;
     };
   }, []);
+
+  const fullscreen = useFullscreen();
+  const { exit: exitFullscreen } = fullscreen;
+  // Leaving the editor also leaves full screen.
+  useEffect(() => () => void exitFullscreen(), [exitFullscreen]);
 
   // ---------- analysis ----------
   const [view, setView] = useState<'editor' | 'analysis'>('editor');
@@ -725,6 +731,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
           <StepToolbar actions={toolbar} />
           <CanvasControls
+            {...(fullscreen.supported ? { fullscreen: { active: fullscreen.active, onToggle: () => void (fullscreen.active ? fullscreen.exit() : fullscreen.enter()) } } : {})}
             onAutoArrange={() => {
               commit(autoLayout(graph));
               requestAnimationFrame(() => void rf.fitView({ padding: 0.25, maxZoom: 1, duration: motionDuration(200) }));

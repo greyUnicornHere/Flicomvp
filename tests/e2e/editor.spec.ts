@@ -453,7 +453,7 @@ test('E17: keyboard only — details, add, name, delete without a mouse', async 
   await expectSaved(page, id, []);
 });
 
-test('label truncation: long names keep compact blocks; full name on hover and in details', async ({ page }) => {
+test('long names: the block grows so the whole name shows (owner feedback 2026-10-31)', async ({ page }) => {
   const long = 'Check the customer’s purchase order against the signed framework agreement and the regional discount table';
   await openWithGraph(page, {
     nodes: [node('s', 'start', 'Start'), node('a', 'action', long, 288)],
@@ -462,12 +462,16 @@ test('label truncation: long names keep compact blocks; full name on hover and i
   const block = page.locator('.react-flow__node[data-id="a"]');
   const size = (await block.boundingBox())!;
   const short = (await page.locator('.react-flow__node[data-id="s"]').boundingBox())!;
-  expect(Math.round(size.height)).toBe(Math.round(short.height));
-  await expect(block.locator('.fl-step')).toHaveAttribute('title', long);
+  expect(size.width).toBeCloseTo(short.width, 0); // same width, taller
+  expect(size.height).toBeGreaterThan(short.height + 40);
+  // Nothing is cut off: the label's full text fits inside its box.
+  const label = block.locator('.fl-node-label');
+  await expect(label).toHaveText(long);
+  expect(await label.evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && getComputedStyle(el).webkitLineClamp !== '2')).toBe(true);
   await expect(block).toHaveAttribute('aria-label', `Action step: ${long}`);
   await block.click();
   await expect(page.getByRole('dialog', { name: 'Edit step' }).getByLabel('Step name')).toHaveValue(long);
-  await page.screenshot({ path: `${SHOTS}/09-label-truncation-1536.png` });
+  await page.screenshot({ path: 'docs/evidence/feedback-m4/01-long-name-grows-1536.png' });
 });
 
 test('Finish is suggested (dismissible), never added automatically', async ({ page }) => {

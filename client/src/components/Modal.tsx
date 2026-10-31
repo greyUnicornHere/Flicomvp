@@ -12,12 +12,14 @@ type ModalProps = {
   onFocusFallback?: () => void;
   /** Wide dialogs hold a diagram (analysis final preview). */
   wide?: boolean;
+  /** Fill the whole screen (full-screen preview). */
+  fill?: boolean;
 };
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** Modal dialog: traps Tab focus, closes on Escape or backdrop click, and returns focus where it came from. */
-export function Modal({ title, children, footer, onClose, initialFocusRef, onFocusFallback, wide = false }: ModalProps) {
+export function Modal({ title, children, footer, onClose, initialFocusRef, onFocusFallback, wide = false, fill = false }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
@@ -80,13 +82,13 @@ export function Modal({ title, children, footer, onClose, initialFocusRef, onFoc
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fl-popover w-full !p-6 ${wide ? 'max-w-[1040px]' : 'max-w-[440px]'}`}
+        className={`fl-popover w-full !p-6 ${fill ? 'flex h-full max-w-none flex-col' : wide ? 'max-w-[1040px]' : 'max-w-[440px]'}`}
         onKeyDown={onKeyDown}
       >
         <h2 id={titleId} className="text-[18px] font-bold leading-[26px]">
           {title}
         </h2>
-        <div className="mt-2 text-fl-text-secondary">{children}</div>
+        <div className={`mt-2 text-fl-text-secondary ${fill ? 'flex min-h-0 flex-1 flex-col' : ''}`}>{children}</div>
         <div className="mt-6 flex justify-end gap-3">{footer}</div>
       </div>
     </div>,

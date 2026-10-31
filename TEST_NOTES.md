@@ -316,3 +316,16 @@ Intentional differences: Accept/Reject buttons on each card (the mockup has no v
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of Milestone 4 | Pass | Product owner approved Milestone 4 on 2026-10-31. A live Claude analysis was not run in this cloud environment (no key added here). |
+
+## Owner feedback after Milestone 4 — 2026-10-31 (branch `owner-feedback-m4`)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Long name shows in full; block keeps its width and grows taller; nothing clipped; full name still in tooltip, screen-reader label and details | Pass | E2E "long names: the block grows…" (replaces the M2 truncation test); `docs/evidence/feedback-m4/01-long-name-grows-1536.png` |
+| Layout with tall blocks: middles aligned on a path, tall Yes/No branches stacked without overlap, new step placed clear of a tall neighbour, height estimate | Pass | `client/src/editor/layout.test.ts` (4 new tests); all existing layout and placement tests unchanged and passing |
+| Editor full screen on and off; Ask Flico and menus still work in full screen | Pass | E2E `tests/e2e/feedback.spec.ts`; `02-editor-full-screen.png` |
+| Analysis: diagram + recommendations fill the screen; accept works in full screen; exiting restores the page; the long name shows in full in the review diagram | Pass (fixture) | E2E; `03-analysis-full-screen-test-fixture.png` |
+| Final preview full screen, exits with Back to review | Pass (fixture) | E2E; `04-final-preview-full-screen-test-fixture.png` |
+| Whole suite | Pass | Unit/API **263 / 263**, E2E **52 / 52**, lint, typecheck, build |
+
+Note: automated browsers run without a visible screen, so the screenshots show the same window size in and out of full screen; the tests check the browser's full-screen state directly. On your PC the page fills the monitor.

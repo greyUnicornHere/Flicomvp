@@ -6,7 +6,7 @@ import type { WorkflowGraph } from '../../../shared/graph';
 import type { Issue } from '../../../shared/validation';
 import { CHANGE_BADGE, type Change } from './changes';
 import type { FlowEdgeType } from './FlowEdge';
-import { NODE_HEIGHT, NODE_WIDTH } from './layout';
+import { NODE_WIDTH, nodeHeight } from './layout';
 import { findNode } from './ops';
 import { curveCrosses, detour, type Box } from './routing';
 import type { StepFlowNode } from './StepNode';
@@ -68,7 +68,7 @@ export function flowEdges(display: Display, options: { dims: Sizes; dragging?: P
   const boxes = new Map<string, Box>(
     shown.nodes.map((n) => {
       const p = options.dragging?.[n.id] ?? n.position;
-      const size = options.dims[n.id] ?? { width: NODE_WIDTH, height: NODE_HEIGHT };
+      const size = options.dims[n.id] ?? { width: NODE_WIDTH, height: nodeHeight(n.label) };
       return [n.id, { left: p.x, top: p.y, right: p.x + size.width, bottom: p.y + size.height }];
     }),
   );

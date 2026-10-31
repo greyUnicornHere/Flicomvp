@@ -311,3 +311,8 @@ Intentional differences: Accept/Reject buttons on each card (the mockup has no v
 - Selecting a recommendation zoomed the diagram in on a single step; it now only pans (or zooms out when needed).
 - The review diagram opened very small for wide workflows; the page is wider and the diagram opens at a readable minimum zoom.
 - Recommendations that only contained invented figures were dropped instead of cleaned; they're now kept with those sentences removed.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of Milestone 4 | Pass | Product owner approved Milestone 4 on 2026-10-31. A live Claude analysis was not run in this cloud environment (no key added here). |

@@ -326,3 +326,30 @@ test('the review diagram opens auto-arranged and shows the whole workflow; the s
   const saved = (await stored(page, workflow.id)).graph;
   expect(saved.nodes.find((n) => n.id === 'a3')!.position).toEqual(messy.nodes.find((n) => n.id === 'a3')!.position);
 });
+
+test('the review diagram is fitted when the Analysis tab is opened later (it was hidden while loading)', async ({ page }) => {
+  const id = await openWorkflow(page);
+  await quickAnalysis(page);
+  await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
+  // Come back later: the page opens on the Editor tab, with the analysis loaded but hidden.
+  await page.goto(`/workflows/${id}`);
+  await expect(page.getByRole('tab', { name: 'Editor', selected: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Analysis' }).click();
+  const pane = page.locator('[aria-label="Workflow with proposed changes"]');
+  const review = pane.locator('.react-flow__node');
+  await expect(review.first()).toBeVisible();
+  await page.waitForTimeout(400);
+  const area = (await pane.boundingBox())!;
+  const boxes = await review.evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }));
+  for (const b of boxes) {
+    expect(b.x).toBeGreaterThanOrEqual(area.x - 1);
+    expect(b.x + b.w).toBeLessThanOrEqual(area.x + area.width + 1);
+    expect(b.y).toBeGreaterThanOrEqual(area.y - 1);
+    expect(b.y + b.h).toBeLessThanOrEqual(area.y + area.height + 1);
+  }
+  // A short workflow is shown at a readable size, not at the minimum zoom.
+  const left = Math.min(...boxes.map((b) => b.x));
+  const right = Math.max(...boxes.map((b) => b.x + b.w));
+  expect(right - left).toBeGreaterThan(area.width * 0.6);
+  await page.screenshot({ path: 'docs/evidence/step-card/08-analysis-reopened-1536-test-fixture.png' });
+});

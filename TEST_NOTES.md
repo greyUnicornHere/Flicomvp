@@ -402,7 +402,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Analysis o
 |---|---|---|
 | Lint, typecheck, build | `npm run check` | Pass |
 | Unit + API | `npm test` | **268 / 268 pass** |
-| Browser E2E (all milestones) | `npm run test:e2e` | **63 / 63 pass** (2 new) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **64 / 64 pass** (3 new) |
 
 | Check | Result | Evidence |
 |---|---|---|
@@ -412,4 +412,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Analysis o
 | Earlier analysis behaviour (selection pans, conflicts, preview, apply, full screen) | Pass | all analysis and owner-feedback E2E tests |
 | Edge browser | Not tested | Only Chromium is available here |
 
+| Owner-reported: after reopening a workflow, the Analysis tab showed the diagram tiny (10%) in the top-left corner | Fixed, Pass (fixture) | E2E "the review diagram is fitted when the Analysis tab is opened later…" failed before the fix (steps outside the area) and passes after; `08-analysis-reopened-1536-test-fixture.png` |
+
+- Cause of the owner-reported bug: the Analysis tab stays loaded while hidden, so the diagram fitted itself into an area with no size and fell to the minimum zoom (the earlier 55% floor had masked this). The diagram now refits whenever its area changes size: when the tab is shown, the window is resized or full screen is toggled.
 - Found while testing: a 12-step workflow needs about 21% zoom to fit, below the old 25% limit, so both ends were cut off. The review diagram's minimum zoom is now 10%.

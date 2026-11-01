@@ -63,6 +63,28 @@ function Diagram({ display: shown, focus, onSelectElement, revealIds, label }: P
     hoverEdge: noop,
   };
 
+  // The Analysis tab stays mounted while hidden, so the diagram can start in an area with no size.
+  // Fit the whole workflow again whenever its area changes size (shown, resized, full screen).
+  useEffect(() => {
+    const pane = document.querySelector(`[aria-label="${CSS.escape(label)}"]`);
+    if (!pane || typeof ResizeObserver === 'undefined') return;
+    let last = '';
+    let frame = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry!.contentRect;
+      const size = `${Math.round(width)}x${Math.round(height)}`;
+      if (width < 1 || height < 1 || size === last) return;
+      last = size;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => void rf.fitView({ padding: 0.08, maxZoom: 1 }));
+    });
+    observer.observe(pane);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [rf, label]);
+
   const revealKey = revealIds.join(',');
   useEffect(() => {
     if (!revealKey) return;

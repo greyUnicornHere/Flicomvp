@@ -22,6 +22,8 @@ type Options<T> = {
 export function useAutosave<T>({ value, initialRevision, save, delayMs = 800 }: Options<T>) {
   const [status, setStatus] = useState<SaveStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  /** The last value the server acknowledged (so "Saved" is only shown for persisted data). */
+  const [saved, setSaved] = useState<T>(value);
   const revision = useRef(initialRevision);
   const latest = useRef(value);
   const dirty = useRef(false);
@@ -44,8 +46,10 @@ export function useAutosave<T>({ value, initialRevision, save, delayMs = 800 }: 
     dirty.current = false;
     setStatus('saving');
     try {
-      const result = await saveRef.current(latest.current, revision.current);
+      const sending = latest.current;
+      const result = await saveRef.current(sending, revision.current);
       revision.current = result.revision;
+      setSaved(sending);
       inFlight.current = false;
       if (dirty.current) return run();
       setStatus('saved');
@@ -105,13 +109,22 @@ export function useAutosave<T>({ value, initialRevision, save, delayMs = 800 }: 
    * Save now and resolve with the saved revision, for actions that need the server to have the
    * latest graph (AI requests). Rejects if saving fails or the workflow changed elsewhere.
    */
-  const flushNow = useCallback(async (): Promise<number> => {
-    clearTimeout(timer.current);
-    await flush();
-    if (conflicted.current) throw new ApiError(409, 'conflict', 'This workflow was changed elsewhere. Reload to get the latest version.');
-    if (dirty.current) throw new Error(lastError.current ?? "Your latest changes couldn't be saved yet.");
-    return revision.current;
-  }, [flush]);
+  const flushNow = useCallback(
+    async (value?: T): Promise<number> => {
+      // A value just committed may not have reached the change effect yet: take it directly.
+      if (value !== undefined && value !== known.current) {
+        known.current = value;
+        latest.current = value;
+        dirty.current = true;
+      }
+      clearTimeout(timer.current);
+      await flush();
+      if (conflicted.current) throw new ApiError(409, 'conflict', 'This workflow was changed elsewhere. Reload to get the latest version.');
+      if (dirty.current) throw new Error(lastError.current ?? "Your latest changes couldn't be saved yet.");
+      return revision.current;
+    },
+    [flush],
+  );
 
   /** The server already saved `value` as `newRevision` (e.g. an applied AI change): adopt it without saving again. */
   const rebase = useCallback((value: T, newRevision: number) => {
@@ -120,9 +133,10 @@ export function useAutosave<T>({ value, initialRevision, save, delayMs = 800 }: 
     latest.current = value;
     revision.current = newRevision;
     dirty.current = false;
+    setSaved(value);
     setStatus('saved');
     setError(null);
   }, []);
 
-  return { status, error, retry, flushNow, rebase };
+  return { status, error, retry, flushNow, rebase, saved };
 }

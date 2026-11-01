@@ -68,6 +68,8 @@ function Diagram({ display, focus, onSelectElement, revealIds, label }: Props) {
   return (
     <EditorUiContext.Provider value={ui}>
       <ReactFlow<StepFlowNode, FlowEdgeType>
+        // A distinct id per diagram keeps arrowhead markers from clashing with the editor's.
+        id={`review-${label.replace(/\W+/g, '-').toLowerCase()}`}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}

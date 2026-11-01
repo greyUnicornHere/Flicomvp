@@ -245,3 +245,22 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - **Analysis tab:** a **Full screen** button beside "Proposed workflow changes" fills the screen with the diagram and the recommendation list side by side, so selecting, accepting and rejecting keep working.
 - **Review accepted changes** (final preview): a **Full screen** button enlarges the combined preview to the whole screen before Confirm & apply.
 - The whole page goes full screen (not just the canvas) so floating windows and dialogs stay visible. The existing four-corner button is still **Fit to screen** (zoom to show everything); the new button is labelled with text so the two aren't confused.
+
+## Block details card (owner request after Milestone 4, 2026-11-01)
+
+The owner asked for these editor changes on their own, without the rest of the Milestone 4.1 brief (automation assessment was not approved and is not built).
+
+### Interactions (supersedes the Milestone 2 "click opens details" rule)
+- **Single click** on a block selects it; the step toolbar acts on it. It no longer opens details.
+- **Double-click** on a block, the toolbar's **Edit details** (its new first button) or **Enter** on a focused block opens the details card. The toolbar is **always visible** at the left of the canvas; its buttons are disabled when nothing is selected.
+
+### Details card
+- Same fields as before. Dragged by its header; the grip button also moves it with the arrow keys. Dragging is limited so the whole card stays inside the window below the app header. It never moves blocks, pans the canvas, changes the workflow or adds Undo steps. Fields, text selection and buttons never start a drag.
+- The dragged position is kept **for the current editor session only** (not saved; resets on reload or when leaving the editor).
+- Typing is committed to the workflow 600 ms after the last keystroke, and on close, block switch or Done. All edits made during one opening of the card form **one Undo step**; commits that change nothing are skipped.
+- Card-local status: **Saving…** while a commit is pending or the server hasn't confirmed the card's current values; **Saved** only when the last value the server confirmed matches what the card shows (an older response can't mark newer edits saved); **Could not save — Retry** with "Your changes are kept here." on failure.
+- **Done** saves pending edits and closes only after the server confirms; on failure the card stays open with the draft and Retry.
+- Escape, click outside and switching blocks commit the draft to the block it belongs to (edits are keyed by step ID, never by "the open card"). If saving then fails, the header's existing Could not save — Retry stays visible and the workflow keeps the edit; nothing is discarded silently.
+
+### Fix found while testing
+- The editor and the analysis diagrams are both mounted at once and used the same arrowhead marker ids, so after switching tabs the editor's arrows could lose their heads. Each diagram now has its own id.

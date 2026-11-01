@@ -58,6 +58,7 @@ import {
   updateStep,
   type OpResult,
   type Slot,
+  type StepPatch,
 } from './ops';
 import { StepNode, type StepFlowNode } from './StepNode';
 import { StepPopover } from './StepPopover';
@@ -111,6 +112,10 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  /** Where the block-details card was dragged (kept for this editor session only). */
+  const [detailsPosition, setDetailsPosition] = useState<{ left: number; top: number } | null>(null);
+  /** Details edits of one card session are a single undo step. */
+  const [detailsSession, setDetailsSession] = useState<{ nodeId: string; committed: boolean } | null>(null);
   const [editing, setEditing] = useState<{ id: string; merge: boolean } | null>(null);
   const [insertMenu, setInsertMenu] = useState<{ slot: Slot; anchor: HTMLElement } | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -409,8 +414,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     const id = nodeEl.dataset.id!;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setSelectedId(id);
-      setDetailsId(id);
+      openDetails(id);
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && findNode(graph, id)?.type !== 'start') {
       e.preventDefault();
       setSelectedId(id);
@@ -446,6 +450,13 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           : undefined;
     const exceptionReason = !node ? none : node.type === 'start' || node.type === 'finish' ? 'Choose a step between Start and Finish.' : undefined;
     const actions: ToolbarAction[] = [
+      {
+        id: 'details',
+        label: 'Edit details',
+        icon: TOOLBAR_ICONS.details,
+        ...(node ? {} : { disabledReason: none }),
+        onClick: () => node && openDetails(node.id),
+      },
       stepAction('action', 'Add action'),
       stepAction('decision', 'Add decision'),
       stepAction('approval', 'Add approval'),
@@ -457,6 +468,39 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     ];
     return preview ? actions.map((a) => ({ ...a, disabledReason: PREVIEW_REASON })) : actions;
   })();
+
+  const openDetails = (id: string) => {
+    setSelectedId(id);
+    setDetailsId(id);
+    setDetailsSession({ nodeId: id, committed: false });
+  };
+
+  /** A details edit: the first of a card session is a new undo step, later ones fold into it. */
+  const commitDetails = (id: string, patch: StepPatch): WorkflowGraph | null => {
+    const current = graphRef.current;
+    const node = findNode(current, id);
+    if (!node || Object.entries(patch).every(([k, v]) => JSON.stringify(node[k as keyof typeof node]) === JSON.stringify(v))) return null;
+    try {
+      const next = updateStep(current, id, patch).graph;
+      const merge = detailsSession?.nodeId === id && detailsSession.committed;
+      if (detailsSession?.nodeId === id && !detailsSession.committed) setDetailsSession({ nodeId: id, committed: true });
+      commit(next, merge);
+      return next;
+    } catch (error) {
+      if (error instanceof GraphOpError) setNotice(error.message);
+      else throw error;
+      return null;
+    }
+  };
+
+  /** This step's details are "saved" only when the server's last acknowledged graph has them. */
+  const detailsSaveState = (id: string): 'saving' | 'saved' | 'error' => {
+    const now = findNode(graph, id);
+    const persisted = findNode(save.saved, id);
+    const same = now && persisted && JSON.stringify({ ...now, position: null }) === JSON.stringify({ ...persisted, position: null });
+    if (same) return 'saved';
+    return save.status === 'error' || save.status === 'conflict' ? 'error' : 'saving';
+  };
 
   const showIssue = (issue: Issue) => {
     const id = issue.nodeId ?? (issue.edgeId ? graph.edges.find((e) => e.id === issue.edgeId)?.sourceId : undefined);
@@ -692,15 +736,21 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
         )}
         <div className={view === 'analysis' ? 'hidden' : 'relative flex-1'} onKeyDown={onCanvasKeyDown}>
           <ReactFlow<StepFlowNode, FlowEdgeType>
+            id="editor"
             nodes={rfNodes}
             edges={rfEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
+            // One click selects (the step toolbar acts on it); a double-click opens the details card.
             onNodeClick={(_, node) => {
               if (preview) return;
               setSelectedId(node.id);
-              setDetailsId(node.id);
+              if (detailsId && detailsId !== node.id) setDetailsId(null);
+            }}
+            onNodeDoubleClick={(_, node) => {
+              if (preview) return;
+              openDetails(node.id);
             }}
             onPaneClick={() => {
               setSelectedId(null);
@@ -829,7 +879,21 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           graph={graph}
           node={detailsNode}
           anchor={() => nodeElement(detailsNode.id)}
-          onChange={(patch) => apply((g) => updateStep(g, detailsNode.id, patch), { select: false })}
+          onChange={(patch) => void commitDetails(detailsNode.id, patch)}
+          saveState={detailsSaveState(detailsNode.id)}
+          saveError={save.error}
+          onRetry={save.retry}
+          onDone={async (patch) => {
+            const next = (patch && commitDetails(detailsNode.id, patch)) ?? undefined;
+            try {
+              await save.flushNow(next);
+              return true;
+            } catch {
+              return false;
+            }
+          }}
+          position={detailsPosition}
+          onMove={setDetailsPosition}
           onClose={(returnFocus) => {
             setDetailsId(null);
             if (returnFocus) nodeElement(detailsNode.id)?.focus({ preventScroll: true });

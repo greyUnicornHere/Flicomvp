@@ -172,6 +172,10 @@ test('R10: Initial and Latest analysis; a single analysis shows no version switc
   await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Show analysis' })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Editor' }).click();
+  // Both diagrams stay mounted: their arrowhead markers must not share ids, or the editor's arrows lose their heads.
+  const markerIds = await page.locator('svg marker[id]').evaluateAll((els) => els.map((el) => el.id));
+  expect(markerIds.length).toBeGreaterThan(0);
+  expect(new Set(markerIds).size).toBe(markerIds.length);
   await quickAnalysis(page);
   const versions = page.getByRole('combobox', { name: 'Show analysis' });
   await expect(versions).toHaveValue('latest');

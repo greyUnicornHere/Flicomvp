@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@xyflow/react';
-import { Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, CircleAlert, GripHorizontal, Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
 import type { StepType, WorkflowGraph, WorkflowNode } from '../../../shared/graph';
 import { placePanel } from '../lib/placement';
 import { allowedTypeChanges, BRANCH_LABEL, connectTargets, findNode, openBranches, outgoing, type StepPatch } from './ops';
@@ -17,12 +17,26 @@ type Props = {
   onConnect: () => void;
   onRemoveConnection: (edgeId: string) => void;
   onAsk: () => void;
+  /** Persistence of this step's details: Saved only once the server has acknowledged them. */
+  saveState: 'saving' | 'saved' | 'error';
+  saveError: string | null;
+  onRetry: () => void;
+  /** Save these pending edits (if any) now; resolves true once persisted. */
+  onDone: (patch: StepPatch | null) => Promise<boolean>;
+  /** Where the person dragged the card this session (null: next to the step). */
+  position: { left: number; top: number } | null;
+  onMove: (position: { left: number; top: number }) => void;
 };
 
+const HEADER = 76;
+const MARGIN = 8;
+
 /** Contextual step details next to the selected step (never a permanent inspector). */
-export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection, onAsk }: Props) {
+export function StepPopover(props: Props) {
+  const { graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection, onAsk } = props;
   const ref = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [autoPosition, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [finishing, setFinishing] = useState(false);
   const transform = useStore((s) => s.transform);
   const titleId = useId();
 
@@ -32,11 +46,24 @@ export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, 
     latest.current = fields;
   });
 
-  // Save whatever changed (on blur, Enter, select changes and when closing).
+  // Save whatever changed (shortly after typing stops, on blur, Enter, select changes, Done and when closing).
   const commit = (next = latest.current) => {
     const patch = diff(node, next);
     if (patch) onChange(patch);
   };
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+
+  // Typing pauses save automatically; leaving the card (or switching to another step) saves too.
+  const pending = diff(node, fields) !== null;
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setTimeout(() => commitRef.current(), 600);
+    return () => clearTimeout(timer);
+  }, [fields, pending]);
+  useEffect(() => () => commitRef.current(), []);
 
   useLayoutEffect(() => {
     const place = () => {
@@ -53,15 +80,57 @@ export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, 
   }, [anchor, transform, graph]);
 
   useEffect(() => {
-    if (position) ref.current?.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+    if (autoPosition) ref.current?.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
     // Focus once when first shown.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [position === null]);
+  }, [autoPosition === null]);
 
   const close = (returnFocus: boolean) => {
     commit();
     onClose(returnFocus);
   };
+
+  /** Done: save pending edits and close once they are persisted; on failure stay open with Retry. */
+  const done = async () => {
+    setFinishing(true);
+    const ok = await props.onDone(diff(node, latest.current));
+    setFinishing(false);
+    if (ok) onClose(true);
+  };
+
+  // The card can be dragged by its header; it always stays fully inside the window, below Flico's top bar.
+  const clamp = (p: { left: number; top: number }) => {
+    const width = 320; // the card's fixed width
+    const height = Math.min(ref.current?.offsetHeight ?? 400, innerHeight - HEADER - 2 * MARGIN);
+    return {
+      left: Math.round(Math.min(Math.max(MARGIN, p.left), innerWidth - width - MARGIN)),
+      top: Math.round(Math.min(Math.max(HEADER + MARGIN, p.top), innerHeight - height - MARGIN)),
+    };
+  };
+  // Positions are clamped when dragged; on show, just keep the header on screen.
+  const position = props.position && autoPosition ? { left: Math.min(props.position.left, innerWidth - 328), top: Math.min(props.position.top, innerHeight - 120) } : autoPosition;
+  const startDrag = (event: React.PointerEvent) => {
+    if ((event.target as HTMLElement).closest('button, input, select, textarea') || !position) return;
+    event.preventDefault();
+    const start = { x: event.clientX, y: event.clientY, ...position };
+    const move = (e: PointerEvent) => props.onMove(clamp({ left: start.left + e.clientX - start.x, top: start.top + e.clientY - start.y }));
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+    };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  };
+  const moveWithKeys = (event: React.KeyboardEvent) => {
+    const step = event.shiftKey ? 64 : 16;
+    const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+    if (!delta || !position) return;
+    event.preventDefault();
+    props.onMove(clamp({ left: position.left + delta[0]!, top: position.top + delta[1]! }));
+  };
+
+  // Edits still being typed count as saving; otherwise the state of this step's last acknowledged save.
+  const status: 'saving' | 'saved' | 'error' = pending ? 'saving' : props.saveState;
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
@@ -102,13 +171,42 @@ export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, 
         e.stopPropagation(); // keep typing out of canvas shortcuts
       }}
     >
-      <div className="flex items-center justify-between px-[18px] pb-1 pt-4">
-        <h2 id={titleId} className="text-[15px] font-bold leading-[22px]">
+      <div className="flex cursor-move select-none items-center gap-1 px-[10px] pb-1 pt-3" onPointerDown={startDrag} data-testid="details-header">
+        <button
+          type="button"
+          className="grid h-8 w-8 cursor-move place-items-center rounded-[8px] text-fl-text-muted hover:bg-fl-surface-subtle"
+          aria-label="Move step details (arrow keys)"
+          onKeyDown={moveWithKeys}
+        >
+          <GripHorizontal size={15} aria-hidden="true" />
+        </button>
+        <h2 id={titleId} className="flex-1 text-[15px] font-bold leading-[22px]">
           Edit step
         </h2>
         <button type="button" className="grid h-9 w-9 place-items-center rounded-[8px] text-fl-text-secondary hover:bg-fl-surface-subtle" aria-label="Close step details" onClick={() => close(true)}>
           <X size={16} aria-hidden="true" />
         </button>
+      </div>
+      <div className="px-[18px] pb-2 text-[12px]" role="status" aria-live="polite" data-testid="details-save-status" data-state={status}>
+        {status === 'saving' && <span className="text-fl-text-muted">Saving…</span>}
+        {status === 'saved' && (
+          <span className="inline-flex items-center gap-1 text-fl-text-muted">
+            <Check size={13} aria-hidden="true" className="text-fl-success" /> Saved
+          </span>
+        )}
+        {status === 'error' && (
+          <span className="inline-flex flex-wrap items-center gap-x-2 text-fl-error">
+            <CircleAlert size={13} aria-hidden="true" /> Could not save
+            <button
+              type="button"
+              className="fl-link text-[12px]"
+              onClick={props.onRetry}
+            >
+              Retry
+            </button>
+            {props.saveError && <span className="basis-full text-fl-text-muted">{props.saveError} Your changes are kept here.</span>}
+          </span>
+        )}
       </div>
 
       {node.origin === 'ai-inferred' && node.assumptionStatus === 'unconfirmed' && (
@@ -223,6 +321,11 @@ export function StepPopover({ graph, node, anchor, onChange, onClose, onDelete, 
             <Trash2 size={14} aria-hidden="true" /> Delete
           </button>
         )}
+      </div>
+      <div className="flex justify-end border-t border-fl-border px-[18px] py-3">
+        <button type="button" className="fl-btn fl-btn-primary !min-h-10 !px-5" onClick={() => void done()} disabled={finishing}>
+          {finishing ? 'Saving…' : 'Done'}
+        </button>
       </div>
     </div>,
     document.body,

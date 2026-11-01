@@ -119,6 +119,7 @@ Letter spacing: hero/heading `-0.025em`; body `0`; overline `0.04em`. Do not shr
 - **Canvas utilities:** bottom right, zoom +/- and percentage, fit-to-screen, auto-arrange. Avoid permanent minimap for MVP.
 - **Dashboard workflow table:** simple rows ~50–56px tall, 1px dividing lines, visible focus for row actions, status text plus pale pill.
 - **Floating step popover:** ~292–340px wide, position next to selected node; flip/shift to remain inside viewport; scroll internally if needed, never clipped by canvas overflow.
+  - *Amended by owner request after Milestone 4 (see `DECISIONS.md`):* opens on double-click or the toolbar's Edit details (not single click); draggable by its header and kept fully inside the window (position kept for the editor session); card-local save status and a Done button. The step toolbar is always visible.
 - **Ask Flico floating chat:** compact ~360×460px (resize via Expand control to ~520×640px where space allows), movable within viewport, minimizable; avoid permanently docked sidebar. Keep open-state persistent while changing view as appropriate.
 
 ## 6. Responsive behavior *within desktop scope*

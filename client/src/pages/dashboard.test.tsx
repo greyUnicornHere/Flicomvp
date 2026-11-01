@@ -79,7 +79,8 @@ describe('dashboard', () => {
     });
     const router = renderAt('/');
     await userEvent.click(await screen.findByText('Oct 25, 2026'));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/workflows/w2'));
+    // The editor route is lazy-loaded; under a busy parallel test run loading it can take over a second.
+    await waitFor(() => expect(router.state.location.pathname).toBe('/workflows/w2'), { timeout: 5000 });
     expect(await screen.findByRole('heading', { level: 1, name: 'Customer onboarding' })).toBeInTheDocument();
   });
 

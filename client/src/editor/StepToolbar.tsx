@@ -12,7 +12,8 @@ export type ToolbarAction = {
 /** Floating vertical step toolbar. Arrow keys move between buttons; one Tab stop. */
 export function StepToolbar({ actions }: { actions: ToolbarAction[] }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const groups = [actions.slice(0, 5), actions.slice(5)];
+  // Edit details, then the five step types, then repeat / parallel / exception.
+  const groups = [actions.slice(0, 1), actions.slice(1, 6), actions.slice(6)];
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     const i = refs.current.indexOf(document.activeElement as HTMLButtonElement);
@@ -26,7 +27,7 @@ export function StepToolbar({ actions }: { actions: ToolbarAction[] }) {
   return (
     <div
       role="toolbar"
-      aria-label="Add after the selected step"
+      aria-label="Step tools for the selected step"
       aria-orientation="vertical"
       className="absolute left-6 top-1/2 z-10 flex w-[60px] -translate-y-1/2 flex-col items-center gap-1 rounded-[18px] border border-fl-border bg-fl-surface py-2 shadow-fl-float"
       onKeyDown={onKeyDown}

@@ -72,6 +72,14 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Long step names show in full: blocks grow taller instead of cutting the name off with "…".
 - Full screen for the editor, for the analysis review (diagram + recommendations) and for the final preview.
 
+## Block details card (owner request after Milestone 4; awaiting owner review, branch `editor-details-card`)
+
+- Single click on a block only selects it. **Double-click**, **Edit details** (first button of the always-visible step toolbar) or Enter opens the details card.
+- The card can be dragged by its header, or moved with the arrow keys from its grip. It stays fully on screen and keeps its place until you reload or leave the editor.
+- The card shows its own **Saving… / Saved / Could not save — Retry**. Saved appears only once the server has stored the change; on failure your typing is kept.
+- **Done** saves and closes; if saving fails the card stays open with your typing.
+- Quick edits, switching blocks during a slow save, or closing the card never put an edit on the wrong block. Everything changed in one opening of the card is one Undo.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -85,7 +93,6 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Applying is once per analysis. To apply more of it later, run a new analysis.
 - **Live AI not yet demonstrated:** no `ANTHROPIC_API_KEY` in this environment yet. All AI features are tested end to end with the test fixture, and the Claude adapter's request format and error handling are unit-tested against a stubbed API. The first live run happens once the key is added (see TEST_NOTES.md).
 - The test fixture follows a simple fixed pattern (one step per sentence, approval/removal/fix suggestions on keywords). It exists to test the app, not to judge AI quality.
-- Ask Flico doesn't use analysis results yet (there are none until Milestone 4).
 - A suggestion made before later edits can't be applied ("the workflow changed"); ask again. Moving a step while Flico is answering also counts as a change.
 - The Ask Flico window can cover part of the diagram; it can be moved, minimized or closed. Changes it previews are kept clear of it when possible.
 - Adding steps never re-arranges the diagram (owner feedback); only Auto-arrange does. Inserted steps make room by sliding the later steps on that path to the right.
@@ -94,7 +101,8 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Arrows bend around a step that sits in their way. With very crowded hand-made layouts a detour can still touch a step; Auto-arrange tidies it.
 - No Customer Order Processing example (owner decision for now).
 - Search filters loaded workflows in the browser (fine for the 200-workflow limit).
+- The details card's dragged position resets on reload or when you leave the editor (by design). Dragged to the far left it can cover the step toolbar; drag it back or close it.
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/` and `docs/evidence/m4/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`.

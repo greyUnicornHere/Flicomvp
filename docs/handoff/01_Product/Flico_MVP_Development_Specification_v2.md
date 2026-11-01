@@ -44,6 +44,7 @@ Flico helps nontechnical users describe or map a business process, understand fr
 - Auto-arrange for large workflows; optional free positioning; **no collapsible sections**.
 - Prominent inline **+** between steps and on connections; hover highlights edge and reveals +. Equivalent actions must be reachable by keyboard and without hover.
 - On selecting a block, open a **contextual floating popover** near it, constrained to viewport. Fields: name, type, owner/team, duration, tool/software, notes. Close on outside click/Escape; accessible focus behavior.
+  - *Amended by owner request after Milestone 4 (see `DECISIONS.md`):* a single click only selects the block; **double-click**, the step toolbar's **Edit details** or Enter opens the details card. The card can be dragged by its header, shows Saving… / Saved / Could not save — Retry, and has **Done**.
 - Undo/Redo buttons always visible, with **Ctrl/Cmd+Z** and **Ctrl/Cmd+Shift+Z**. No additional Flico-specific shortcut suite.
 - Step deletion shows a confirmation identifying affected connections; action is undoable. Avoid silently changing branching semantics.
 - Autosave manual edits and applied AI changes. AI and recommendation applications should form coherent undoable transactions. Preserve original snapshot.

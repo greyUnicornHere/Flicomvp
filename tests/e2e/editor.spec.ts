@@ -58,8 +58,7 @@ async function addAfter(page: Page, label: string, type: string, name?: string) 
 
 async function selectOnly(page: Page, name: string) {
   await page.getByRole('button', { name: 'Fit to screen' }).click();
-  await step(page, name).click();
-  await page.keyboard.press('Escape'); // close the details, keep the selection
+  await step(page, name).click(); // one click selects; details open on double-click (Milestone 4.1)
 }
 
 async function addDecisionAfter(page: Page, name: string, question: string, yes?: string, no?: string) {
@@ -138,7 +137,7 @@ test('E03/E04: decision with two independent outcomes, then the paths merge at F
   );
 
   await addAfter(page, 'Confirm order', 'Finish');
-  await step(page, 'Request restock').click();
+  await step(page, 'Request restock').dblclick();
   await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: 'Connect to a step…' }).click();
   const connect = page.getByRole('dialog', { name: 'Connect to a step' });
   await expect(connect.getByRole('combobox').locator('option:checked')).toHaveText('Finish'); // suggested join
@@ -243,7 +242,7 @@ test('E09: step details popover — all fields, persists, Escape returns focus',
     nodes: [node('s', 'start', 'Start'), node('a', 'action', 'Receive order', 288)],
     edges: [{ id: 'e1', sourceId: 's', targetId: 'a', type: 'normal' }],
   });
-  await step(page, 'Receive order').click();
+  await step(page, 'Receive order').dblclick();
   const pop = page.getByRole('dialog', { name: 'Edit step' });
   await expect(pop.getByLabel('Step name')).toBeFocused();
   await pop.getByLabel('Type').selectOption('Approval');
@@ -261,7 +260,7 @@ test('E09: step details popover — all fields, persists, Escape returns focus',
     .poll(async () => (await stored(page, id)).nodes.find((n) => n.id === 'a'), { timeout: 8000 })
     .toMatchObject({ type: 'approval', owner: 'Sales team', duration: { value: 5, unit: 'hours' }, tools: ['Order system', 'Email'], notes: 'Check the PO number' });
   await page.reload();
-  await step(page, 'Receive order').click();
+  await step(page, 'Receive order').dblclick();
   await expect(page.getByRole('dialog', { name: 'Edit step' }).getByLabel('Owner / team')).toHaveValue('Sales team');
 });
 
@@ -276,7 +275,7 @@ test('E10/E11/E12: delete shows affected connections; cancel, confirm with recon
   });
   const original = await stored(page, id);
 
-  await step(page, 'Verify stock').click();
+  await step(page, 'Verify stock').dblclick();
   await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: 'Delete' }).click();
   let dialog = page.getByRole('dialog', { name: 'Delete this step?' });
   await expect(dialog.getByRole('listitem')).toHaveText(['Receive order → Verify stock', 'Verify stock → Finish']);
@@ -286,7 +285,6 @@ test('E10/E11/E12: delete shows affected connections; cancel, confirm with recon
   await expect(step(page, 'Verify stock')).toBeVisible();
 
   await step(page, 'Verify stock').click();
-  await page.keyboard.press('Escape');
   await page.keyboard.press('Delete'); // keyboard shortcut on the focused step
   dialog = page.getByRole('dialog', { name: 'Delete this step?' });
   await dialog.getByRole('button', { name: 'Delete step' }).click();
@@ -469,7 +467,7 @@ test('long names: the block grows so the whole name shows (owner feedback 2026-1
   await expect(label).toHaveText(long);
   expect(await label.evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && getComputedStyle(el).webkitLineClamp !== '2')).toBe(true);
   await expect(block).toHaveAttribute('aria-label', `Action step: ${long}`);
-  await block.click();
+  await block.dblclick();
   await expect(page.getByRole('dialog', { name: 'Edit step' }).getByLabel('Step name')).toHaveValue(long);
   await page.screenshot({ path: 'docs/evidence/feedback-m4/01-long-name-grows-1536.png' });
 });

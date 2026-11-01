@@ -67,6 +67,38 @@ describe('useAutosave', () => {
     expect(result.current.status).toBe('saved');
   });
 
+  it('reports as saved only the value the server acknowledged, not a newer edit still in flight', async () => {
+    const pending: ((r: { revision: number }) => void)[] = [];
+    const save = vi.fn<(v: string, base: number) => Promise<{ revision: number }>>(() => new Promise((resolve) => pending.push(resolve)));
+    const { result, rerender } = setup(save);
+    expect(result.current.saved).toBe('v0');
+    rerender({ value: 'v1' });
+    await act(async () => vi.advanceTimersByTime(500));
+    rerender({ value: 'v2' });
+    await act(async () => vi.advanceTimersByTime(500));
+    expect(result.current.saved).toBe('v0');
+    await act(async () => pending[0]!({ revision: 2 }));
+    // v1 is acknowledged; v2 is now being sent and is not reported as saved yet.
+    expect(result.current.saved).toBe('v1');
+    expect(save).toHaveBeenLastCalledWith('v2', 2);
+    expect(result.current.status).toBe('saving');
+    await act(async () => pending[1]!({ revision: 3 }));
+    expect(result.current.saved).toBe('v2');
+    expect(result.current.status).toBe('saved');
+  });
+
+  it('flushNow saves a just-committed value immediately and resolves with its revision', async () => {
+    const save = vi.fn(async (_v: string, base: number) => ({ revision: base + 1 }));
+    const { result } = setup(save);
+    let revision = 0;
+    await act(async () => {
+      revision = await result.current.flushNow('v9');
+    });
+    expect(save).toHaveBeenLastCalledWith('v9', 1);
+    expect(revision).toBe(2);
+    expect(result.current.saved).toBe('v9');
+  });
+
   it('keeps a failure visible and saves again on Retry', async () => {
     const save = vi
       .fn<(v: string, base: number) => Promise<{ revision: number }>>()

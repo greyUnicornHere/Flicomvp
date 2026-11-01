@@ -334,3 +334,27 @@ Note: automated browsers run without a visible screen, so the screenshots show t
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the long-name and full-screen changes | Pass | Product owner approved on 2026-11-01 |
+
+## Block details card — 2026-11-01 (branch `editor-details-card`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI output is involved in these checks.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint | `npm run lint` | Pass |
+| Typecheck | `npm run typecheck` | Pass |
+| Unit + API | `npm test` | **265 / 265 pass** (2 new autosave tests) |
+| Production build | `npm run build` | Pass |
+| Browser E2E (all milestones) | `npm run test:e2e` | **57 / 57 pass** (5 new in `tests/e2e/details-card.spec.ts`; editor and AI specs open details with double-click) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Single click selects only; double-click, toolbar Edit details and Enter open the card | Pass | E2E "single click selects, double-click / Edit details / Enter open the card" |
+| Card drags and stays on screen; workflow and Undo unchanged; position kept for the session; arrow keys move it | Pass | E2E "the card drags inside the window…"; `docs/evidence/details-card/01-details-card-dragged.png` |
+| Saving… then Saved only after storing; Done saves and closes; one Undo reverts the card session, Redo restores it; survives reload | Pass | E2E "Saved only after persistence…"; `useAutosave.test.ts` (an older response never marks a newer edit saved; flushNow) |
+| Failed save keeps the card open with the draft; Retry saves | Pass | E2E "a failed save keeps the card open…"; `02-details-save-failed.png` |
+| Slow saves and switching blocks keep each edit on its own block | Pass | E2E "switching blocks and slow saves…" (every save delayed 700 ms) |
+| Editor arrows keep their arrowheads after visiting the Analysis tab | Pass | E2E R10 now checks marker ids are unique (failed before the fix: 3 unique of 4) |
+| Edge browser | Not tested | Only Chromium is available here |
+
+- The dashboard unit test "opens a workflow when its row is clicked" can exceed the default 1 s wait under a busy parallel run (the editor route loads lazily); its wait now allows 5 seconds. App unchanged.

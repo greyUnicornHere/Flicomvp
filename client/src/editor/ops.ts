@@ -379,15 +379,27 @@ export function removeConnection(g: WorkflowGraph, edgeId: string): OpResult {
   return { graph: { nodes: g.nodes, edges: g.edges.filter((e) => e.id !== edgeId) } };
 }
 
-export type StepPatch = Partial<Pick<WorkflowNode, 'label' | 'type' | 'owner' | 'duration' | 'tools' | 'notes' | 'assumptionStatus'>>;
+export type StepPatch = Partial<Pick<WorkflowNode, 'label' | 'type' | 'owner' | 'duration' | 'tools' | 'notes' | 'assumptionStatus'>> & {
+  /** Turning a decision with both paths set into another type: which path stays (the other connection goes). */
+  keepBranch?: 'yes' | 'no';
+};
 
 /** Types a step can be switched to in its details (decisions and exceptions use their guided flows). */
+/**
+ * Types a step can switch to in its details. Start and Exception keep their type. A decision can
+ * become an ordinary step (it keeps one of its paths); ordinary steps can't become decisions here,
+ * because a decision needs a question and Yes/No paths (the guided Decision flow).
+ */
 export function allowedTypeChanges(g: WorkflowGraph, nodeId: string): StepType[] {
   const node = findNode(g, nodeId);
-  if (!node || node.type === 'start' || node.type === 'decision' || node.type === 'exception') return node ? [node.type] : [];
+  if (!node || node.type === 'start' || node.type === 'exception') return node ? [node.type] : [];
   const canFinish = flowOut(g, nodeId).length === 0;
-  return (['action', 'approval', 'wait', 'finish'] as StepType[]).filter((t) => t !== 'finish' || canFinish);
+  const ordinary = (['action', 'approval', 'wait', 'finish'] as StepType[]).filter((t) => t !== 'finish' || canFinish);
+  return node.type === 'decision' ? ['decision', ...ordinary] : ordinary;
 }
+
+/** A decision's Yes/No connections. */
+export const decisionPaths = (g: WorkflowGraph, decisionId: string) => outgoing(g, decisionId).filter((e) => e.type === 'yes' || e.type === 'no');
 
 export function updateStep(g: WorkflowGraph, nodeId: string, patch: StepPatch): OpResult {
   const node = findNode(g, nodeId);
@@ -395,11 +407,22 @@ export function updateStep(g: WorkflowGraph, nodeId: string, patch: StepPatch): 
   if (patch.type && patch.type !== node.type && !allowedTypeChanges(g, nodeId).includes(patch.type)) {
     throw new GraphOpError("This step's type can't be changed that way.");
   }
-  const next: WorkflowNode = { ...node, ...patch };
+  const { keepBranch, ...fields } = patch;
+  let edges = g.edges;
+  if (node.type === 'decision' && fields.type && fields.type !== 'decision') {
+    // An ordinary step has one way on: the kept path becomes a plain connection, the other one goes.
+    const paths = decisionPaths(g, nodeId);
+    if (paths.length > 1 && !keepBranch) throw new GraphOpError('Choose which path to keep.');
+    const kept = paths.length > 1 ? paths.find((e) => e.type === keepBranch) : paths[0];
+    edges = g.edges
+      .filter((e) => !paths.includes(e) || e === kept)
+      .map((e) => (e === kept ? { id: e.id, sourceId: e.sourceId, targetId: e.targetId, type: 'normal' as const } : e));
+  }
+  const next: WorkflowNode = { ...node, ...fields };
   for (const key of ['owner', 'notes'] as const) if (next[key] === '') delete next[key];
   if (next.tools && next.tools.length === 0) delete next.tools;
-  if (patch.duration === undefined && 'duration' in patch) delete next.duration;
-  return { graph: { nodes: g.nodes.map((n) => (n.id === nodeId ? next : n)), edges: g.edges } };
+  if (fields.duration === undefined && 'duration' in fields) delete next.duration;
+  return { graph: { nodes: g.nodes.map((n) => (n.id === nodeId ? next : n)), edges } };
 }
 
 export function setPositions(g: WorkflowGraph, positions: Record<string, { x: number; y: number }>): WorkflowGraph {

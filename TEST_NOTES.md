@@ -371,8 +371,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI outp
 | Suite | Command | Result |
 |---|---|---|
 | Lint, typecheck, build | `npm run check` | Pass |
-| Unit + API | `npm test` | **265 / 265 pass** |
-| Browser E2E (all milestones) | `npm run test:e2e` | **60 / 60 pass** (3 new card-layout tests; existing tests open More details / Connections where they need those fields) |
+| Unit + API | `npm test` | **268 / 268 pass** (3 new) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **61 / 61 pass** (4 new card tests; existing tests open More details / Connections where they need those fields) |
 
 | Check | Result | Evidence |
 |---|---|---|
@@ -382,6 +382,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI outp
 | Tools as tags: Enter and comma add, × and Backspace remove, an unconfirmed tool is saved on Done | Pass | E2E "tools are tags…" (stored tools checked after each step); `03-tools-as-tags-1536.png` |
 | 1280×720 with everything open: card fully on screen, Done reachable, no horizontal scroll | Pass | E2E "1280px…"; `04-everything-open-1280.png` |
 | All earlier card behaviour (open/close, drag, saving, failure and Retry, switching blocks, one Undo) | Pass | the 5 earlier tests in `tests/e2e/details-card.spec.ts`; E2E E09 (all fields persist) |
+| Decision → Approval: asks which path to keep, Cancel changes nothing, kept path becomes a plain connection, other steps stay, saved, one Undo restores the decision and both paths | Pass | E2E "asks which path to keep…"; `ops.test.ts` (3 new: choice required with two paths, none with one/zero, Finish only when nothing follows, loop/exception connections kept); `05-decision-keep-which-path-1536.png` |
 | Edge browser | Not tested | Only Chromium is available here |
 
 ### Bugs found and fixed

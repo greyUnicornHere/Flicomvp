@@ -4,7 +4,7 @@ import { useStore } from '@xyflow/react';
 import { Check, ChevronRight, CircleAlert, GripVertical, Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
 import type { StepType, WorkflowGraph, WorkflowNode } from '../../../shared/graph';
 import { placePanel } from '../lib/placement';
-import { allowedTypeChanges, BRANCH_LABEL, connectTargets, findNode, openBranches, outgoing, type StepPatch } from './ops';
+import { allowedTypeChanges, BRANCH_LABEL, connectTargets, decisionPaths, findNode, openBranches, outgoing, type StepPatch } from './ops';
 import { DURATION_UNITS, STEP_META } from './stepMeta';
 
 type Props = {
@@ -85,6 +85,17 @@ export function StepPopover(props: Props) {
   const [connectionsOpen, setConnectionsOpen] = useState(() => open.length > 0);
   const moreId = useId();
   const connectionsId = useId();
+  // Turning a decision with both paths set into another type first asks which path stays.
+  const paths = node.type === 'decision' ? decisionPaths(graph, node.id) : [];
+  const [pendingType, setPendingType] = useState<StepType | null>(null);
+  const [keep, setKeep] = useState<'yes' | 'no'>('yes');
+  const confirmTypeChange = () => {
+    if (!pendingType) return;
+    const next = { ...fields, type: pendingType, keepBranch: keep };
+    setPendingType(null);
+    setFields(next);
+    commit(next);
+  };
 
   // The card's height changes as sections open and close; it is placed again so it stays on screen.
   const [height, setHeight] = useState(0);
@@ -309,9 +320,15 @@ export function StepPopover(props: Props) {
                 <select
                   id={id}
                   className="fl-input !min-h-[38px]"
-                  value={fields.type}
+                  value={pendingType ?? fields.type}
                   onChange={(e) => {
-                    const next = { ...fields, type: e.target.value as StepType };
+                    const type = e.target.value as StepType;
+                    if (node.type === 'decision' && type !== 'decision' && paths.length > 1) {
+                      setPendingType(type);
+                      return;
+                    }
+                    setPendingType(null);
+                    const next = { ...fields, type };
                     setFields(next);
                     commit(next);
                   }}
@@ -329,6 +346,32 @@ export function StepPopover(props: Props) {
               )
             }
           </Field>
+          {pendingType && (
+            <div role="group" aria-labelledby={`${moreId}-keep`} className="rounded-[10px] border border-fl-border-strong bg-fl-surface-subtle p-3 text-[13px] leading-[19px]">
+              <p id={`${moreId}-keep`} className="font-semibold text-fl-text">
+                {/^[aeiou]/i.test(STEP_META[pendingType].name) ? 'An' : 'A'} {STEP_META[pendingType].name.toLowerCase()} has one way on. Which path should it keep?
+              </p>
+              <div className="mt-2 space-y-1">
+                {paths.map((e) => (
+                  <label key={e.id} className="flex min-h-8 cursor-pointer items-center gap-2">
+                    <input type="radio" name={`${moreId}-path`} checked={keep === e.type} onChange={() => setKeep(e.type as 'yes' | 'no')} />
+                    <span className="min-w-0 truncate">
+                      {BRANCH_LABEL[e.type as 'yes' | 'no']} → {label(e.targetId)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[12px] leading-[17px] text-fl-text-secondary">The other connection is removed. Steps after it stay on the canvas. Undo brings everything back.</p>
+              <div className="mt-2.5 flex justify-end gap-2">
+                <button type="button" className="fl-btn !min-h-9 !px-3 !text-[13px]" onClick={() => setPendingType(null)}>
+                  Cancel
+                </button>
+                <button type="button" className="fl-btn fl-btn-primary !min-h-9 !px-3 !text-[13px]" onClick={confirmTypeChange}>
+                  Change to {STEP_META[pendingType].name}
+                </button>
+              </div>
+            </div>
+          )}
           <Field label="Owner / team" className={row} labelClass={fieldLabel}>
             {(id) => <input id={id} className="fl-input !min-h-[38px]" value={fields.owner} maxLength={200} placeholder="Who does this?" onChange={set('owner')} />}
           </Field>
@@ -473,7 +516,18 @@ export function StepPopover(props: Props) {
   );
 }
 
-type Fields = { label: string; type: StepType; owner: string; durationValue: string; durationUnit: string; tools: string[]; toolDraft: string; notes: string };
+type Fields = {
+  label: string;
+  type: StepType;
+  /** A decision becoming another type: which of its two paths stays. */
+  keepBranch?: 'yes' | 'no';
+  owner: string;
+  durationValue: string;
+  durationUnit: string;
+  tools: string[];
+  toolDraft: string;
+  notes: string;
+};
 
 function toFields(n: WorkflowNode): Fields {
   return {
@@ -492,7 +546,10 @@ function toFields(n: WorkflowNode): Fields {
 function diff(n: WorkflowNode, f: Fields): StepPatch | null {
   const patch: StepPatch = {};
   if (f.label.trim() && f.label.trim() !== n.label) patch.label = f.label.trim();
-  if (f.type !== n.type) patch.type = f.type;
+  if (f.type !== n.type) {
+    patch.type = f.type;
+    if (f.keepBranch) patch.keepBranch = f.keepBranch;
+  }
   if (f.owner.trim() !== (n.owner ?? '')) patch.owner = f.owner.trim();
   if (f.notes.trim() !== (n.notes ?? '')) patch.notes = f.notes.trim();
   // A tool still being typed counts too, so nothing is lost if the card closes before Enter.

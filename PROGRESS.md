@@ -87,6 +87,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Tools** are tags: type a name and press Enter (or a comma) to add; × or Backspace removes. A name typed but not yet confirmed is still saved.
 - One footer row: **Ask Flico**, **Delete** (bin icon) and **Done**.
 - The card moves to stay fully on screen when a section opens or closes.
+- A **decision can now change type** to Action, Approval or Wait (or Finish when nothing follows it). If both its Yes and No paths are set, the card asks which one to keep; the other connection is removed and Undo restores it.
 
 ## Known issues / limitations
 

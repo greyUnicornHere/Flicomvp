@@ -271,3 +271,56 @@ test.describe('compact card layout', () => {
     await page.screenshot({ path: `${CARD_SHOTS}/04-everything-open-1280.png` });
   });
 });
+
+test.describe('changing a decision into another type', () => {
+  const decided: WorkflowGraph = {
+    nodes: [
+      { id: 's', type: 'start', label: 'Start', position: { x: 0, y: 0 } },
+      { id: 'd', type: 'decision', label: 'Check stock', position: { x: 288, y: 0 } },
+      { id: 'r', type: 'action', label: 'Reserve items', position: { x: 576, y: -120 } },
+      { id: 'o', type: 'action', label: 'Reorder', position: { x: 576, y: 120 } },
+      { id: 'f', type: 'finish', label: 'Shipped', position: { x: 864, y: 0 } },
+    ],
+    edges: [
+      { id: 'e1', sourceId: 's', targetId: 'd', type: 'normal' },
+      { id: 'e2', sourceId: 'd', targetId: 'r', type: 'yes', label: 'Yes', branchGroupId: 'd' },
+      { id: 'e3', sourceId: 'd', targetId: 'o', type: 'no', label: 'No', branchGroupId: 'd' },
+      { id: 'e4', sourceId: 'r', targetId: 'f', type: 'normal' },
+      { id: 'e5', sourceId: 'o', targetId: 'f', type: 'normal' },
+    ],
+  };
+
+  test('asks which path to keep; Cancel changes nothing; the change saves and one Undo restores the decision', async ({ page }) => {
+    const id = await open(page, decided);
+    await step(page, 'Check stock').dblclick();
+    const card = details(page);
+    await card.getByLabel('Type').selectOption('Action');
+    const choice = card.getByRole('group', { name: /Which path should it keep/ });
+    await expect(choice).toContainText('An action has one way on');
+    await expect(choice.getByRole('radio', { name: 'Yes → Reserve items' })).toBeChecked();
+    await choice.getByRole('button', { name: 'Cancel' }).click();
+    await expect(choice).toHaveCount(0);
+    await expect(card.getByLabel('Type')).toHaveValue('decision');
+
+    await card.getByLabel('Type').selectOption('Approval');
+    await choice.getByRole('radio', { name: 'No → Reorder' }).check();
+    await page.screenshot({ path: 'docs/evidence/step-card/05-decision-keep-which-path-1536.png' });
+    await choice.getByRole('button', { name: 'Change to Approval' }).click();
+    await expect(page.getByTestId('details-save-status')).toContainText('Approval');
+    await expect(page.getByTestId('details-save-status')).toHaveAttribute('data-state', 'saved', { timeout: 8000 });
+    const g = (await stored(page, id)).graph;
+    expect(g.nodes.find((n) => n.id === 'd')!.type).toBe('approval');
+    expect(g.edges.filter((e) => e.sourceId === 'd')).toEqual([{ id: 'e3', sourceId: 'd', targetId: 'o', type: 'normal' }]);
+    // The dropped path's steps stay on the canvas, flagged as no longer connected.
+    await expect(step(page, 'Reserve items')).toBeVisible();
+
+    await card.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect
+      .poll(async () => {
+        const back = (await stored(page, id)).graph;
+        return [back.nodes.find((n) => n.id === 'd')!.type, back.edges.filter((e) => e.sourceId === 'd').map((e) => e.type).sort()];
+      }, { timeout: 8000 })
+      .toEqual(['decision', ['no', 'yes']]);
+  });
+});

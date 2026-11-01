@@ -358,3 +358,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI outp
 | Edge browser | Not tested | Only Chromium is available here |
 
 - The dashboard unit test "opens a workflow when its row is clicked" can exceed the default 1 s wait under a busy parallel run (the editor route loads lazily); its wait now allows 5 seconds. App unchanged.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the block details card changes | Pass | Product owner approved on 2026-11-01 |

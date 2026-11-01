@@ -72,7 +72,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Long step names show in full: blocks grow taller instead of cutting the name off with "…".
 - Full screen for the editor, for the analysis review (diagram + recommendations) and for the final preview.
 
-## Block details card (owner request after Milestone 4; awaiting owner review, branch `editor-details-card`)
+## Block details card (owner request after Milestone 4; approved by owner 2026-11-01; merged to `main`)
 
 - Single click on a block only selects it. **Double-click**, **Edit details** (first button of the always-visible step toolbar) or Enter opens the details card.
 - The card can be dragged by its header, or moved with the arrow keys from its grip. It stays fully on screen and keeps its place until you reload or leave the editor.

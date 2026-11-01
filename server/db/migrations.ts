@@ -161,6 +161,14 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 5,
+    name: 'automation_assessments',
+    sql: `
+      -- Automation assessments of an analysis's work steps (JSON). NULL: made before assessments existed.
+      ALTER TABLE analyses ADD COLUMN assessments_json TEXT;
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

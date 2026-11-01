@@ -2,6 +2,7 @@
 // re-check everything that comes back (model output is untrusted, even with structured output).
 // Optional values are empty strings so every field is always present (simplest, widely supported schema form).
 import { z } from 'zod';
+import { AUTOMATION_CLASSES, EVIDENCE_SOURCES } from '../../shared/assessment.js';
 import { EDGE_TYPES, GRAPH_LIMITS, STEP_TYPES } from '../../shared/graph.js';
 
 export const SCHEMA_VERSION = 'v1';
@@ -137,6 +138,30 @@ const levels = ['low', 'medium', 'high'] as const;
 export const CATEGORIES = ['quick_win', 'strategic', 'complex'] as const;
 export const EVIDENCE = ['supported', 'assumption', 'verify'] as const;
 
+/** One automation assessment of a work step (Milestone 4.1). */
+const assessmentJsonSchema = object({
+  step: str('The step ref (e.g. "s3"). Only work steps: never Start, Finish or waits.'),
+  classification: { type: 'string', enum: [...AUTOMATION_CLASSES], description: 'full = full automation candidate; assisted = human-assisted automation; human = keep human-led; unknown = more information needed.' },
+  provisional: { type: 'boolean', description: 'True when the evidence supports a tentative class but prerequisites are still unverified.' },
+  reasoning: str('Two or three sentences explaining the classification from the evidence.'),
+  inputs: str('Inputs: are they digital, complete, usable? Upstream dependencies.'),
+  rules: str('Rules and judgment: governing rules; interpretation or judgment that remains.'),
+  access: str('System access: applications, permissions and mechanisms needed. A tool name alone is not proof of access.'),
+  exceptions: str('Exceptions: what can fail or vary; can it be detected, handled or escalated?'),
+  verification: str('Verification: how success and correctness could be checked; what would need testing.'),
+  risk: str('Risk and accountability: consequences of error, authority and review needed.'),
+  automatable: str('What could be automated and a proposed approach, or "" if nothing is supportable.'),
+  human: str('What remains human and why, or "".'),
+  evidence: {
+    type: 'array',
+    items: object({ source: { type: 'string', enum: [...EVIDENCE_SOURCES] }, text: str('One short piece of evidence.') }),
+    description: 'user = the person said it (step details or answers); workflow = visible in the diagram; assumption = your assumption.',
+  },
+  prerequisites: { type: 'array', items: { type: 'string' }, description: 'What must be verified before relying on this (e.g. access in a test).' },
+  questions: { type: 'array', items: { type: 'string' }, description: 'Decision-critical unknowns, as short questions.' },
+  value: str('Business value only from supplied frequency/time/error data, in words; otherwise "". Never savings, money or ROI.'),
+});
+
 export const analysisJsonSchema = object({
   headline: str('One short sentence naming the main opportunity, e.g. "A clearer way to process orders." No numbers.'),
   summary: str('Executive summary in 2–4 plain sentences: what works, the main issues, what you propose. No numeric savings.'),
@@ -163,6 +188,26 @@ export const analysisJsonSchema = object({
       operations: { type: 'array', items: operationJsonSchema, description: 'The diagram changes that implement it, against the ORIGINAL workflow.' },
     }),
   },
+  automation: { type: 'array', description: 'One automation assessment per meaningful work step.', items: assessmentJsonSchema },
+});
+
+const assessmentOutput = z.object({
+  step: shortText(40),
+  classification: z.enum(AUTOMATION_CLASSES),
+  provisional: z.boolean(),
+  reasoning: shortText(1200),
+  inputs: shortText(600),
+  rules: shortText(600),
+  access: shortText(600),
+  exceptions: shortText(600),
+  verification: shortText(600),
+  risk: shortText(600),
+  automatable: shortText(800),
+  human: shortText(800),
+  evidence: z.array(z.object({ source: z.enum(EVIDENCE_SOURCES), text: shortText(400) })).max(12),
+  prerequisites: z.array(shortText(300)).max(8),
+  questions: z.array(shortText(300)).max(6),
+  value: shortText(600),
 });
 
 export const analysisOutput = z.object({
@@ -191,8 +236,10 @@ export const analysisOutput = z.object({
       }),
     )
     .max(MAX_RECOMMENDATIONS * 2),
+  automation: z.array(assessmentOutput).max(80).default([]),
 });
 export type AnalysisOutput = z.infer<typeof analysisOutput>;
+export type AssessmentOutput = z.infer<typeof assessmentOutput>;
 
 export const questionsJsonSchema = object({
   questions: {

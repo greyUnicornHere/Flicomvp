@@ -5,7 +5,10 @@
 // [fixture:bad-ids] (always references steps that don't exist), [fixture:error] (provider outage).
 import { AiError, AI_ERROR_MESSAGES, type AiProvider, type AiRequest, type AiResponse } from './provider.js';
 
-type View = { steps: { ref: string; type: string; label: string }[]; connections: { ref: string; from: string; to: string; type: string }[] };
+type View = {
+  steps: { ref: string; type: string; label: string; owner?: string; notes?: string; tools?: string[] }[];
+  connections: { ref: string; from: string; to: string; type: string }[];
+};
 
 const tagged = (text: string, tag: string): string | null => {
   const match = new RegExp(`<${tag}>\\n?([\\s\\S]*?)\\n?</${tag}>`).exec(text);
@@ -229,6 +232,7 @@ function analysis(input: string, attempt: number) {
       outcome: 'no_improvements',
       assumptions: ['The workflow shows every step that happens today.'],
       recommendations: [],
+      automation: automation(view, []),
     };
   }
 
@@ -334,5 +338,116 @@ function analysis(input: string, attempt: number) {
     outcome: recs.length ? 'improvements' : 'no_improvements',
     assumptions: ['The workflow shows every step that happens today.'],
     recommendations: recs,
+    automation: automation(view, []),
   };
+}
+
+// ---------- automation assessments (deterministic stand-ins for the model's judgment) ----------
+
+type Turn = { step: string; question: string; answer: string };
+
+const quoteOf = (text: string) => `“${text.length > 120 ? `${text.slice(0, 117)}…` : text}”`;
+
+/** Classify one work step from its details and the person's answers about it. */
+function assess(view: View, ref: string, answers: Turn[]) {
+  const step = view.steps.find((s) => s.ref === ref)!;
+  const own = answers.filter((a) => a.step === ref && a.answer !== '(skipped for now)');
+  const said = [step.notes ?? '', ...own.map((a) => a.answer)].join(' ');
+  const text = `${step.label} ${said}`.toLowerCase();
+  const previous = view.connections.find((c) => c.to === ref);
+  const before = previous ? view.steps.find((s) => s.ref === previous.from)?.label : undefined;
+  const evidence = [
+    ...(step.notes ? [{ source: 'user', text: `Step notes: ${quoteOf(step.notes)}` }] : []),
+    ...own.map((a) => ({ source: 'user', text: `${a.question} ${quoteOf(a.answer)}` })),
+    { source: 'workflow', text: before ? `Follows “${before}” in the workflow.` : 'Position in the workflow.' },
+  ];
+  const volume = /(\d[\d,]*)\s*(?:\w+\s)?(?:a|per)\s+(day|week|month)/i.exec(said);
+  const value = volume ? `Runs about ${volume[1]} times a ${volume[2]} (you said). Time per run isn't known, so the value can't be estimated.` : '';
+  const dims = (over: Partial<Record<'inputs' | 'rules' | 'access' | 'exceptions' | 'verification' | 'risk', string>>) => ({
+    inputs: 'Not described yet.',
+    rules: 'Not described yet.',
+    access: 'Not described: a tool name alone does not show access.',
+    exceptions: 'Not described yet.',
+    verification: 'Not described yet.',
+    risk: 'Not described yet.',
+    ...over,
+  });
+  const base = { step: ref, value, questions: [] as string[], prerequisites: [] as string[] };
+
+  const human = /physical|on site|on-site|in person|inspect|wet signature|legally/.exec(text);
+  if (human) {
+    return {
+      ...base,
+      classification: 'human',
+      provisional: false,
+      reasoning: `The details say this needs ${human[0]} work by a person, which software can't do here.`,
+      ...dims({ rules: 'Depends on a person on site.', risk: 'Errors would be found late if skipped.' }),
+      automatable: '',
+      human: `The ${human[0]} part (you said).`,
+      evidence,
+    };
+  }
+  if (/quot(e|ation)/.test(text) && /compar/.test(text)) {
+    const statedHuman = /technical|evaluat|select|choose|decid/.test(said.toLowerCase());
+    return {
+      ...base,
+      classification: 'assisted',
+      provisional: true,
+      reasoning: 'Reading the quotations and lining up prices and terms can be automated; choosing the supplier remains a human evaluation.',
+      ...dims({ inputs: 'Quotations arrive as documents (stated).', rules: 'Comparison is mechanical; the choice involves judgment.' }),
+      automatable: 'Extract prices, terms and delivery dates from each quotation and build a side-by-side comparison.',
+      human: statedHuman ? 'The technical evaluation and the final selection stay with the team (you said).' : 'The final selection stays with a person (assumption).',
+      evidence: statedHuman ? evidence : [...evidence, { source: 'assumption', text: 'A person makes the final choice.' }],
+      prerequisites: ['Check that quotation formats can be read reliably.'],
+    };
+  }
+  const rules = /rule|policy|threshold|always|criteria/.test(text);
+  const access = /access|api|erp|crm|integration|export|database/.test(text);
+  const check = /check|verif|validat|reconcil|confirm/.test(text);
+  if (rules && access && check) {
+    return {
+      ...base,
+      classification: 'full',
+      provisional: true,
+      reasoning: 'The stated rules, digital inputs, system access and checks support doing the normal task without routine human involvement. Nothing has been tested yet.',
+      ...dims({ inputs: 'Digital and usable (stated).', rules: 'Fixed rules (stated).', access: 'Access described by you, not yet tested.', exceptions: 'Cases the rules don\'t cover go to a person.', verification: 'Results can be checked as described.', risk: 'Low if checks run on every case.' }),
+      automatable: 'Apply the stated rules to the digital inputs through the described system access, with an automatic check on every result.',
+      human: '',
+      evidence: [...evidence, { source: 'assumption', text: 'The described access and checks work as stated.' }],
+      prerequisites: ['Confirm the stated system access works in a test.', 'Test the rules against past cases.'],
+    };
+  }
+  if (step.type === 'approval' && !/no approval/.test(text)) {
+    return {
+      ...base,
+      classification: 'assisted',
+      provisional: true,
+      reasoning: 'Collecting and routing the information can be automated; the approval itself is a human decision of authority.',
+      ...dims({ rules: 'Approval is a decision of authority.', risk: 'An approver is accountable for the outcome.' }),
+      automatable: 'Prepare the approval request with all information and route it to the approver.',
+      human: `The approval decision stays with ${step.owner ? quoteOf(step.owner) : 'the approver'}.`,
+      evidence: [...evidence, { source: 'workflow', text: 'This is an approval step.' }],
+      prerequisites: ['Confirm who approves and on what basis.'],
+    };
+  }
+  const missing = !own.some((a) => /come from|source|information/.test(a.question)) ? `For “${step.label}”, where does the information come from?` : `For “${step.label}”, which rule or criteria decide the result?`;
+  return {
+    ...base,
+    classification: 'unknown',
+    provisional: false,
+    reasoning: access && !rules
+      ? 'System access is described, but not the rules that decide the result, so a defensible classification is not possible yet.'
+      : 'The details don\'t say where the inputs come from or what rules apply, so a defensible classification is not possible yet.',
+    ...dims({}),
+    automatable: '',
+    human: '',
+    evidence,
+    questions: [missing],
+  };
+}
+
+const ASSESSABLE = new Set(['action', 'approval', 'decision', 'exception']);
+
+function automation(view: View, answers: Turn[]) {
+  return view.steps.filter((s) => ASSESSABLE.has(s.type)).map((s) => assess(view, s.ref, answers));
 }

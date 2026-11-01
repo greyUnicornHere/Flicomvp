@@ -163,6 +163,7 @@ Letter spacing: hero/heading `-0.025em`; body `0`; overline `0.04em`. Do not shr
 - Interactions synchronized in both directions: selecting a recommendation highlights/focuses corresponding graph change; clicking changed graph item selects its recommendation.
 - Added green, modified amber, removed faded/dashed red with strikethrough; explicit badges and legend. Distinguish old dashed edges from active new paths. Branch and path labels clear.
 - Recommendation card: brief problem/proposal/reason, tags for `Quick Win`, `Strategic Improvement`, `Complex Change`, explicit `Pending/Accepted/Rejected`, expandable details, qualitative evidence and verification flags. Rejected items in collapsible section.
+- *Automation assessment (owner choice, option A; see `DECISIONS.md`):* the Analysis tab's side panel has **Recommendations | Automation** tabs. Automation shows counts per classification, then the assessed steps grouped by classification (icon + label headings). A row opens its explanation in place and highlights the step in the diagram (others dimmed); clicking a step in the diagram opens its row. Provisional is a dashed chip, Needs reassessment a dotted amber chip with a refresh icon. Nothing is drawn on the blocks, so change colours keep their meaning.
 - `Apply All` and per-item acceptance available. Combined preview before final `Confirm & Apply`. Preserve original workflow/snapshot.
 - `Initial Analysis / Latest Analysis` dropdown; when only one analysis exists, don't duplicate data or misleadingly show two distinct versions.
 

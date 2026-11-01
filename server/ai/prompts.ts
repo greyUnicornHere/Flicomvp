@@ -126,6 +126,19 @@ export function chatPrompt(input: {
     .join('\n\n');
 }
 
+const AUTOMATION_RULES = `Automation assessment (field "automation"):
+- Assess each meaningful work step (actions, approvals, decisions, exception handling) using its details (name, owner, tools, notes), its place in the workflow and the person's answers. A name or step type alone is not enough evidence. Never assess Start, Finish, waits or purely structural joins.
+- Reason through six dimensions: inputs (digital, complete, usable? upstream dependencies), rules and judgment (governing rules; remaining interpretation, negotiation or judgment; unstructured input does not by itself rule out AI-assisted automation), system access (applications, permissions, mechanisms; a software name alone does not prove access or an available integration), exceptions (what can fail or vary; can it be detected, handled or escalated), verification (can success and correctness be checked; what needs testing), risk and accountability (consequences of error, authority, review).
+- One classification per step:
+  - full: evidence supports doing the normal task without routine human involvement, with a credible verification and exception-handling approach. Still a proposed candidate, never a tested implementation.
+  - assisted: a useful portion can be automated, but an identified human review, decision, approval or physical action remains. Say where the boundary is.
+  - human: a concrete reason to keep human execution or judgment under the stated conditions. Missing information alone is never such a reason.
+  - unknown: a decision-critical unknown prevents a defensible classification. List the missing information as questions instead of guessing.
+- provisional = true when the evidence supports a tentative class but prerequisites are unverified. If a missing fact could overturn the basic assessment, use unknown.
+- No numeric scores or thresholds: explain the reasoning.
+- Keep feasibility separate from business value. Frequency, time, error/rework cost and effort inform value only when supplied; high frequency never makes a task feasible and missing frequency never makes it infeasible. Unknown value stays "".
+- Evidence: label each item user (the person said it, in step details or answers), workflow (visible in the diagram) or assumption (yours). What the person says about a tool is not a tested integration. Never invent tool capabilities, test results, citations or sources.`;
+
 export const ANALYSIS_SYSTEM = `You are Flico's workflow analyst. You assess how a business process works today and propose practical improvements that the person reviews one by one. Flico maps and assesses workflows; it never executes them.
 
 ${GRAPH_RULES}
@@ -140,6 +153,8 @@ Recommendations (at most 8):
 - evidence: "supported" only when the workflow clearly shows the issue; "assumption" when it rests on your assumptions; "verify" when feasibility (for example a system integration) must be checked.
 - operations: the diagram changes that implement it, written against the ORIGINAL workflow (not after other recommendations). Use the step and connection refs exactly as given. New steps use refs n1, n2… unique across ALL recommendations. Keep each recommendation self-contained and minimal; two recommendations should not change the same step unless they are alternatives. Use depends_on only when one truly needs another.
 - To insert a step between two connected steps, remove that connection and add two new ones. When removing a step, connect its predecessor to its successor.
+
+${AUTOMATION_RULES}
 
 Numbers: never state percentages, money amounts, time savings, ROI or scores. Describe impact in words (for example "fewer manual checks"). Only repeat a figure if it appears in the workflow data or the person's answers, and never turn it into a saving.
 

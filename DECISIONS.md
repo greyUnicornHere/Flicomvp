@@ -287,3 +287,24 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - **Long names in the card header**: the name box wraps onto as many lines as the name needs (owner choice "wrap onto more lines"), so the full name is always visible, matching the blocks on the canvas. Enter still finishes the name and never adds a line break; pasted line breaks become spaces.
 - **More details always starts closed** (owner choice), even when the step has details; the summary line shows what's inside. Connections still opens by itself when a decision has a Yes/No path to set.
 - **Analysis diagram auto-arranged and fit to the whole workflow** (owner choice "Auto-arrange + fit all"): the review diagram and the final preview lay the shown workflow out with the same Auto-arrange as the editor, as a view only (the saved layout and positions are not changed). They open zoomed to show every step (minimum zoom lowered from 25% to 10%; the Milestone 4 "readable minimum zoom" is replaced), and refit when the arrangement changes (e.g. after rejecting a recommendation). Selecting a recommendation still pans to its steps without zooming in. It also refits whenever its area changes size (the hidden Analysis tab being shown, a window resize, full screen).
+
+## Automation assessment (owner request, 2026-11-01)
+
+### Owner decisions
+- Build the automation assessment as listed by the owner; **"Refine assessment" is not built** (owner: not now).
+- UI: mockups of three options were compared (automation section in the Analysis tab, badges on blocks, a Changes/Automation diagram switch). The owner chose **A: an Automation section in the Analysis tab**. Nothing is drawn on blocks, in the editor or the Analysis diagram.
+
+### What an assessment is
+- Produced by the same analysis call: no extra credit, no extra model request. Assessed: actions, decisions, approvals and exception handling. Not assessed: Start, Finish and Wait.
+- Four classes (Full automation candidate / Human-assisted automation / Keep human-led / More information needed) plus a **Provisional** flag (not a fifth class). No numerical scores.
+- Stored per step: class, provisional, reasoning, notes on six areas (inputs, rules and judgment, system access, exceptions, verification, risk and accountability), what could be automated, what stays human, evidence (each tagged You said / From the workflow / Assumption), prerequisites, open questions, and business value only where the person gave frequency/time/error figures (otherwise "Not assessed").
+- Server checks (problems trigger the existing single correction retry; anything still invalid is dropped, never shown): the step exists and is a work step, no duplicates, reasoning and evidence present, More information needed has a question, candidate/assisted say what could be automated, assisted/human say what stays human, no invented figures (the Milestone 4 `unsupportedFigures` guard).
+- Binding: stable step ID + analysis + analysed revision + a fingerprint of the step's type, name, owner/team, duration, tools and notes and of the connections and steps that feed it. Positions aren't part of it, so moving blocks never invalidates anything; other changes show **Needs reassessment** instead of presenting the old conclusion as current.
+- Older analyses have no assessments (`NULL`) and say so; they're never shown as "nothing could be automated".
+- Database: migration 5 adds `analyses.assessments_json` only. (A database that ran the withdrawn 4.1 branch also has an unused `workflow_chat_messages.refine_json` column; it is ignored.)
+
+### Automation tab (option A)
+- The side panel of the Analysis tab has **Recommendations | Automation** tabs; Recommendations stays the default. When an analysis has no recommendations but has assessments, only Automation is shown.
+- Automation: four counts, a "recommendations only" note, then steps grouped by class under icon + label headings (lightning, handshake, person, question mark). A row shows the step's current name, a dashed **Provisional** chip and a dotted amber **Needs reassessment** chip when relevant. Opening a row shows the explanation in place, with "Reasoning by area" folded.
+- Linked to the diagram: an open row highlights its step (others dimmed) and brings it into view; clicking a step in the diagram while on Automation opens its row. Change highlighting (added/updated/removed) is untouched.
+- The executive summary lists "N steps assessed for automation" or "No automation assessment in this analysis".

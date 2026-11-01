@@ -10,6 +10,7 @@ import type {
   Recommendation,
   ReviewStatus,
 } from '../../shared/api.js';
+import type { StepAssessment } from '../../shared/assessment.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
 import type { Db } from '../db/database.js';
 import { newId } from '../auth/tokens.js';
@@ -128,11 +129,12 @@ type AnalysisRow = {
   result_json: string;
   answers_json: string;
   review_json: string;
+  assessments_json: string | null;
   created_at: number;
   applied_at: number | null;
 };
 
-type StoredResult = Omit<AnalysisResult, 'usage' | 'dropped' | 'recommendations'> & { recommendations: Omit<Recommendation, 'status'>[] };
+type StoredResult = Omit<AnalysisResult, 'usage' | 'dropped' | 'recommendations' | 'assessments'> & { recommendations: Omit<Recommendation, 'status'>[] };
 
 const toAnalysis = (row: AnalysisRow): Analysis => {
   const result = JSON.parse(row.result_json) as StoredResult;
@@ -151,6 +153,7 @@ const toAnalysis = (row: AnalysisRow): Analysis => {
     assumptions: result.assumptions,
     answers: JSON.parse(row.answers_json) as Analysis['answers'],
     recommendations: result.recommendations.map((r) => ({ ...r, status: review[r.id] ?? 'pending' })),
+    assessments: row.assessments_json === null ? null : (JSON.parse(row.assessments_json) as StepAssessment[]),
     createdAt: new Date(row.created_at).toISOString(),
     appliedAt: row.applied_at === null ? null : new Date(row.applied_at).toISOString(),
   };
@@ -182,7 +185,15 @@ export function saveAnalysis(
   db: Db,
   ownerId: string,
   workflowId: string,
-  input: { mode: AnalysisMode; source: AiSource; baseRevision: number; snapshot: WorkflowGraph; result: StoredResult; answers: Analysis['answers'] },
+  input: {
+    mode: AnalysisMode;
+    source: AiSource;
+    baseRevision: number;
+    snapshot: WorkflowGraph;
+    result: StoredResult;
+    answers: Analysis['answers'];
+    assessments: StepAssessment[];
+  },
   now: number,
 ): string {
   const hasInitial = db.prepare("SELECT 1 FROM analyses WHERE workflow_id = ? AND slot = 'initial'").get(workflowId);
@@ -190,8 +201,8 @@ export function saveAnalysis(
   if (slot === 'latest') db.prepare("DELETE FROM analyses WHERE workflow_id = ? AND slot = 'latest'").run(workflowId);
   const id = newId();
   db.prepare(
-    `INSERT INTO analyses (id, workflow_id, owner_id, slot, mode, source, base_revision, snapshot_json, result_json, answers_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO analyses (id, workflow_id, owner_id, slot, mode, source, base_revision, snapshot_json, result_json, answers_json, assessments_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     workflowId,
@@ -203,6 +214,7 @@ export function saveAnalysis(
     JSON.stringify(input.snapshot),
     JSON.stringify(input.result),
     JSON.stringify(input.answers),
+    JSON.stringify(input.assessments),
     now,
   );
   db.prepare("UPDATE workflows SET status = 'analyzed' WHERE id = ? AND owner_id = ?").run(workflowId, ownerId);

@@ -421,3 +421,27 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Analysis o
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the step card and analysis diagram fixes | Pass | Product owner approved on 2026-11-01 |
+
+## Automation assessment — 2026-11-01 (branch `automation-assessment`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessments in all automated tests and screenshots come from the labelled test fixture (`AI_PROVIDER=fixture`), not a live model.**
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **284 / 284 pass** (16 new: 5 API, 6 classification fixtures, 5 fingerprint) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **68 / 68 pass** (4 new in `tests/e2e/automation.spec.ts`) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Four classes from stated details: full candidate (provisional, untested assumptions listed), assisted (quotation comparison; stated human selection kept), human-led (stated physical inspection), more information needed (questions, nothing invented) | Pass (fixture) | `server/ai/fixture.test.ts` (6 tests) |
+| Feasibility separate from value; business value only from supplied figures | Pass (fixture) | fixture test "keeps feasibility separate from value"; server rejects invented figures (API "rejects invalid assessments once…") |
+| Start, Finish, Wait never assessed; unknown steps, duplicates, missing evidence/questions rejected once then dropped | Pass | `shared/assessment.test.ts`; API "rejects invalid assessments…"; E2E (the wait step is not listed) |
+| Bound to step ID, analysis and revision; no extra AI call or credit | Pass | API "binds each assessment…", "comes with the same analysis: one AI call and one credit"; E2E credit check |
+| Needs reassessment on relevant changes (the step, or a step feeding it); moving blocks doesn't | Pass | `shared/assessment.test.ts`; E2E "changing a step… shows Needs reassessment"; `docs/evidence/automation/02-needs-reassessment-1536-test-fixture.png` |
+| Older analyses open and say they have no assessment | Pass | API "older analyses stay readable…"; E2E (analysis set to no assessments in the database) |
+| Owner isolation | Pass | API "keeps assessments private to the workflow owner" |
+| Automation tab: counts, grouped list, explanation in place with evidence tags and reasoning by area; row ↔ diagram linking; Recommendations unchanged | Pass (fixture) | E2E "Automation tab: counts, steps grouped…"; `01-automation-tab-1536-test-fixture.png` |
+| 1280 px: readable, no horizontal scroll | Pass (fixture) | E2E "1280px…"; `03-automation-tab-1280-test-fixture.png` |
+| Edge browser | Not tested | Only Chromium is available here |
+| Live Claude assessment | Not tested | No API key in this environment; to be checked by the owner on their PC |

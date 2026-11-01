@@ -10,6 +10,7 @@ import {
   type CreditsResponse,
   type ReviewStatus,
 } from '../../shared/api.js';
+import { assessmentBasis } from '../../shared/assessment.js';
 import { diffGraphs } from '../../shared/aiOps.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
 import { planApply } from '../../shared/analysis.js';
@@ -174,12 +175,15 @@ export const analysisRoutes =
             finishRun(db, runId, 'failed', ctx.now(), { error: NO_CREDITS });
             return;
           }
-          const { usage: _usage, dropped: _dropped, ...stored } = result;
+          const { usage: _usage, dropped: _dropped, assessments: drafts, ...stored } = result;
+          // Each assessment is bound to its step, this analysis and the analysed revision.
+          const assessedAt = new Date(ctx.now()).toISOString();
+          const assessments = drafts.map((a) => ({ ...a, basis: assessmentBasis(job.graph, a.stepId)!, revision: job.revision, updatedAt: assessedAt }));
           const analysisId = saveAnalysis(
             db,
             userId,
             job.workflowId,
-            { mode: job.mode, source: ai.source, baseRevision: job.revision, snapshot: job.graph, result: stored, answers: job.answers },
+            { mode: job.mode, source: ai.source, baseRevision: job.revision, snapshot: job.graph, result: stored, answers: job.answers, assessments },
             ctx.now(),
           );
           debitForRun(db, userId, runId, ctx.now());

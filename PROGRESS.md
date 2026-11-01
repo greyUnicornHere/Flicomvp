@@ -95,6 +95,15 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - "More details" always starts closed; its summary line shows what's inside.
 - The diagram in the Analysis tab and the final preview opens **auto-arranged** and zoomed out to show the **whole workflow**, and refits when the tab is shown, the window is resized or full screen is toggled. This only affects the view: your own layout in the editor is not changed. Long workflows open small; zoom or Full screen to read them.
 
+## Automation assessment (owner request; awaiting owner review, branch `automation-assessment`)
+
+- Each new analysis also assesses every work step as **Full automation candidate**, **Human-assisted automation**, **Keep human-led** or **More information needed**, with a **Provisional** flag when it rests on unconfirmed points. Start, Finish and Wait steps aren't assessed.
+- Each assessment explains its reasoning across six areas (inputs, rules and judgment, system access, exceptions, verification, risk), what could be automated, what stays human, what to verify, and evidence tagged **You said**, **From the workflow** or **Assumption**. Business value appears only when you gave the figures; invented figures are rejected by the server.
+- Part of the same analysis: no extra credit and no extra AI call.
+- Shown in the Analysis tab's new **Automation** tab (option A): counts per class, then steps grouped by class; a row opens its explanation and highlights the step in the diagram, and clicking a step opens its row.
+- Changing a step, or a step that feeds it, shows **Needs reassessment**; moving blocks doesn't.
+- Analyses made before this still open and say they have no automation assessment.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -117,7 +126,9 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - No Customer Order Processing example (owner decision for now).
 - Search filters loaded workflows in the browser (fine for the 200-workflow limit).
 - The details card's dragged position resets on reload or when you leave the editor (by design). Dragged to the far left it can cover the step toolbar; drag it back or close it.
+- Automation assessments are recommendations only: Flico doesn't run automations, connect to systems or test integrations. In tests and screenshots they come from the labelled test fixture; quality with live Claude Haiku 5.5 still needs a live check.
+- An assessment that needs reassessment is updated by running a new analysis (one credit). Refining an assessment through questions isn't built (owner choice: not now).
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/` and `docs/evidence/step-card/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/` and `docs/evidence/automation/`.

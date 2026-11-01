@@ -122,6 +122,7 @@ test.describe('saving block details', () => {
     await expect.poll(fields, { timeout: 8000 }).toEqual(['Sales desk', 'Check the PO number first']);
     await page.reload();
     await step(page, 'Receive order').dblclick();
+    await openMore(page);
     await expect(details(page).getByLabel('Notes')).toHaveValue('Check the PO number first');
     await expect(details(page).getByLabel('Owner / team')).toHaveValue('Sales desk');
   });
@@ -220,13 +221,13 @@ test.describe('compact card layout', () => {
     await expect(page.getByTestId('details-save-status')).toContainText('Wait');
     await card.getByRole('button', { name: 'Done', exact: true }).click();
 
-    // A step that has details opens them; folding shows what's inside.
+    // More details always starts folded, even when the step has details; the summary shows what's inside.
     await step(page, 'Manager approves').dblclick();
-    await expect(card.getByRole('button', { name: /^More details/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.getByRole('button', { name: /^More details/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(card.getByRole('button', { name: /^More details/ })).toContainText('2 days · ERP · Notes');
+    await openMore(page);
     await expect(card.getByLabel('Notes')).toHaveValue('Over 5000 only');
     await page.screenshot({ path: `${CARD_SHOTS}/02-more-details-open-1536.png` });
-    await card.getByRole('button', { name: /^More details/ }).click();
-    await expect(card.getByRole('button', { name: /^More details/ })).toContainText('2 days · ERP · Notes');
     await card.getByRole('button', { name: 'Close step details' }).click();
 
     // A decision with a path still to set opens Connections by itself.
@@ -261,6 +262,7 @@ test.describe('compact card layout', () => {
     await open(page, detailed, { width: 1280, height: 720 });
     await step(page, 'Manager approves').dblclick();
     const card = details(page);
+    await openMore(page);
     await card.getByRole('button', { name: /^Connections/ }).click();
     const box = (await card.boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(1280);
@@ -323,4 +325,20 @@ test.describe('changing a decision into another type', () => {
       }, { timeout: 8000 })
       .toEqual(['decision', ['no', 'yes']]);
   });
+});
+
+test('a long step name wraps in the card header and is shown in full', async ({ page }) => {
+  const long = 'Check the supplier invoice against the purchase order and the delivery note';
+  const id = await open(page, simple);
+  await step(page, 'Receive order').dblclick();
+  const name = details(page).getByLabel('Step name');
+  await name.fill(long);
+  await name.press('Enter'); // finishes the name, never adds a line break
+  await expect(name).toHaveValue(long);
+  // Every line is visible: the box is as tall as its content, and taller than one line.
+  const fits = await name.evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && el.clientHeight > 40);
+  expect(fits).toBe(true);
+  await expect(page.getByTestId('details-save-status')).toBeInViewport();
+  await page.screenshot({ path: 'docs/evidence/step-card/06-long-name-wraps-1536.png' });
+  await expect.poll(async () => (await stored(page, id)).graph.nodes.find((n) => n.id === 'a')!.label, { timeout: 8000 }).toBe(long);
 });

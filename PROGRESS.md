@@ -89,6 +89,12 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - The card moves to stay fully on screen when a section opens or closes.
 - A **decision can now change type** to Action, Approval or Wait (or Finish when nothing follows it). If both its Yes and No paths are set, the card asks which one to keep; the other connection is removed and Undo restores it.
 
+## Step card and analysis diagram fixes (owner feedback; awaiting owner review, branch `step-card-fixes`)
+
+- Long step names wrap onto more lines in the card's header, so the whole name is always visible.
+- "More details" always starts closed; its summary line shows what's inside.
+- The diagram in the Analysis tab and the final preview opens **auto-arranged** and zoomed out to show the **whole workflow**. This only affects the view: your own layout in the editor is not changed. Long workflows open small; zoom or Full screen to read them.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -97,7 +103,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Feedback in the account menu is disabled ("Coming soon") until Milestone 5.
 - Export is visibly disabled until Milestone 5.
 - **Live analysis not yet demonstrated:** like Milestone 3, analyses in tests and screenshots come from the labelled test fixture. Analysis quality with Claude Haiku 5.5 needs a live check once a key is available.
-- Long workflows are drawn small in the review diagram (it shares the width with the list). It opens at a readable zoom; use pan, zoom or fit-to-screen to see the rest.
+- Long workflows are drawn small in the review diagram: it opens showing the whole workflow (owner choice). Zoom in or use Full screen to read the steps.
 - An analysis can't be applied after steps or connections changed (moving steps is fine); run a new analysis.
 - Applying is once per analysis. To apply more of it later, run a new analysis.
 - **Live AI not yet demonstrated:** no `ANTHROPIC_API_KEY` in this environment yet. All AI features are tested end to end with the test fixture, and the Claude adapter's request format and error handling are unit-tested against a stubbed API. The first live run happens once the key is added (see TEST_NOTES.md).

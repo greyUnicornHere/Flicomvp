@@ -273,3 +273,83 @@ test('1280px layout and keyboard: review without a mouse', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page.getByRole('tab', { name: 'Editor', selected: true })).toBeVisible();
 });
+
+test('the review diagram opens auto-arranged and shows the whole workflow; the saved layout is untouched', async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 960 });
+  await signIn(page, uniqueEmail('arrange'));
+  const names = ['Receive request', 'Log request', 'Check budget', 'Ask supplier', 'Compare quotes', 'Pick supplier', 'Raise order', 'Confirm delivery', 'Pay invoice'];
+  // A long workflow left untidy in the editor: steps scattered up and down, out of order.
+  const messy: WorkflowGraph = {
+    nodes: [
+      { id: 's', type: 'start', label: 'Start', position: { x: 0, y: 0 } },
+      ...names.map((label, i) => ({ id: `a${i}`, type: 'action' as const, label, position: { x: 300 * ((i * 7) % 9) + 300, y: ((i * 173) % 500) - 250 } })),
+      { id: 'f', type: 'finish', label: 'Done', position: { x: 3300, y: 400 } },
+    ],
+    edges: [
+      { id: 'e0', sourceId: 's', targetId: 'a0', type: 'normal' },
+      ...names.slice(1).map((_, i) => ({ id: `e${i + 1}`, sourceId: `a${i}`, targetId: `a${i + 1}`, type: 'normal' as const })),
+      { id: 'ef', sourceId: `a${names.length - 1}`, targetId: 'f', type: 'normal' },
+    ],
+  };
+  const { workflow } = await (await page.request.post('/api/workflows', { data: { kind: 'manual' } })).json();
+  expect((await page.request.put(`/api/workflows/${workflow.id}/graph`, { data: { graph: messy, baseRevision: 1 } })).status()).toBe(200);
+  await page.goto(`/workflows/${workflow.id}`);
+  await expect(page.locator('.react-flow__node').first()).toBeVisible();
+  await quickAnalysis(page);
+  await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
+
+  const pane = page.getByRole('region', { name: 'Workflow with proposed changes' }).or(page.locator('[aria-label="Workflow with proposed changes"]')).first();
+  const review = page.locator('[aria-label="Workflow with proposed changes"] .react-flow__node');
+  await expect(review.first()).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: 'docs/evidence/step-card/07-analysis-auto-arranged-1536-test-fixture.png' });
+  const area = (await pane.boundingBox())!;
+  const boxes = await review.evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }));
+  // Every step is inside the diagram area (fit to show the whole workflow)...
+  for (const b of boxes) {
+    expect(b.x).toBeGreaterThanOrEqual(area.x - 1);
+    expect(b.x + b.w).toBeLessThanOrEqual(area.x + area.width + 1);
+    expect(b.y).toBeGreaterThanOrEqual(area.y - 1);
+    expect(b.y + b.h).toBeLessThanOrEqual(area.y + area.height + 1);
+  }
+  // ...and arranged: the unchanged stretch of the path sits on one row, in order, left to right.
+  const unchanged = ['Check budget', 'Ask supplier', 'Compare quotes', 'Pick supplier', 'Raise order', 'Confirm delivery', 'Pay invoice'];
+  const placed = [];
+  for (const name of unchanged) {
+    const b = (await review.filter({ has: page.locator('.fl-node-label', { hasText: new RegExp(`^${name}$`) }) }).boundingBox())!;
+    placed.push({ x: b.x, middle: Math.round(b.y + b.height / 2) });
+  }
+  const middles = placed.map((p) => p.middle);
+  expect(Math.max(...middles) - Math.min(...middles)).toBeLessThanOrEqual(2);
+  expect(placed.map((p) => p.x)).toEqual([...placed.map((p) => p.x)].sort((a, b) => a - b));
+  // The person's own layout in the editor is not changed.
+  const saved = (await stored(page, workflow.id)).graph;
+  expect(saved.nodes.find((n) => n.id === 'a3')!.position).toEqual(messy.nodes.find((n) => n.id === 'a3')!.position);
+});
+
+test('the review diagram is fitted when the Analysis tab is opened later (it was hidden while loading)', async ({ page }) => {
+  const id = await openWorkflow(page);
+  await quickAnalysis(page);
+  await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
+  // Come back later: the page opens on the Editor tab, with the analysis loaded but hidden.
+  await page.goto(`/workflows/${id}`);
+  await expect(page.getByRole('tab', { name: 'Editor', selected: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Analysis' }).click();
+  const pane = page.locator('[aria-label="Workflow with proposed changes"]');
+  const review = pane.locator('.react-flow__node');
+  await expect(review.first()).toBeVisible();
+  await page.waitForTimeout(400);
+  const area = (await pane.boundingBox())!;
+  const boxes = await review.evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }));
+  for (const b of boxes) {
+    expect(b.x).toBeGreaterThanOrEqual(area.x - 1);
+    expect(b.x + b.w).toBeLessThanOrEqual(area.x + area.width + 1);
+    expect(b.y).toBeGreaterThanOrEqual(area.y - 1);
+    expect(b.y + b.h).toBeLessThanOrEqual(area.y + area.height + 1);
+  }
+  // A short workflow is shown at a readable size, not at the minimum zoom.
+  const left = Math.min(...boxes.map((b) => b.x));
+  const right = Math.max(...boxes.map((b) => b.x + b.w));
+  expect(right - left).toBeGreaterThan(area.width * 0.6);
+  await page.screenshot({ path: 'docs/evidence/step-card/08-analysis-reopened-1536-test-fixture.png' });
+});

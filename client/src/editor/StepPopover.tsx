@@ -47,6 +47,14 @@ export function StepPopover(props: Props) {
   const transform = useStore((s) => s.transform);
 
   const [fields, setFields] = useState(() => toFields(node));
+  // The name wraps onto as many lines as it needs, so the whole name is always visible.
+  const nameRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = nameRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [fields.label]);
   const latest = useRef(fields);
   useEffect(() => {
     latest.current = fields;
@@ -79,8 +87,8 @@ export function StepPopover(props: Props) {
   const connectionText = (e: (typeof outs)[number]) =>
     `${e.type === 'loop' ? 'Repeats ' : e.type === 'exception' ? 'Exception: ' : e.label ? `${e.label} → ` : '→ '}${label(e.targetId)}`;
 
-  // Duration, tools and notes fold away; they open by themselves when the step already has any.
-  const [moreOpen, setMoreOpen] = useState(() => Boolean(node.duration || node.tools?.length || node.notes));
+  // Duration, tools and notes always start folded; the summary line shows what's inside (owner choice).
+  const [moreOpen, setMoreOpen] = useState(false);
   // Connections fold away too, unless a Yes/No path still needs setting.
   const [connectionsOpen, setConnectionsOpen] = useState(() => open.length > 0);
   const moreId = useId();
@@ -260,12 +268,21 @@ export function StepPopover(props: Props) {
           <TypeIcon size={16} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1" onBlur={() => commit()} onKeyDown={commitOnEnter}>
-          <input
-            className="-ml-1.5 mb-1 w-[calc(100%+6px)] cursor-text select-text rounded-[8px] border border-transparent bg-transparent px-1.5 py-0.5 text-[16px] font-bold leading-6 text-fl-text hover:border-fl-border-strong focus:border-fl-border-strong focus:bg-fl-surface focus-visible:!outline-offset-0"
+          <textarea
+            ref={nameRef}
+            rows={1}
+            className="-ml-1.5 mb-1 block w-[calc(100%+6px)] cursor-text select-text resize-none overflow-hidden break-words rounded-[8px] border border-transparent bg-transparent px-1.5 py-0.5 text-[16px] font-bold leading-6 text-fl-text hover:border-fl-border-strong focus:border-fl-border-strong focus:bg-fl-surface focus-visible:!outline-offset-0"
             aria-label="Step name"
             value={fields.label}
             maxLength={200}
-            onChange={set('label')}
+            // A name is one line of text: Enter finishes it, pasted line breaks become spaces.
+            onChange={(e) => setFields({ ...fields, label: e.target.value.replace(/\s*\n\s*/g, ' ') })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commit();
+              }
+            }}
           />
           <div className="flex flex-wrap items-center gap-x-1.5 text-[12px] leading-[18px]" role="status" aria-live="polite" data-testid="details-save-status" data-state={status}>
             <span className="font-semibold" style={{ color: tone('ink') }}>

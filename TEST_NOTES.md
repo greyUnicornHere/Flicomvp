@@ -329,3 +329,8 @@ Intentional differences: Accept/Reject buttons on each card (the mockup has no v
 | Whole suite | Pass | Unit/API **263 / 263**, E2E **52 / 52**, lint, typecheck, build |
 
 Note: automated browsers run without a visible screen, so the screenshots show the same window size in and out of full screen; the tests check the browser's full-screen state directly. On your PC the page fills the monitor.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the long-name and full-screen changes | Pass | Product owner approved on 2026-11-01 |

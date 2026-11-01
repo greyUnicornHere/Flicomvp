@@ -67,7 +67,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Final preview** of accepted changes only, with conflict and dependency checks, then **Confirm & apply**: one server-checked save, one Undo, original snapshot kept.
 - Initial and Latest analysis with a dropdown (no duplicate when there's one). An honest "no improvements" result. No invented numbers. Ask Flico knows the latest analysis.
 
-## Owner feedback after Milestone 4 (branch `owner-feedback-m4`, waiting for owner review)
+## Owner feedback after Milestone 4 (approved by owner 2026-11-01; merged to `main`)
 
 - Long step names show in full: blocks grow taller instead of cutting the name off with "…".
 - Full screen for the editor, for the analysis review (diagram + recommendations) and for the final preview.

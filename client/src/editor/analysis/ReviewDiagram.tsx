@@ -5,6 +5,7 @@ import { CanvasControls } from '../CanvasControls';
 import { EditorUiContext, type EditorUi } from '../EditorContext';
 import { FlowEdge, type FlowEdgeType } from '../FlowEdge';
 import { flowEdges, flowNodes, type Display, type Focus } from '../flowElements';
+import { autoLayout } from '../layout';
 import { motionDuration } from '../motion';
 import { StepNode, type StepFlowNode } from '../StepNode';
 
@@ -30,11 +31,25 @@ export function ReviewDiagram(props: Props) {
   );
 }
 
-function Diagram({ display, focus, onSelectElement, revealIds, label }: Props) {
+function Diagram({ display: shown, focus, onSelectElement, revealIds, label }: Props) {
   const rf = useReactFlow<StepFlowNode, FlowEdgeType>();
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
+  // The review always shows a tidy, auto-arranged diagram (view only: the saved layout is untouched).
+  const display = useMemo(() => ({ ...shown, graph: autoLayout(shown.graph) }), [shown]);
   const nodes = useMemo(() => flowNodes(display, { dims, focus }), [display, dims, focus]);
   const edges = useMemo(() => flowEdges(display, { dims, focus }), [display, dims, focus]);
+
+  // Whenever the arrangement changes (e.g. a recommendation is rejected), show the whole workflow again.
+  const layoutKey = display.graph.nodes.map((n) => `${n.id}:${n.position.x},${n.position.y}`).join('|');
+  const [shownLayout, setShownLayout] = useState(layoutKey);
+  useEffect(() => {
+    if (layoutKey === shownLayout) return;
+    const frame = requestAnimationFrame(() => {
+      setShownLayout(layoutKey);
+      void rf.fitView({ padding: 0.08, maxZoom: 1, duration: motionDuration(200) });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [layoutKey, shownLayout, rf]);
   const ui: EditorUi = {
     graph: display.graph as WorkflowGraph,
     editingId: null,
@@ -93,10 +108,12 @@ function Diagram({ display, focus, onSelectElement, revealIds, label }: Props) {
         elementsSelectable={false}
         deleteKeyCode={null}
         zoomOnDoubleClick={false}
-        minZoom={0.25}
+        // Low enough that long workflows still fit whole when the review opens.
+        minZoom={0.1}
         maxZoom={1.5}
         fitView
-        fitViewOptions={{ padding: 0.08, maxZoom: 1, minZoom: 0.55 }}
+        // Opens showing the whole workflow (owner choice); zoom, fit or Full screen to read long ones.
+        fitViewOptions={{ padding: 0.08, maxZoom: 1 }}
         proOptions={{ hideAttribution: true }}
         aria-label={label}
       >

@@ -393,3 +393,23 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI outp
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the compact step card and decision type changes | Pass | Product owner approved on 2026-11-01 |
+
+## Step card and analysis diagram fixes — 2026-11-01 (branch `step-card-fixes`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Analysis output comes from the labelled test fixture.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **268 / 268 pass** |
+| Browser E2E (all milestones) | `npm run test:e2e` | **63 / 63 pass** (2 new) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| A long name wraps in the card header; every line visible; Enter finishes without a line break; saved | Pass | E2E "a long step name wraps…"; `docs/evidence/step-card/06-long-name-wraps-1536.png` |
+| More details starts closed, also for a step with details, with its summary | Pass | E2E "header shows type…" (updated); other card tests open it explicitly |
+| Analysis diagram: a long, untidy workflow opens auto-arranged (unchanged path steps on one row, in order) with every step inside the diagram; the saved layout is unchanged | Pass (fixture) | E2E "the review diagram opens auto-arranged…"; `07-analysis-auto-arranged-1536-test-fixture.png` |
+| Earlier analysis behaviour (selection pans, conflicts, preview, apply, full screen) | Pass | all analysis and owner-feedback E2E tests |
+| Edge browser | Not tested | Only Chromium is available here |
+
+- Found while testing: a 12-step workflow needs about 21% zoom to fit, below the old 25% limit, so both ends were cut off. The review diagram's minimum zoom is now 10%.

@@ -96,7 +96,7 @@ npm 10 has a known resolver crash (`reading 'edgesOut'`) when *re-resolving* thi
 - **Loop:** an explicit `loop` connection back to an earlier step (only steps that lead to the current one are offered), with an optional condition label (default "Repeat"). Validation warns only if nothing in the repeated section has a way out.
 - **Parallel:** connections typed `parallel` sharing a group id. The join step stores that group id.
 - **Exception:** an `exception` step on a dashed `exception` connection labelled "Exception", with an optional response step.
-- **Type changes** in step details are limited to Action, Approval, Wait and Finish (Finish only for steps that end a path). Decisions and exceptions are created through their guided flows.
+- **Type changes** in step details are limited to Action, Approval, Wait and Finish (Finish only for steps that end a path). Decisions and exceptions are created through their guided flows. *(Updated by owner request 2026-11-01: a decision can now become Action, Approval or Wait, or Finish when nothing follows it; see "Changing a decision's type" below.)*
 - New steps get type-based default names ("New action", "New approval", "New wait", "Finish"). The name is selected for typing immediately; naming merges into the same undo step, so one Undo removes the step entirely.
 - **Finish** is never created automatically. When exactly one path end remains and there are at least two steps, a dismissible suggestion offers to add it (dismissal remembered for the browser session).
 - **Server-side storage check** (in addition to M1): Yes/No only from decisions, at most one of each per decision, and no step connected to itself.
@@ -264,3 +264,20 @@ The owner asked for these editor changes on their own, without the rest of the M
 
 ### Fix found while testing
 - The editor and the analysis diagrams are both mounted at once and used the same arrowhead marker ids, so after switching tabs the editor's arrows could lose their heads. Each diagram now has its own id.
+
+## Compact step card — option A (owner choice, 2026-11-01)
+
+The owner found the card too tall, plain and form-like, showing too many fields and with scattered actions. Three directions were mocked up; the owner chose **A: compact + More details**.
+
+- **Header**: tinted with the step type's own fill and stroke tokens (the same colours as the block), a type icon tile, the step name as an editable title, and "<Type> · <save status>" beneath. The save status (Saving… / Saved / Could not save — Retry with the explanation) lives here now. The card is dragged by this header.
+- **Always shown**: Type and Owner / team, labels in normal sentence case beside the fields (no small uppercase labels).
+- **More details** (duration, tools, notes) and **Connections** are folding sections with a one-line summary when closed ("Duration, tools, notes", or e.g. "2 days · ERP · Notes"; "→ Pack order"). More details opens by itself when the step already has any of them; Connections opens by itself when a Yes/No path is not set yet. Otherwise both start closed.
+- **Tools as tags**: Enter or a comma adds a tool (pasting "A, B" adds both), × removes one, Backspace in the empty box removes the last. A tool typed but not confirmed is saved with the rest, so nothing is lost on Done or close. At most 20 tools.
+- **Footer**: Ask Flico, Delete (bin icon, labelled "Delete step"), then Done on the right.
+- Width 340 px (was 320). The card re-positions whenever its height changes (opening a section), so it always stays fully inside the window; a dragged card keeps its place and moves up only as far as needed.
+- Behaviour from the previous change is unchanged: double-click / Edit details / Enter to open, saving rules, Done, one Undo per opening, edits never land on the wrong block, the "Confirm step" banner for AI-inferred steps.
+
+### Changing a decision's type (owner request, 2026-11-01)
+- The owner asked why a decision's type couldn't be changed. The Milestone 2 rule kept decisions fixed because a decision owns a question and Yes/No paths. Owner choice: allow **Decision → Action / Approval / Wait** (and **Finish** when nothing follows it). Ordinary steps still can't become decisions in the card (that needs the guided Decision form), and Start and Exception steps keep their type.
+- An ordinary step has one way on. If the decision has **both** paths set, the card asks **which path to keep** (Yes is preselected), names where each leads, and says what happens: the other connection is removed, the steps after it stay on the canvas (validation flags them as not connected) and Undo brings everything back. Cancel changes nothing. With one path or none, no question is needed.
+- The kept path becomes a plain connection (no Yes/No label). Loop and exception connections from the decision are kept. The change is part of the card's single Undo step.

@@ -276,9 +276,47 @@ suite('updateStep and type changes (E09)', () => {
     expect(findNode(cleared, 'a')).toEqual({ id: 'a', type: 'action', label: 'Receive order', position: { x: 0, y: 0 } });
   });
 
-  it('only allows Finish for steps that end a path, and never changes decisions this way', () => {
+  it('only allows Finish for steps that end a path, and never turns a step into a decision this way', () => {
     expect(allowedTypeChanges(sequential(), 'a')).toEqual(['action', 'approval', 'wait']);
     expect(allowedTypeChanges(startOnly(), 's')).toEqual(['start']);
     expect(() => updateStep(sequential(), 'a', { type: 'finish' })).toThrow();
+    expect(() => updateStep(sequential(), 'a', { type: 'decision' })).toThrow();
+  });
+
+  const decided = () =>
+    graph({
+      nodes: [['s', 'start', 'Start'], ['d', 'decision', 'In stock?'], ['r', 'action', 'Reserve'], ['o', 'action', 'Reorder'], ['f', 'finish', 'Finish']],
+      edges: [['s', 'd'], ['d', 'r', 'yes', 'Yes'], ['d', 'o', 'no', 'No'], ['r', 'f'], ['o', 'f']],
+    });
+
+  it('turns a decision into an ordinary step, keeping the chosen path as a plain connection', () => {
+    expect(allowedTypeChanges(decided(), 'd')).toEqual(['decision', 'action', 'approval', 'wait']);
+    expect(() => updateStep(decided(), 'd', { type: 'action' })).toThrow(/which path/);
+    const { graph: g } = updateStep(decided(), 'd', { type: 'action', keepBranch: 'no' });
+    expect(findNode(g, 'd')).toEqual({ id: 'd', type: 'action', label: 'In stock?', position: expect.anything() });
+    expect(g.edges.filter((e) => e.sourceId === 'd')).toEqual([{ id: 'e3', sourceId: 'd', targetId: 'o', type: 'normal' }]);
+    expect(describe(g)).toContain('In stock? → Reorder');
+    expect(noIssues(g)).toEqual([]);
+    // The steps on the dropped path stay; validation points out that they're no longer reached.
+    expect(findNode(g, 'r')).toBeDefined();
+    expect(validateWorkflow(g).some((i) => i.code === 'unreachable' && i.nodeId === 'r')).toBe(true);
+  });
+
+  it('needs no choice when a decision has one path or none, and can become Finish when nothing follows', () => {
+    const onePath = graph({ nodes: [['s', 'start', 'Start'], ['d', 'decision', 'Valid?'], ['a', 'action', 'Process']], edges: [['s', 'd'], ['d', 'a', 'yes', 'Yes']] });
+    const g = updateStep(onePath, 'd', { type: 'wait' }).graph;
+    expect(g.edges.find((e) => e.sourceId === 'd')).toEqual({ id: 'e2', sourceId: 'd', targetId: 'a', type: 'normal' });
+    const noPath = graph({ nodes: [['s', 'start', 'Start'], ['d', 'decision', 'Valid?']], edges: [['s', 'd']] });
+    expect(allowedTypeChanges(noPath, 'd')).toContain('finish');
+    expect(findNode(updateStep(noPath, 'd', { type: 'finish' }).graph, 'd')!.type).toBe('finish');
+  });
+
+  it('keeps a decision\'s loop and exception connections when it becomes an ordinary step', () => {
+    const g0 = graph({
+      nodes: [['s', 'start', 'Start'], ['a', 'action', 'Pick'], ['d', 'decision', 'Complete?'], ['f', 'finish', 'Finish'], ['x', 'exception', 'Lost']],
+      edges: [['s', 'a'], ['a', 'd'], ['d', 'f', 'yes', 'Yes'], ['d', 'a', 'loop'], ['d', 'x', 'exception']],
+    });
+    const g = updateStep(g0, 'd', { type: 'action', keepBranch: 'yes' }).graph;
+    expect(g.edges.filter((e) => e.sourceId === 'd').map((e) => e.type).sort()).toEqual(['exception', 'loop', 'normal']);
   });
 });

@@ -89,11 +89,11 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - The card moves to stay fully on screen when a section opens or closes.
 - A **decision can now change type** to Action, Approval or Wait (or Finish when nothing follows it). If both its Yes and No paths are set, the card asks which one to keep; the other connection is removed and Undo restores it.
 
-## Step card and analysis diagram fixes (owner feedback; awaiting owner review, branch `step-card-fixes`)
+## Step card and analysis diagram fixes (owner feedback; approved by owner 2026-11-01; merged to `main`)
 
 - Long step names wrap onto more lines in the card's header, so the whole name is always visible.
 - "More details" always starts closed; its summary line shows what's inside.
-- The diagram in the Analysis tab and the final preview opens **auto-arranged** and zoomed out to show the **whole workflow**. This only affects the view: your own layout in the editor is not changed. Long workflows open small; zoom or Full screen to read them.
+- The diagram in the Analysis tab and the final preview opens **auto-arranged** and zoomed out to show the **whole workflow**, and refits when the tab is shown, the window is resized or full screen is toggled. This only affects the view: your own layout in the editor is not changed. Long workflows open small; zoom or Full screen to read them.
 
 ## Known issues / limitations
 

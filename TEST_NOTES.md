@@ -416,3 +416,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Analysis o
 
 - Cause of the owner-reported bug: the Analysis tab stays loaded while hidden, so the diagram fitted itself into an area with no size and fell to the minimum zoom (the earlier 55% floor had masked this). The diagram now refits whenever its area changes size: when the tab is shown, the window is resized or full screen is toggled.
 - Found while testing: a 12-step workflow needs about 21% zoom to fit, below the old 25% limit, so both ends were cut off. The review diagram's minimum zoom is now 10%.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the step card and analysis diagram fixes | Pass | Product owner approved on 2026-11-01 |

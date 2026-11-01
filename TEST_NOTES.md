@@ -388,3 +388,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI outp
 ### Bugs found and fixed
 - At 1280×720, opening both sections made the card run past the bottom of the window (it was only placed when opened). It now re-places itself whenever its height changes.
 - The focus ring on the name box overlapped the "Action · Saved" line beneath it; it now sits tight to the box.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the compact step card and decision type changes | Pass | Product owner approved on 2026-11-01 |

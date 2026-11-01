@@ -264,3 +264,15 @@ The owner asked for these editor changes on their own, without the rest of the M
 
 ### Fix found while testing
 - The editor and the analysis diagrams are both mounted at once and used the same arrowhead marker ids, so after switching tabs the editor's arrows could lose their heads. Each diagram now has its own id.
+
+## Compact step card — option A (owner choice, 2026-11-01)
+
+The owner found the card too tall, plain and form-like, showing too many fields and with scattered actions. Three directions were mocked up; the owner chose **A: compact + More details**.
+
+- **Header**: tinted with the step type's own fill and stroke tokens (the same colours as the block), a type icon tile, the step name as an editable title, and "<Type> · <save status>" beneath. The save status (Saving… / Saved / Could not save — Retry with the explanation) lives here now. The card is dragged by this header.
+- **Always shown**: Type and Owner / team, labels in normal sentence case beside the fields (no small uppercase labels).
+- **More details** (duration, tools, notes) and **Connections** are folding sections with a one-line summary when closed ("Duration, tools, notes", or e.g. "2 days · ERP · Notes"; "→ Pack order"). More details opens by itself when the step already has any of them; Connections opens by itself when a Yes/No path is not set yet. Otherwise both start closed.
+- **Tools as tags**: Enter or a comma adds a tool (pasting "A, B" adds both), × removes one, Backspace in the empty box removes the last. A tool typed but not confirmed is saved with the rest, so nothing is lost on Done or close. At most 20 tools.
+- **Footer**: Ask Flico, Delete (bin icon, labelled "Delete step"), then Done on the right.
+- Width 340 px (was 320). The card re-positions whenever its height changes (opening a section), so it always stays fully inside the window; a dragged card keeps its place and moves up only as far as needed.
+- Behaviour from the previous change is unchanged: double-click / Edit details / Enter to open, saving rules, Done, one Undo per opening, edits never land on the wrong block, the "Confirm step" banner for AI-inferred steps.

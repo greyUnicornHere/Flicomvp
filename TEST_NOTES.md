@@ -363,3 +363,27 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI outp
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the block details card changes | Pass | Product owner approved on 2026-11-01 |
+
+## Compact step card, option A — 2026-11-01 (branch `step-card-compact`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). No AI output is involved.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **265 / 265 pass** |
+| Browser E2E (all milestones) | `npm run test:e2e` | **60 / 60 pass** (3 new card-layout tests; existing tests open More details / Connections where they need those fields) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Header shows type, name and save status; Type and Owner always shown; More details and Connections closed with summaries for a step without details | Pass | E2E "header shows type, name and save state…"; `docs/evidence/step-card/01-compact-card-1536.png` |
+| Changing Type updates the header at once | Pass | same test |
+| A step with details opens More details; closing shows "2 days · ERP · Notes"; a decision with an unset path opens Connections | Pass | same test; `02-more-details-open-1536.png` |
+| Tools as tags: Enter and comma add, × and Backspace remove, an unconfirmed tool is saved on Done | Pass | E2E "tools are tags…" (stored tools checked after each step); `03-tools-as-tags-1536.png` |
+| 1280×720 with everything open: card fully on screen, Done reachable, no horizontal scroll | Pass | E2E "1280px…"; `04-everything-open-1280.png` |
+| All earlier card behaviour (open/close, drag, saving, failure and Retry, switching blocks, one Undo) | Pass | the 5 earlier tests in `tests/e2e/details-card.spec.ts`; E2E E09 (all fields persist) |
+| Edge browser | Not tested | Only Chromium is available here |
+
+### Bugs found and fixed
+- At 1280×720, opening both sections made the card run past the bottom of the window (it was only placed when opened). It now re-places itself whenever its height changes.
+- The focus ring on the name box overlapped the "Action · Saved" line beneath it; it now sits tight to the box.

@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '@xyflow/react';
-import { Check, CircleAlert, GripHorizontal, Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, GripVertical, Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
 import type { StepType, WorkflowGraph, WorkflowNode } from '../../../shared/graph';
 import { placePanel } from '../lib/placement';
 import { allowedTypeChanges, BRANCH_LABEL, connectTargets, findNode, openBranches, outgoing, type StepPatch } from './ops';
@@ -30,15 +30,21 @@ type Props = {
 
 const HEADER = 76;
 const MARGIN = 8;
+/** The card's fixed width. */
+const WIDTH = 340;
+const MAX_TOOLS = 20;
 
-/** Contextual step details next to the selected step (never a permanent inspector). */
+/**
+ * Contextual step details next to the selected step (never a permanent inspector). Compact: the
+ * header carries the step's type, name and save state; Type and Owner are always shown; duration,
+ * tools, notes and connections fold away.
+ */
 export function StepPopover(props: Props) {
   const { graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection, onAsk } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [autoPosition, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [finishing, setFinishing] = useState(false);
   const transform = useStore((s) => s.transform);
-  const titleId = useId();
 
   const [fields, setFields] = useState(() => toFields(node));
   const latest = useRef(fields);
@@ -65,6 +71,23 @@ export function StepPopover(props: Props) {
   }, [fields, pending]);
   useEffect(() => () => commitRef.current(), []);
 
+  const types = allowedTypeChanges(graph, node.id);
+  const outs = outgoing(graph, node.id);
+  const open = openBranches(graph, node.id);
+  const canConnect = node.type !== 'finish' && connectTargets(graph, node.id).length > 0 && (node.type !== 'decision' || open.length > 0);
+  const label = (id: string) => findNode(graph, id)?.label || 'Untitled step';
+  const connectionText = (e: (typeof outs)[number]) =>
+    `${e.type === 'loop' ? 'Repeats ' : e.type === 'exception' ? 'Exception: ' : e.label ? `${e.label} → ` : '→ '}${label(e.targetId)}`;
+
+  // Duration, tools and notes fold away; they open by themselves when the step already has any.
+  const [moreOpen, setMoreOpen] = useState(() => Boolean(node.duration || node.tools?.length || node.notes));
+  // Connections fold away too, unless a Yes/No path still needs setting.
+  const [connectionsOpen, setConnectionsOpen] = useState(() => open.length > 0);
+  const moreId = useId();
+  const connectionsId = useId();
+
+  // The card's height changes as sections open and close; it is placed again so it stays on screen.
+  const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const place = () => {
       const el = ref.current;
@@ -76,7 +99,16 @@ export function StepPopover(props: Props) {
     };
     place();
     addEventListener('resize', place);
-    return () => removeEventListener('resize', place);
+    const el = ref.current;
+    const resized = typeof ResizeObserver === 'undefined' || !el ? null : new ResizeObserver(() => {
+      setHeight(el.offsetHeight);
+      place();
+    });
+    if (resized && el) resized.observe(el);
+    return () => {
+      removeEventListener('resize', place);
+      resized?.disconnect();
+    };
   }, [anchor, transform, graph]);
 
   useEffect(() => {
@@ -100,15 +132,21 @@ export function StepPopover(props: Props) {
 
   // The card can be dragged by its header; it always stays fully inside the window, below Flico's top bar.
   const clamp = (p: { left: number; top: number }) => {
-    const width = 320; // the card's fixed width
     const height = Math.min(ref.current?.offsetHeight ?? 400, innerHeight - HEADER - 2 * MARGIN);
     return {
-      left: Math.round(Math.min(Math.max(MARGIN, p.left), innerWidth - width - MARGIN)),
+      left: Math.round(Math.min(Math.max(MARGIN, p.left), innerWidth - WIDTH - MARGIN)),
       top: Math.round(Math.min(Math.max(HEADER + MARGIN, p.top), innerHeight - height - MARGIN)),
     };
   };
-  // Positions are clamped when dragged; on show, just keep the header on screen.
-  const position = props.position && autoPosition ? { left: Math.min(props.position.left, innerWidth - 328), top: Math.min(props.position.top, innerHeight - 120) } : autoPosition;
+  // A dragged position is kept, moved up only as far as needed for the whole card to stay on screen.
+  const visibleHeight = Math.min(height || 120, innerHeight - HEADER - 2 * MARGIN);
+  const position =
+    props.position && autoPosition
+      ? {
+          left: Math.min(props.position.left, innerWidth - WIDTH - MARGIN),
+          top: Math.max(HEADER + MARGIN, Math.min(props.position.top, innerHeight - visibleHeight - MARGIN)),
+        }
+      : autoPosition;
   const startDrag = (event: React.PointerEvent) => {
     if ((event.target as HTMLElement).closest('button, input, select, textarea') || !position) return;
     event.preventDefault();
@@ -143,25 +181,47 @@ export function StepPopover(props: Props) {
     return () => document.removeEventListener('pointerdown', onDown);
   });
 
-  const set = (key: keyof Fields) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+  const set = (key: 'label' | 'owner' | 'durationValue' | 'durationUnit' | 'notes') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setFields({ ...fields, [key]: e.target.value });
   const commitOnEnter = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) commit();
   };
 
-  const types = allowedTypeChanges(graph, node.id);
-  const outs = outgoing(graph, node.id);
-  const open = openBranches(graph, node.id);
-  const canConnect = node.type !== 'finish' && connectTargets(graph, node.id).length > 0 && (node.type !== 'decision' || open.length > 0);
-  const label = (id: string) => findNode(graph, id)?.label || 'Untitled step';
+  const addTool = (raw: string) => {
+    const tools = [...fields.tools];
+    for (const name of raw.split(',').map((t) => t.trim()).filter(Boolean)) if (!tools.includes(name) && tools.length < MAX_TOOLS) tools.push(name);
+    const next = { ...fields, tools, toolDraft: '' };
+    setFields(next);
+    commit(next);
+  };
+  const removeTool = (name: string) => {
+    const next = { ...fields, tools: fields.tools.filter((t) => t !== name) };
+    setFields(next);
+    commit(next);
+  };
+
+  const meta = STEP_META[fields.type];
+  const TypeIcon = meta.icon;
+  const tone = (part: 'fill' | 'stroke' | 'ink') => `var(--fl-${fields.type}-${part})`;
+  const moreSummary =
+    [fields.durationValue.trim() && `${fields.durationValue.trim()} ${fields.durationUnit}`, ...fields.tools, fields.toolDraft.trim(), fields.notes.trim() && 'Notes']
+      .filter(Boolean)
+      .join(' · ') || 'Duration, tools, notes';
+  const connectionsSummary =
+    outs.length > 0 ? outs.map(connectionText).join(', ') : open.length > 0 ? `${open.map((b) => BRANCH_LABEL[b]).join(' and ')} path not set` : "Doesn't continue yet";
+
+  const fieldLabel = 'text-[13px] font-medium leading-[18px] text-fl-text-secondary';
+  const row = 'grid grid-cols-[92px_minmax(0,1fr)] items-center gap-2.5';
+  const foldButton = 'flex min-h-10 w-full items-center gap-2 rounded-[9px] px-2 text-left text-[13px] font-semibold text-fl-text hover:bg-fl-surface-subtle';
+  const chevron = (isOpen: boolean) => `flex-none text-fl-text-secondary transition-transform motion-reduce:transition-none ${isOpen ? 'rotate-90' : ''}`;
 
   return createPortal(
     <div
       ref={ref}
       role="dialog"
-      aria-labelledby={titleId}
-      className="fl-popover fixed z-40 w-[320px] overflow-y-auto !p-0"
-      style={{ top: position?.top ?? 0, left: position?.left ?? 0, maxHeight: 'calc(100vh - 100px)', visibility: position ? 'visible' : 'hidden' }}
+      aria-label="Edit step"
+      className="fl-popover fixed z-40 overflow-y-auto !p-0"
+      style={{ width: WIDTH, top: position?.top ?? 0, left: position?.left ?? 0, maxHeight: 'calc(100vh - 100px)', visibility: position ? 'visible' : 'hidden' }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -171,46 +231,69 @@ export function StepPopover(props: Props) {
         e.stopPropagation(); // keep typing out of canvas shortcuts
       }}
     >
-      <div className="flex cursor-move select-none items-center gap-1 px-[10px] pb-1 pt-3" onPointerDown={startDrag} data-testid="details-header">
+      <div
+        className="flex cursor-move select-none items-start gap-2 border-b py-3 pl-2 pr-2.5"
+        style={{ background: tone('fill'), borderColor: tone('stroke') }}
+        onPointerDown={startDrag}
+        data-testid="details-header"
+      >
         <button
           type="button"
-          className="grid h-8 w-8 cursor-move place-items-center rounded-[8px] text-fl-text-muted hover:bg-fl-surface-subtle"
+          className="grid h-9 w-7 flex-none cursor-move place-items-center rounded-[8px] text-fl-text-secondary hover:bg-white/60"
           aria-label="Move step details (arrow keys)"
           onKeyDown={moveWithKeys}
         >
-          <GripHorizontal size={15} aria-hidden="true" />
+          <GripVertical size={15} aria-hidden="true" />
         </button>
-        <h2 id={titleId} className="flex-1 text-[15px] font-bold leading-[22px]">
-          Edit step
-        </h2>
-        <button type="button" className="grid h-9 w-9 place-items-center rounded-[8px] text-fl-text-secondary hover:bg-fl-surface-subtle" aria-label="Close step details" onClick={() => close(true)}>
+        <span className="grid h-9 w-9 flex-none place-items-center rounded-[10px] border bg-fl-surface" style={{ borderColor: tone('stroke'), color: tone('ink') }}>
+          <TypeIcon size={16} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1" onBlur={() => commit()} onKeyDown={commitOnEnter}>
+          <input
+            className="-ml-1.5 mb-1 w-[calc(100%+6px)] cursor-text select-text rounded-[8px] border border-transparent bg-transparent px-1.5 py-0.5 text-[16px] font-bold leading-6 text-fl-text hover:border-fl-border-strong focus:border-fl-border-strong focus:bg-fl-surface focus-visible:!outline-offset-0"
+            aria-label="Step name"
+            value={fields.label}
+            maxLength={200}
+            onChange={set('label')}
+          />
+          <div className="flex flex-wrap items-center gap-x-1.5 text-[12px] leading-[18px]" role="status" aria-live="polite" data-testid="details-save-status" data-state={status}>
+            <span className="font-semibold" style={{ color: tone('ink') }}>
+              {meta.name}
+            </span>
+            <span aria-hidden="true" className="text-fl-text-muted">
+              ·
+            </span>
+            {status === 'saving' && <span className="text-fl-text-secondary">Saving…</span>}
+            {status === 'saved' && (
+              <span className="inline-flex items-center gap-1 text-fl-text-secondary">
+                <Check size={12} aria-hidden="true" className="text-fl-success" /> Saved
+              </span>
+            )}
+            {status === 'error' && (
+              <>
+                <span className="inline-flex items-center gap-1 font-semibold text-fl-error">
+                  <CircleAlert size={12} aria-hidden="true" /> Could not save
+                </span>
+                <button type="button" className="fl-link text-[12px]" onClick={props.onRetry}>
+                  Retry
+                </button>
+                {props.saveError && <span className="basis-full text-fl-text-secondary">{props.saveError} Your changes are kept here.</span>}
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="grid h-9 w-9 flex-none place-items-center rounded-[9px] text-fl-text-secondary hover:bg-white/60"
+          aria-label="Close step details"
+          onClick={() => close(true)}
+        >
           <X size={16} aria-hidden="true" />
         </button>
       </div>
-      <div className="px-[18px] pb-2 text-[12px]" role="status" aria-live="polite" data-testid="details-save-status" data-state={status}>
-        {status === 'saving' && <span className="text-fl-text-muted">Saving…</span>}
-        {status === 'saved' && (
-          <span className="inline-flex items-center gap-1 text-fl-text-muted">
-            <Check size={13} aria-hidden="true" className="text-fl-success" /> Saved
-          </span>
-        )}
-        {status === 'error' && (
-          <span className="inline-flex flex-wrap items-center gap-x-2 text-fl-error">
-            <CircleAlert size={13} aria-hidden="true" /> Could not save
-            <button
-              type="button"
-              className="fl-link text-[12px]"
-              onClick={props.onRetry}
-            >
-              Retry
-            </button>
-            {props.saveError && <span className="basis-full text-fl-text-muted">{props.saveError} Your changes are kept here.</span>}
-          </span>
-        )}
-      </div>
 
       {node.origin === 'ai-inferred' && node.assumptionStatus === 'unconfirmed' && (
-        <div className="mx-[18px] mb-2 flex items-center gap-2 rounded-[10px] border border-dashed border-fl-brand bg-fl-brand-pale px-3 py-2 text-[12.5px] leading-[18px] text-fl-brand-active">
+        <div className="mx-4 mt-3 flex items-center gap-2 rounded-[10px] border border-dashed border-fl-brand bg-fl-brand-pale px-3 py-2 text-[12.5px] leading-[18px] text-fl-brand-active">
           <span className="flex-1">Flico inferred this step. Check it, then confirm.</span>
           <button type="button" className="fl-btn !min-h-8 !px-2.5 !text-[12px]" onClick={() => onChange({ assumptionStatus: 'confirmed' })}>
             Confirm step
@@ -218,112 +301,170 @@ export function StepPopover(props: Props) {
         </div>
       )}
 
-      <div className="space-y-3 px-[18px] pb-4" onBlur={() => commit()} onKeyDown={commitOnEnter}>
-        <Labeled label="Step name">
-          {(id) => <input id={id} className="fl-input !min-h-10" value={fields.label} maxLength={200} onChange={set('label')} />}
-        </Labeled>
-        <Labeled label="Type">
-          {(id) =>
-            types.length > 1 ? (
-              <select
-                id={id}
-                className="fl-input !min-h-10"
-                value={fields.type}
-                onChange={(e) => {
-                  const next = { ...fields, type: e.target.value as StepType };
-                  setFields(next);
-                  commit(next);
-                }}
-              >
-                {types.map((t) => (
-                  <option key={t} value={t}>
-                    {STEP_META[t].name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p id={id} className="text-[14px] text-fl-text">
-                {STEP_META[node.type].name}
-              </p>
-            )
-          }
-        </Labeled>
-        <Labeled label="Owner / team">
-          {(id) => <input id={id} className="fl-input !min-h-10" value={fields.owner} maxLength={200} onChange={set('owner')} />}
-        </Labeled>
-        <Labeled label="Duration">
-          {(id) => (
-            <div className="flex gap-2">
-              <input id={id} className="fl-input !min-h-10 w-[96px]" type="number" min={0} step="any" inputMode="decimal" value={fields.durationValue} onChange={set('durationValue')} />
-              <select className="fl-input !min-h-10 flex-1" aria-label="Duration unit" value={fields.durationUnit} onChange={set('durationUnit')}>
-                {DURATION_UNITS.map((u) => (
-                  <option key={u}>{u}</option>
-                ))}
-              </select>
+      <div onBlur={() => commit()} onKeyDown={commitOnEnter}>
+        <div className="space-y-3 px-4 pb-1.5 pt-3.5">
+          <Field label="Type" className={row} labelClass={fieldLabel}>
+            {(id) =>
+              types.length > 1 ? (
+                <select
+                  id={id}
+                  className="fl-input !min-h-[38px]"
+                  value={fields.type}
+                  onChange={(e) => {
+                    const next = { ...fields, type: e.target.value as StepType };
+                    setFields(next);
+                    commit(next);
+                  }}
+                >
+                  {types.map((t) => (
+                    <option key={t} value={t}>
+                      {STEP_META[t].name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p id={id} className="text-[14px] text-fl-text">
+                  {STEP_META[node.type].name}
+                </p>
+              )
+            }
+          </Field>
+          <Field label="Owner / team" className={row} labelClass={fieldLabel}>
+            {(id) => <input id={id} className="fl-input !min-h-[38px]" value={fields.owner} maxLength={200} placeholder="Who does this?" onChange={set('owner')} />}
+          </Field>
+        </div>
+
+        <div className="px-2 pb-2">
+          <button type="button" className={foldButton} aria-expanded={moreOpen} aria-controls={moreId} onClick={() => setMoreOpen(!moreOpen)}>
+            <ChevronRight size={14} aria-hidden="true" className={chevron(moreOpen)} />
+            <span className="flex-none">More details</span>
+            {!moreOpen && <span className="min-w-0 flex-1 truncate text-right font-normal text-fl-text-muted">{moreSummary}</span>}
+          </button>
+          {moreOpen && (
+            <div id={moreId} className="space-y-2.5 px-2 pb-2 pt-1">
+              <Field label="Duration" className={row} labelClass={fieldLabel}>
+                {(id) => (
+                  <div className="flex gap-2">
+                    <input id={id} className="fl-input !min-h-[38px] w-[84px]" type="number" min={0} step="any" inputMode="decimal" value={fields.durationValue} onChange={set('durationValue')} />
+                    <select className="fl-input !min-h-[38px] min-w-0 flex-1" aria-label="Duration unit" value={fields.durationUnit} onChange={set('durationUnit')}>
+                      {DURATION_UNITS.map((u) => (
+                        <option key={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </Field>
+              <Field label="Tools" className={row} labelClass={fieldLabel}>
+                {(id) => (
+                  <div className="fl-input flex !min-h-[38px] flex-wrap items-center gap-1.5 !py-1 !pl-1.5 focus-within:outline focus-within:outline-2 focus-within:outline-[var(--fl-focus)]">
+                    {fields.tools.map((t) => (
+                      <span key={t} className="inline-flex max-w-full items-center gap-0.5 rounded-[6px] bg-fl-brand-pale py-0.5 pl-2 pr-0.5 text-[12.5px] font-medium text-[var(--fl-action-ink)]">
+                        <span className="truncate">{t}</span>
+                        <button type="button" className="grid h-6 w-6 flex-none place-items-center rounded-[5px] hover:bg-white/70" aria-label={`Remove ${t}`} onClick={() => removeTool(t)}>
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      id={id}
+                      className="min-w-[60px] flex-1 border-0 bg-transparent py-1 text-[14px] outline-none"
+                      aria-label="Tools / software (Enter to add)"
+                      placeholder={fields.tools.length ? 'Add…' : 'e.g. ERP, Excel'}
+                      value={fields.toolDraft}
+                      maxLength={100}
+                      onChange={(e) => (e.target.value.includes(',') ? addTool(e.target.value) : setFields({ ...fields, toolDraft: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && fields.toolDraft.trim()) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          addTool(fields.toolDraft);
+                        } else if (e.key === 'Backspace' && !fields.toolDraft && fields.tools.length) {
+                          removeTool(fields.tools[fields.tools.length - 1]!);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+              </Field>
+              <Field label="Notes" className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-2.5" labelClass={`${fieldLabel} pt-[9px]`}>
+                {(id) => (
+                  <textarea
+                    id={id}
+                    className="fl-input min-h-[72px] resize-y"
+                    value={fields.notes}
+                    maxLength={2000}
+                    placeholder="Rules, exceptions, anything worth knowing"
+                    onChange={set('notes')}
+                  />
+                )}
+              </Field>
             </div>
           )}
-        </Labeled>
-        <Labeled label="Tools / software" hint="comma-separated">
-          {(id) => <input id={id} className="fl-input !min-h-10" value={fields.tools} maxLength={600} onChange={set('tools')} />}
-        </Labeled>
-        <Labeled label="Notes">
-          {(id) => <textarea id={id} className="fl-input min-h-[72px] resize-y" value={fields.notes} maxLength={2000} placeholder="Add details (optional)" onChange={set('notes')} />}
-        </Labeled>
-      </div>
 
-      <div className="border-t border-fl-border px-[18px] py-3">
-        <h3 className="text-[11px] font-bold uppercase leading-4 tracking-[0.04em] text-fl-text-secondary">Connections</h3>
-        <ul className="mt-1.5 space-y-1">
-          {outs.map((e) => (
-            <li key={e.id} className="flex items-center gap-2 text-[13px]">
-              {e.type === 'loop' && <Repeat size={13} aria-hidden="true" className="text-fl-text-secondary" />}
-              <span className="min-w-0 flex-1 truncate">
-                {e.type === 'loop' ? 'Repeats ' : e.type === 'exception' ? 'Exception: ' : e.label ? `${e.label} → ` : '→ '}
-                {label(e.targetId)}
-              </span>
-              <button
-                type="button"
-                className="grid h-8 w-8 flex-none place-items-center rounded-[8px] text-fl-text-secondary hover:bg-[var(--fl-exception-fill)] hover:text-fl-error"
-                aria-label={`Remove connection to “${label(e.targetId)}”`}
-                onClick={() => onRemoveConnection(e.id)}
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-          {open.map((b) => (
-            <li key={b} className="text-[13px] text-fl-text-muted">
-              {BRANCH_LABEL[b]} path: not set yet
-            </li>
-          ))}
-          {outs.length === 0 && open.length === 0 && <li className="text-[13px] text-fl-text-muted">This step doesn't continue yet.</li>}
-        </ul>
-        {canConnect && (
-          <button type="button" className="fl-link mt-2 inline-flex items-center gap-1.5 text-[13px] no-underline hover:underline" onClick={onConnect}>
-            <Link2 size={14} aria-hidden="true" /> Connect to a step…
+          <button type="button" className={foldButton} aria-expanded={connectionsOpen} aria-controls={connectionsId} onClick={() => setConnectionsOpen(!connectionsOpen)}>
+            <ChevronRight size={14} aria-hidden="true" className={chevron(connectionsOpen)} />
+            <span className="flex-none">Connections</span>
+            {!connectionsOpen && <span className="min-w-0 flex-1 truncate text-right font-normal text-fl-text-muted">{connectionsSummary}</span>}
           </button>
-        )}
+          {connectionsOpen && (
+            <div id={connectionsId} className="pb-1 pl-[30px] pr-2">
+              <ul className="space-y-0.5">
+                {outs.map((e) => (
+                  <li key={e.id} className="flex items-center gap-2 text-[13px]">
+                    {e.type === 'loop' && <Repeat size={13} aria-hidden="true" className="text-fl-text-secondary" />}
+                    <span className="min-w-0 flex-1 truncate">{connectionText(e)}</span>
+                    <button
+                      type="button"
+                      className="grid h-8 w-8 flex-none place-items-center rounded-[8px] text-fl-text-secondary hover:bg-[var(--fl-exception-fill)] hover:text-fl-error"
+                      aria-label={`Remove connection to “${label(e.targetId)}”`}
+                      onClick={() => onRemoveConnection(e.id)}
+                    >
+                      <X size={14} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+                {open.map((b) => (
+                  <li key={b} className="text-[13px] text-fl-text-muted">
+                    {BRANCH_LABEL[b]} path: not set yet
+                  </li>
+                ))}
+                {outs.length === 0 && open.length === 0 && <li className="text-[13px] text-fl-text-muted">This step doesn't continue yet.</li>}
+              </ul>
+              {canConnect && (
+                <button type="button" className="fl-link mb-1 mt-1.5 inline-flex items-center gap-1.5 text-[13px] no-underline hover:underline" onClick={onConnect}>
+                  <Link2 size={14} aria-hidden="true" /> Connect to a step…
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-fl-border px-[18px] py-3">
+      <div className="flex items-center gap-1 border-t border-fl-border bg-fl-surface-subtle px-3 py-2.5">
         <button
           type="button"
-          className="inline-flex h-9 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-semibold text-fl-brand hover:bg-fl-brand-pale"
+          className="inline-flex h-[38px] items-center gap-1.5 rounded-[9px] px-2 text-[13px] font-semibold text-fl-brand hover:bg-fl-brand-pale"
+          aria-label="Ask Flico about this step"
           onClick={() => {
             commit();
             onAsk();
           }}
         >
-          <Sparkles size={14} aria-hidden="true" /> Ask Flico about this step
+          <Sparkles size={15} aria-hidden="true" /> Ask Flico
         </button>
         {node.type !== 'start' && (
-          <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-semibold text-fl-error hover:bg-[var(--fl-exception-fill)]" onClick={onDelete}>
-            <Trash2 size={14} aria-hidden="true" /> Delete
+          <button
+            type="button"
+            className="grid h-[38px] w-[38px] place-items-center rounded-[9px] text-fl-error hover:bg-[var(--fl-exception-fill)]"
+            aria-label="Delete step"
+            title="Delete step"
+            onClick={onDelete}
+          >
+            <Trash2 size={16} aria-hidden="true" />
           </button>
         )}
-      </div>
-      <div className="flex justify-end border-t border-fl-border px-[18px] py-3">
-        <button type="button" className="fl-btn fl-btn-primary !min-h-10 !px-5" onClick={() => void done()} disabled={finishing}>
+        <span className="flex-1" />
+        <button type="button" className="fl-btn fl-btn-primary !min-h-[38px] !px-5" onClick={() => void done()} disabled={finishing}>
           {finishing ? 'Saving…' : 'Done'}
         </button>
       </div>
@@ -332,7 +473,7 @@ export function StepPopover(props: Props) {
   );
 }
 
-type Fields = { label: string; type: StepType; owner: string; durationValue: string; durationUnit: string; tools: string; notes: string };
+type Fields = { label: string; type: StepType; owner: string; durationValue: string; durationUnit: string; tools: string[]; toolDraft: string; notes: string };
 
 function toFields(n: WorkflowNode): Fields {
   return {
@@ -341,7 +482,8 @@ function toFields(n: WorkflowNode): Fields {
     owner: n.owner ?? '',
     durationValue: n.duration ? String(n.duration.value) : '',
     durationUnit: n.duration?.unit ?? 'minutes',
-    tools: (n.tools ?? []).join(', '),
+    tools: [...(n.tools ?? [])],
+    toolDraft: '',
     notes: n.notes ?? '',
   };
 }
@@ -353,7 +495,9 @@ function diff(n: WorkflowNode, f: Fields): StepPatch | null {
   if (f.type !== n.type) patch.type = f.type;
   if (f.owner.trim() !== (n.owner ?? '')) patch.owner = f.owner.trim();
   if (f.notes.trim() !== (n.notes ?? '')) patch.notes = f.notes.trim();
-  const tools = f.tools.split(',').map((t) => t.trim()).filter(Boolean);
+  // A tool still being typed counts too, so nothing is lost if the card closes before Enter.
+  const draft = f.toolDraft.trim();
+  const tools = draft && !f.tools.includes(draft) ? [...f.tools, draft] : f.tools;
   if (tools.join('\n') !== (n.tools ?? []).join('\n')) patch.tools = tools;
   const value = f.durationValue.trim() === '' ? null : Number(f.durationValue);
   const current = n.duration;
@@ -365,15 +509,14 @@ function diff(n: WorkflowNode, f: Fields): StepPatch | null {
   return Object.keys(patch).length ? patch : null;
 }
 
-function Labeled({ label, hint, children }: { label: string; hint?: string; children: (id: string) => React.ReactNode }) {
+function Field({ label, className, labelClass, children }: { label: string; className: string; labelClass: string; children: (id: string) => React.ReactNode }) {
   const id = useId();
   return (
-    <div>
-      <label htmlFor={id} className="block text-[11px] font-bold uppercase leading-4 tracking-[0.04em] text-fl-text-secondary">
+    <div className={className}>
+      <label htmlFor={id} className={labelClass}>
         {label}
-        {hint && <span className="ml-1 font-normal normal-case tracking-normal text-fl-text-muted">({hint})</span>}
       </label>
-      <div className="mt-1">{children(id)}</div>
+      {children(id)}
     </div>
   );
 }

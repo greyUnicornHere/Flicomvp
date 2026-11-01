@@ -138,6 +138,7 @@ test('E03/E04: decision with two independent outcomes, then the paths merge at F
 
   await addAfter(page, 'Confirm order', 'Finish');
   await step(page, 'Request restock').dblclick();
+  await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: /^Connections/ }).click();
   await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: 'Connect to a step…' }).click();
   const connect = page.getByRole('dialog', { name: 'Connect to a step' });
   await expect(connect.getByRole('combobox').locator('option:checked')).toHaveText('Finish'); // suggested join
@@ -247,6 +248,7 @@ test('E09: step details popover — all fields, persists, Escape returns focus',
   await expect(pop.getByLabel('Step name')).toBeFocused();
   await pop.getByLabel('Type').selectOption('Approval');
   await pop.getByLabel('Owner / team').fill('Sales team');
+  await pop.getByRole('button', { name: /^More details/ }).click();
   await pop.getByLabel('Duration', { exact: true }).fill('5');
   await pop.getByLabel('Duration unit').selectOption('hours');
   await pop.getByLabel(/Tools \/ software/).fill('Order system, Email');

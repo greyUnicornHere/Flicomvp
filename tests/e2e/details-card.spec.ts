@@ -35,6 +35,8 @@ async function open(page: Page, graph: WorkflowGraph, viewport = { width: 1536, 
 
 const stored = async (page: Page, id: string): Promise<WorkflowDetail> => (await (await page.request.get(`/api/workflows/${id}`)).json()).workflow;
 const details = (page: Page) => page.getByRole('dialog', { name: 'Edit step' });
+/** Duration, tools and notes are folded away under More details until the step has any. */
+const openMore = (page: Page) => details(page).getByRole('button', { name: /^More details/ }).click();
 
 test.describe('block interactions', () => {
   test('single click selects, double-click / Edit details / Enter open the card', async ({ page }) => {
@@ -103,6 +105,7 @@ test.describe('saving block details', () => {
     await expect(status).toHaveAttribute('data-state', 'saved', { timeout: 8000 });
     expect((await stored(page, id)).graph.nodes.find((n) => n.id === 'a')!.owner).toBe('Sales desk');
 
+    await openMore(page);
     await card.getByLabel('Notes').fill('Check the PO number first');
     await card.getByRole('button', { name: 'Done', exact: true }).click(); // saves the pending edit, then closes
     await expect(card).toHaveCount(0);
@@ -131,6 +134,7 @@ test.describe('saving block details', () => {
     );
     await step(page, 'Pack order').dblclick();
     const card = details(page);
+    await openMore(page);
     await card.getByLabel('Tools / software').fill('Shipping portal');
     await card.getByRole('button', { name: 'Done', exact: true }).click();
     const status = page.getByTestId('details-save-status');
@@ -156,9 +160,11 @@ test.describe('saving block details', () => {
     });
     // (The card opens to the right of its step, so switch to the step on the left.)
     await step(page, 'Pack order').dblclick();
+    await openMore(page);
     await details(page).getByLabel('Notes').fill('Note for packing');
     await step(page, 'Receive order').dblclick(); // switch straight away
     await expect(details(page).getByLabel('Step name')).toHaveValue('Receive order');
+    await openMore(page);
     await details(page).getByLabel('Notes').fill('Note for receiving');
     await details(page).getByRole('button', { name: 'Done', exact: true }).click();
     await expect(details(page)).toHaveCount(0, { timeout: 10000 });
@@ -171,3 +177,97 @@ test.describe('saving block details', () => {
   });
 });
 
+
+test.describe('compact card layout', () => {
+  const CARD_SHOTS = 'docs/evidence/step-card';
+  const detailed: WorkflowGraph = {
+    nodes: [
+      { id: 's', type: 'start', label: 'Start', position: { x: 0, y: 0 } },
+      { id: 'a', type: 'action', label: 'Receive order', position: { x: 288, y: 0 } },
+      { id: 'b', type: 'approval', label: 'Manager approves', owner: 'Finance', duration: { value: 2, unit: 'days' }, tools: ['ERP'], notes: 'Over 5000 only', position: { x: 576, y: 0 } },
+      { id: 'd', type: 'decision', label: 'Check stock', position: { x: 864, y: 0 } },
+      { id: 'f', type: 'finish', label: 'Shipped', position: { x: 1152, y: 0 } },
+    ],
+    edges: [
+      { id: 'e1', sourceId: 's', targetId: 'a', type: 'normal' },
+      { id: 'e2', sourceId: 'a', targetId: 'b', type: 'normal' },
+      { id: 'e3', sourceId: 'b', targetId: 'd', type: 'normal' },
+      { id: 'e4', sourceId: 'd', targetId: 'f', type: 'normal', label: 'Yes', branchGroupId: 'd' },
+    ],
+  };
+
+  test('header shows type, name and save state; Type and Owner shown; the rest folds with a summary', async ({ page }) => {
+    await open(page, detailed);
+    await step(page, 'Receive order').dblclick();
+    const card = details(page);
+    const header = page.getByTestId('details-header');
+    await expect(header.getByLabel('Step name')).toHaveValue('Receive order');
+    await expect(page.getByTestId('details-save-status')).toContainText('Action');
+    await expect(card.getByLabel('Type')).toBeVisible();
+    await expect(card.getByLabel('Owner / team')).toBeVisible();
+    // A step without duration, tools or notes keeps them folded; connections are folded with a summary.
+    const more = card.getByRole('button', { name: /^More details/ });
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await expect(more).toContainText('Duration, tools, notes');
+    await expect(card.getByLabel('Notes')).toHaveCount(0);
+    const connections = card.getByRole('button', { name: /^Connections/ });
+    await expect(connections).toHaveAttribute('aria-expanded', 'false');
+    await expect(connections).toContainText('→ Manager approves');
+    await page.screenshot({ path: `${CARD_SHOTS}/01-compact-card-1536.png` });
+
+    // Changing the type updates the header straight away.
+    await card.getByLabel('Type').selectOption('Wait');
+    await expect(page.getByTestId('details-save-status')).toContainText('Wait');
+    await card.getByRole('button', { name: 'Done', exact: true }).click();
+
+    // A step that has details opens them; folding shows what's inside.
+    await step(page, 'Manager approves').dblclick();
+    await expect(card.getByRole('button', { name: /^More details/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.getByLabel('Notes')).toHaveValue('Over 5000 only');
+    await page.screenshot({ path: `${CARD_SHOTS}/02-more-details-open-1536.png` });
+    await card.getByRole('button', { name: /^More details/ }).click();
+    await expect(card.getByRole('button', { name: /^More details/ })).toContainText('2 days · ERP · Notes');
+    await card.getByRole('button', { name: 'Close step details' }).click();
+
+    // A decision with a path still to set opens Connections by itself.
+    await step(page, 'Check stock').dblclick();
+    await expect(card.getByRole('button', { name: /^Connections/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(card).toContainText('No path: not set yet');
+  });
+
+  test('tools are tags: Enter or a comma adds, × and Backspace remove, a half-typed tool is still saved', async ({ page }) => {
+    const id = await open(page, detailed);
+    await step(page, 'Receive order').dblclick();
+    const card = details(page);
+    await openMore(page);
+    const tools = card.getByLabel('Tools / software');
+    await tools.fill('ERP');
+    await tools.press('Enter');
+    await tools.fill('Excel, Email');
+    await expect(card.getByRole('button', { name: 'Remove ERP' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Remove Email' })).toBeVisible();
+    await expect.poll(async () => (await stored(page, id)).graph.nodes.find((n) => n.id === 'a')!.tools, { timeout: 8000 }).toEqual(['ERP', 'Excel', 'Email']);
+    await card.getByRole('button', { name: 'Remove Excel' }).click();
+    await tools.press('Backspace'); // empty input: removes the last tag
+    await expect.poll(async () => (await stored(page, id)).graph.nodes.find((n) => n.id === 'a')!.tools, { timeout: 8000 }).toEqual(['ERP']);
+    await tools.fill('Shipping portal'); // not confirmed with Enter
+    await page.screenshot({ path: `${CARD_SHOTS}/03-tools-as-tags-1536.png` });
+    await card.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(card).toHaveCount(0);
+    expect((await stored(page, id)).graph.nodes.find((n) => n.id === 'a')!.tools).toEqual(['ERP', 'Shipping portal']);
+  });
+
+  test('1280px: the card fits and Done stays reachable with everything open', async ({ page }) => {
+    await open(page, detailed, { width: 1280, height: 720 });
+    await step(page, 'Manager approves').dblclick();
+    const card = details(page);
+    await card.getByRole('button', { name: /^Connections/ }).click();
+    const box = (await card.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(1280);
+    expect(box.y + box.height).toBeLessThanOrEqual(720);
+    await card.getByRole('button', { name: 'Done', exact: true }).scrollIntoViewIfNeeded();
+    await expect(card.getByRole('button', { name: 'Done', exact: true })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `${CARD_SHOTS}/04-everything-open-1280.png` });
+  });
+});

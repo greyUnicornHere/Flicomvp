@@ -80,6 +80,14 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Done** saves and closes; if saving fails the card stays open with your typing.
 - Quick edits, switching blocks during a slow save, or closing the card never put an edit on the wrong block. Everything changed in one opening of the card is one Undo.
 
+## Compact step card, option A (owner request; awaiting owner review, branch `step-card-compact`)
+
+- The card's header shows the step's type icon and colour, its name (type straight into it) and "Action · Saved". Saving, Saved and Could not save — Retry appear there.
+- **Type** and **Owner / team** are always shown. **More details** (duration, tools, notes) and **Connections** fold away, each showing a one-line summary. They open by themselves when the step already has details, or when a Yes/No path still needs setting.
+- **Tools** are tags: type a name and press Enter (or a comma) to add; × or Backspace removes. A name typed but not yet confirmed is still saved.
+- One footer row: **Ask Flico**, **Delete** (bin icon) and **Done**.
+- The card moves to stay fully on screen when a section opens or closes.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -105,4 +113,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/` and `docs/evidence/step-card/`.

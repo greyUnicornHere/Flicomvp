@@ -56,11 +56,14 @@ test('Automation tab: counts, steps grouped by class, explanation in place, link
   await expect(page.getByRole('tab', { name: /Recommendations/, selected: true })).toBeVisible();
   await page.getByRole('tab', { name: /Automation \(4\)/ }).click();
 
-  const summary = panel(page).getByRole('list', { name: 'Automation summary' });
-  await expect(summary).toContainText('1Full automation candidate');
-  await expect(summary).toContainText('1Human-assisted automation');
-  await expect(summary).toContainText('1Keep human-led');
-  await expect(summary).toContainText('1More information needed');
+  // Top opportunities first: the candidate, then the human-assisted step, each with what to automate and the next step.
+  const top = panel(page).getByTestId('top-opportunities').getByRole('listitem');
+  await expect(top).toHaveCount(2);
+  await expect(top.nth(0)).toContainText('Match invoice to order');
+  await expect(top.nth(0)).toContainText('Next:');
+  await expect(top.nth(1)).toContainText('Compare supplier quotations');
+  await expect(top.nth(1)).toContainText('Extract prices');
+  await expect(panel(page).getByLabel('Automation summary')).toHaveText('1 automation candidate · 1 human-assisted · 1 keep human-led · 1 needs more information');
   await expect(panel(page).getByRole('region', { name: 'Human-assisted automation' })).toContainText('Compare supplier quotations');
   await expect(panel(page).getByRole('region', { name: 'Keep human-led' })).toContainText('Check delivery');
   await expect(panel(page).getByRole('region', { name: 'More information needed' })).toContainText('Send quotation');
@@ -68,31 +71,34 @@ test('Automation tab: counts, steps grouped by class, explanation in place, link
   await expect(panel(page)).not.toContainText('Wait for delivery');
   await expect(panel(page).locator('li[data-assessment]')).toHaveCount(4);
 
-  // Selecting a step opens its explanation and highlights it in the diagram.
-  await row(page, 'Compare supplier quotations').getByRole('button').first().click();
+  // Each step is a compact card: verdict, Automate, Keep human, Next step; the rest is under "Why".
   const open = row(page, 'Compare supplier quotations');
-  await expect(open.getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
-  await expect(open).toContainText('What could be automated');
-  await expect(open).toContainText('What stays human');
+  await expect(open).toContainText('Automate');
+  await expect(open).toContainText('Keep human');
+  await expect(open).toContainText('Next step');
+  await expect(open).not.toContainText('Business value');
+  // Selecting a step highlights it in the diagram (here: in the Removed list, as a recommendation removes it).
+  await open.getByRole('button').first().click();
+  await expect(open.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
+  await open.getByRole('button', { name: 'Why' }).click();
   await expect(open).toContainText('You said');
   await expect(open).toContainText('Business value');
   // This step is removed by a recommendation, so it isn't drawn: its entry in the Removed list is highlighted.
   const removedEntry = page.getByTestId('removed-steps').getByRole('button', { name: /Compare supplier quotations/ });
   await expect(removedEntry).toHaveClass(/shadow/);
   await expect(removedEntry).toContainText('Human-assisted');
-  await open.getByText('Reasoning by area').click();
   await expect(open).toContainText('Rules and judgment');
   await page.screenshot({ path: `${SHOTS}/01-automation-tab-1536-test-fixture.png` });
 
   // Clicking a step in the diagram opens its assessment.
   await page.locator('[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="inspect"]').click();
-  await expect(row(page, 'Check delivery').getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'Check delivery').getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
   await expect(row(page, 'Check delivery')).toContainText('physical');
   await expect(diagramStep(page, 'inspect')).toHaveAttribute('data-focus', 'on');
   await expect(diagramStep(page, 'quote')).toHaveAttribute('data-focus', 'dim');
   // A removed step's entry opens its assessment too.
   await removedEntry.click();
-  await expect(row(page, 'Compare supplier quotations').getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'Compare supplier quotations').getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
 
   // Back to recommendations: the diagram follows recommendation selection again.
   await page.getByRole('tab', { name: /Recommendations/ }).click();
@@ -121,7 +127,7 @@ test('changing a step (or what feeds it) shows Needs reassessment; moving blocks
   await expect(label(page, 'inspect')).toHaveAttribute('data-stale', 'true');
   await expect(label(page, 'match')).not.toHaveAttribute('data-stale', 'true');
   await row(page, 'Check delivery').getByRole('button').first().click();
-  await expect(row(page, 'Check delivery')).toContainText('Run a new analysis to reassess it.');
+  await expect(row(page, 'Check delivery')).toContainText('run a new analysis to reassess');
   await page.screenshot({ path: `${SHOTS}/02-needs-reassessment-1536-test-fixture.png` });
 });
 
@@ -164,7 +170,7 @@ test('labels on the analysis diagram: only in the Automation view; a label opens
 
   // A label opens that step's assessment and highlights the step; no recommendation gets selected.
   await label(page, 'inspect').click();
-  await expect(row(page, 'Check delivery').getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'Check delivery').getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
   await expect(diagramStep(page, 'inspect')).toHaveAttribute('data-focus', 'on');
   await page.screenshot({ path: `${SHOTS}/04-labels-on-diagram-1536-test-fixture.png` });
   // Zoomed in, the labels read clearly next to the change highlighting.

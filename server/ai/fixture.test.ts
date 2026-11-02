@@ -154,3 +154,12 @@ describe('FixtureProvider automation assessments (acceptance fixtures)', () => {
     expect(result.assessments.map((a) => a.stepId)).toEqual(['task']);
   });
 });
+
+describe('concise assessments', () => {
+  it('keeps each field short: first sentence, a word cap, and at most two points to verify', async () => {
+    const { brief } = await import('./service.js');
+    expect(brief('One clear reason. Then a second sentence that adds detail.', 30)).toBe('One clear reason.');
+    expect(brief(Array.from({ length: 40 }, (_, i) => `w${i}`).join(' '), 10)).toBe('w0 w1 w2 w3 w4 w5 w6 w7 w8 w9…');
+    expect(brief('Step notes: “Check it. Then file it.”', 30, false)).toBe('Step notes: “Check it. Then file it.”');
+  });
+});

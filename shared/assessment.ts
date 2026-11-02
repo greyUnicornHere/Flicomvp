@@ -107,3 +107,23 @@ export function assessmentBasis(graph: WorkflowGraph, stepId: string): string | 
 export function needsReassessment(graph: WorkflowGraph, assessment: Pick<StepAssessment, 'stepId' | 'basis'>): boolean {
   return assessmentBasis(graph, assessment.stepId) !== assessment.basis;
 }
+
+/** The step's single most useful next action: its first open question, else its first point to verify. */
+export function nextStep(a: Pick<StepAssessment, 'questions' | 'prerequisites'>): string {
+  return a.questions[0] ?? a.prerequisites[0] ?? '';
+}
+
+/**
+ * The best automation opportunities, at most `limit`: automation candidates before human-assisted
+ * steps, confirmed before provisional, and steps whose business value the person described first.
+ * Assessments that need reassessment are left out.
+ */
+export function topOpportunities<T extends Pick<StepAssessment, 'classification' | 'provisional' | 'value'>>(assessments: T[], isOutdated: (a: T) => boolean, limit = 3): T[] {
+  const rank = (a: T) => (a.classification === 'full' ? 0 : 2) + (a.provisional ? 1 : 0) - (a.value ? 0.5 : 0);
+  return assessments
+    .filter((a) => (a.classification === 'full' || a.classification === 'assisted') && !isOutdated(a))
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i)
+    .slice(0, limit)
+    .map(({ a }) => a);
+}

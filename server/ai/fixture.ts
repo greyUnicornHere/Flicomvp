@@ -362,7 +362,7 @@ function assess(view: View, ref: string, answers: Turn[]) {
     { source: 'workflow', text: before ? `Follows “${before}” in the workflow.` : 'Position in the workflow.' },
   ];
   const volume = /(\d[\d,]*)\s*(?:\w+\s)?(?:a|per)\s+(day|week|month)/i.exec(said);
-  const value = volume ? `Runs about ${volume[1]} times a ${volume[2]} (you said). Time per run isn't known, so the value can't be estimated.` : '';
+  const value = volume ? `Runs about ${volume[1]} times a ${volume[2]} (you said), but time per run isn't known, so the value can't be estimated.` : '';
   const dims = (over: Partial<Record<'inputs' | 'rules' | 'access' | 'exceptions' | 'verification' | 'risk', string>>) => ({
     inputs: 'Not described yet.',
     rules: 'Not described yet.',

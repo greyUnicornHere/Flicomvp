@@ -308,3 +308,9 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - Automation: four counts, a "recommendations only" note, then steps grouped by class under icon + label headings (lightning, handshake, person, question mark). A row shows the step's current name, a dashed **Provisional** chip and a dotted amber **Needs reassessment** chip when relevant. Opening a row shows the explanation in place, with "Reasoning by area" folded.
 - Linked to the diagram: an open row highlights its step (others dimmed) and brings it into view; clicking a step in the diagram while on Automation opens its row. Change highlighting (added/updated/removed) is untouched.
 - The executive summary lists "N steps assessed for automation" or "No automation assessment in this analysis".
+
+### Labels on the diagram (owner request, 2026-11-02)
+- Owner choices: labels on the **analysis diagram only, while the Automation tab is open**; **clicking a label opens its assessment**.
+- Each assessed block gets a small neutral pill at its bottom-right: class icon + short name (Automation candidate / Human-assisted / Human-led / Needs info), the full class as its accessible name. Provisional = dashed border; needs reassessment = dotted amber with a refresh icon (the class name stays visible).
+- Clicking a label opens that step's row and highlights the step; it never selects a recommendation. With Recommendations open, in the editor and in the final preview there are no labels, so the change colours stand alone.
+- Labels scale with the diagram: with a long workflow fitted to the screen they are small; zoom in or use Full screen to read them.

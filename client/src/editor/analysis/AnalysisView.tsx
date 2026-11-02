@@ -10,6 +10,7 @@ import { applyAnalysis, saveReview } from '../../lib/analysis';
 import { formatModifiedFull } from '../../lib/workflows';
 import { useFullscreen } from '../../lib/useFullscreen';
 import { withChanges, type Focus } from '../flowElements';
+import { needsReassessment } from '../../../../shared/assessment';
 import { AutomationPanel } from './AutomationPanel';
 import { ReviewDiagram } from './ReviewDiagram';
 
@@ -88,6 +89,9 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
   // Without recommendations, the side panel shows only the automation assessment (when there is one).
   const sidePanel = noImprovementsOf(analysis) ? 'automation' : panel;
   const showSide = !noImprovementsOf(analysis) || hasAssessments;
+
+  // Labels on the diagram's blocks while the Automation view is open.
+  const automationLabels = new Map((assessments ?? []).map((a) => [a.stepId, { assessment: a, stale: needsReassessment(currentGraph, a) }]));
 
   const selectedTouch = selected ? touchedBy.get(selected.id)! : null;
   const focusIds =
@@ -269,6 +273,8 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               focus={focus}
               revealIds={revealIds}
               label={noImprovements ? 'Analysed workflow' : 'Workflow with proposed changes'}
+              assessments={sidePanel === 'automation' ? automationLabels : undefined}
+              onOpenAssessment={(id) => setAssessId(id)}
               onSelectElement={(id) => {
                 if (sidePanel === 'automation') {
                   if (assessments?.some((a) => a.stepId === id)) setAssessId(assessId === id ? null : id);

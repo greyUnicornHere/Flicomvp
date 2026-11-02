@@ -101,6 +101,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Each assessment explains its reasoning across six areas (inputs, rules and judgment, system access, exceptions, verification, risk), what could be automated, what stays human, what to verify, and evidence tagged **You said**, **From the workflow** or **Assumption**. Business value appears only when you gave the figures; invented figures are rejected by the server.
 - Part of the same analysis: no extra credit and no extra AI call.
 - Shown in the Analysis tab's new **Automation** tab (option A): counts per class, then steps grouped by class; a row opens its explanation and highlights the step in the diagram, and clicking a step opens its row.
+- While the Automation tab is open, each assessed block in the analysis diagram also carries a small **label** (icon + short class name); clicking it opens that step's assessment. Not shown with Recommendations open, in the editor or in the final preview.
 - Changing a step, or a step that feeds it, shows **Needs reassessment**; moving blocks doesn't.
 - Analyses made before this still open and say they have no automation assessment.
 

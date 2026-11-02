@@ -430,7 +430,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 |---|---|---|
 | Lint, typecheck, build | `npm run check` | Pass |
 | Unit + API | `npm test` | **284 / 284 pass** (16 new: 5 API, 6 classification fixtures, 5 fingerprint) |
-| Browser E2E (all milestones) | `npm run test:e2e` | **68 / 68 pass** (4 new in `tests/e2e/automation.spec.ts`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **69 / 69 pass** (5 new in `tests/e2e/automation.spec.ts`) |
 
 | Check | Result | Evidence |
 |---|---|---|
@@ -443,5 +443,6 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 | Owner isolation | Pass | API "keeps assessments private to the workflow owner" |
 | Automation tab: counts, grouped list, explanation in place with evidence tags and reasoning by area; row ↔ diagram linking; Recommendations unchanged | Pass (fixture) | E2E "Automation tab: counts, steps grouped…"; `01-automation-tab-1536-test-fixture.png` |
 | 1280 px: readable, no horizontal scroll | Pass (fixture) | E2E "1280px…"; `03-automation-tab-1280-test-fixture.png` |
+| Labels on the analysis diagram: only in the Automation view (none with Recommendations, none in the editor); short class text with the full class as accessible name; provisional and needs-reassessment states; a label opens its assessment without selecting a recommendation | Pass (fixture) | E2E "labels on the analysis diagram…" and the reassessment test; `04-labels-on-diagram-1536-test-fixture.png`, `05-labels-zoomed-in-1536-test-fixture.png` |
 | Edge browser | Not tested | Only Chromium is available here |
 | Live Claude assessment | Not tested | No API key in this environment; to be checked by the owner on their PC |

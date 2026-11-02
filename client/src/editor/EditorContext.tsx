@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { StepAssessment } from '../../../shared/assessment';
 import type { WorkflowGraph } from '../../../shared/graph';
 import type { Issue } from '../../../shared/validation';
 import type { Slot } from './ops';
@@ -16,6 +17,9 @@ export type EditorUi = {
   commitName: (nodeId: string, label: string) => void;
   cancelName: () => void;
   hoverEdge: (edgeId: string | null) => void;
+  /** Automation labels to draw on blocks (Analysis tab, Automation view only), by step. */
+  assessments?: Map<string, { assessment: StepAssessment; stale: boolean }>;
+  openAssessment?: (stepId: string) => void;
 };
 
 export const EditorUiContext = createContext<EditorUi | null>(null);

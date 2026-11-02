@@ -46,6 +46,7 @@ async function analysed(page: Page, viewport = { width: 1536, height: 960 }) {
 
 const panel = (page: Page) => page.getByTestId('automation-panel');
 const row = (page: Page, name: string) => panel(page).locator('li[data-assessment]').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}`) }) });
+const label = (page: Page, id: string) => page.locator(`[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="${id}"] .fl-auto-badge`);
 const diagramStep = (page: Page, id: string) => page.locator(`[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="${id}"] .fl-step`);
 
 test('Automation tab: counts, steps grouped by class, explanation in place, linked to the diagram; no extra credit', async ({ page }) => {
@@ -109,6 +110,9 @@ test('changing a step (or what feeds it) shows Needs reassessment; moving blocks
   await expect(row(page, 'Check delivery')).toContainText('Needs reassessment');
   await expect(row(page, 'Send quotation')).toContainText('Needs reassessment'); // fed by the changed step
   await expect(row(page, 'Match invoice to order')).not.toContainText('Needs reassessment'); // only moved
+  // The labels on the diagram say so too.
+  await expect(label(page, 'inspect')).toHaveAttribute('data-stale', 'true');
+  await expect(label(page, 'match')).not.toHaveAttribute('data-stale', 'true');
   await row(page, 'Check delivery').getByRole('button').first().click();
   await expect(row(page, 'Check delivery')).toContainText('Run a new analysis to reassess it.');
   await page.screenshot({ path: `${SHOTS}/02-needs-reassessment-1536-test-fixture.png` });
@@ -135,4 +139,37 @@ test('1280px: the Automation tab stays readable next to the diagram', async ({ p
   await expect(row(page, 'Match invoice to order')).toContainText('Provisional');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/03-automation-tab-1280-test-fixture.png` });
+});
+
+test('labels on the analysis diagram: only in the Automation view; a label opens its assessment', async ({ page }) => {
+  await analysed(page);
+  const labels = page.locator('[aria-label="Workflow with proposed changes"] .fl-auto-badge');
+  // Recommendations view: change highlighting only.
+  await expect(labels).toHaveCount(0);
+  await page.getByRole('tab', { name: /Automation/ }).click();
+  await expect(labels).toHaveCount(4); // Start, Finish and the wait have none
+  await expect(label(page, 'compare')).toHaveText('Human-assisted');
+  await expect(label(page, 'compare')).toHaveAttribute('aria-label', /Human-assisted automation/);
+  await expect(label(page, 'match')).toHaveAttribute('data-provisional', 'true');
+  await expect(label(page, 'inspect')).toHaveText('Human-led');
+  await expect(label(page, 'quote')).toHaveText('Needs info');
+  await expect(page.locator('[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="wait"] .fl-auto-badge')).toHaveCount(0);
+
+  // A label opens that step's assessment and highlights the step; no recommendation gets selected.
+  await label(page, 'inspect').click();
+  await expect(row(page, 'Check delivery').getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(diagramStep(page, 'inspect')).toHaveAttribute('data-focus', 'on');
+  await page.screenshot({ path: `${SHOTS}/04-labels-on-diagram-1536-test-fixture.png` });
+  // Zoomed in, the labels read clearly next to the change highlighting.
+  const zoomIn = page.getByRole('group', { name: 'Canvas controls' }).getByRole('button', { name: 'Zoom in' });
+  for (let i = 0; i < 4; i++) await zoomIn.click();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SHOTS}/05-labels-zoomed-in-1536-test-fixture.png` });
+  await page.getByRole('tab', { name: /Recommendations/ }).click();
+  await expect(labels).toHaveCount(0);
+  await expect(page.locator('article[data-rec] button[aria-pressed="true"]')).toHaveCount(0);
+
+  // The editor never shows them.
+  await page.getByRole('tab', { name: 'Editor' }).click();
+  await expect(page.locator('[aria-label="Workflow diagram"] .fl-auto-badge')).toHaveCount(0);
 });

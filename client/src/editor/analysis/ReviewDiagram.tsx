@@ -20,6 +20,9 @@ type Props = {
   /** Steps to bring into view (e.g. the selected recommendation's). */
   revealIds: string[];
   label: string;
+  /** Automation labels to draw on the blocks (only while the Automation view is open). */
+  assessments?: EditorUi['assessments'];
+  onOpenAssessment?: (stepId: string) => void;
 };
 
 /** The single review diagram: read-only, with proposed changes drawn on the analysed workflow. */
@@ -31,7 +34,7 @@ export function ReviewDiagram(props: Props) {
   );
 }
 
-function Diagram({ display: shown, focus, onSelectElement, revealIds, label }: Props) {
+function Diagram({ display: shown, focus, onSelectElement, revealIds, label, assessments, onOpenAssessment }: Props) {
   const rf = useReactFlow<StepFlowNode, FlowEdgeType>();
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
   // The review always shows a tidy, auto-arranged diagram (view only: the saved layout is untouched).
@@ -61,6 +64,8 @@ function Diagram({ display: shown, focus, onSelectElement, revealIds, label }: P
     commitName: noop,
     cancelName: noop,
     hoverEdge: noop,
+    assessments,
+    openAssessment: onOpenAssessment,
   };
 
   // The Analysis tab stays mounted while hidden, so the diagram can start in an area with no size.

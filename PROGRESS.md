@@ -112,7 +112,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Removed steps** are listed in a "Removed" box in the diagram's corner, each with where it was ("after “Receive order”"). Hovering one highlights where it was; clicking it selects the recommendation that removes it (in the Automation view: opens its assessment, and its class is shown).
 - View only: your own layout in the editor is never changed.
 
-## Concise automation assessment (owner feedback; awaiting owner review, branch `concise-assessment`)
+## Concise automation assessment (owner feedback; approved by owner 2026-11-02; merged to `main`)
 
 - **Shorter from Claude:** one sentence of reasoning (about 20 words), one short phrase for what to automate and what stays human, at most two points to verify and two or three pieces of evidence. The server trims anything longer (first sentence, word cap) without spending a retry.
 - **Top opportunities** at the top of the Automation tab: up to three automation candidates or human-assisted steps (candidates first, confirmed before provisional, steps with described business value first), each with what to automate and the next step. The four count boxes became one line.

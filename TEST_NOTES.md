@@ -493,3 +493,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Assessment
 | Next step and top-opportunity ranking (candidates, confirmed, described value; never human-led, unknown or outdated) | Pass | `shared/assessment.test.ts` |
 | Automation tab: top opportunities with what to automate and next step; one-line count; compact cards with Automate / Keep human / Next step; Why reveals evidence, areas and value; selection highlights the step | Pass (fixture) | `tests/e2e/automation.spec.ts`; `docs/evidence/concise-assessment/` |
 | Live Claude brevity | Not tested here | To be checked by the owner with a live key |
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the concise automation assessment | Pass | Product owner approved on 2026-11-02 |

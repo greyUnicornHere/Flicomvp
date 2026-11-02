@@ -476,3 +476,20 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the analysis diagram layout and Removed list | Pass | Product owner approved on 2026-11-02 |
+
+## Concise automation assessment — 2026-11-02 (branch `concise-assessment`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Assessments come from the labelled test fixture.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **296 / 296 pass** (4 new: trimming, stored-concise API, next step, top opportunities) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **70 / 70 pass** (automation tests updated for the compact cards) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Over-long output is trimmed: first sentence, word cap, ≤ 2 points to verify (questions first), ≤ 3 evidence items; evidence quotes not cut mid-quote | Pass | `server/ai/fixture.test.ts` "concise assessments"; API "stores concise assessments…" |
+| Next step and top-opportunity ranking (candidates, confirmed, described value; never human-led, unknown or outdated) | Pass | `shared/assessment.test.ts` |
+| Automation tab: top opportunities with what to automate and next step; one-line count; compact cards with Automate / Keep human / Next step; Why reveals evidence, areas and value; selection highlights the step | Pass (fixture) | `tests/e2e/automation.spec.ts`; `docs/evidence/concise-assessment/` |
+| Live Claude brevity | Not tested here | To be checked by the owner with a live key |

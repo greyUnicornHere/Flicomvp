@@ -137,7 +137,8 @@ const AUTOMATION_RULES = `Automation assessment (field "automation"):
 - provisional = true when the evidence supports a tentative class but prerequisites are unverified. If a missing fact could overturn the basic assessment, use unknown.
 - No numeric scores or thresholds: explain the reasoning.
 - Keep feasibility separate from business value. Frequency, time, error/rework cost and effort inform value only when supplied; high frequency never makes a task feasible and missing frequency never makes it infeasible. Unknown value stays "".
-- Evidence: label each item user (the person said it, in step details or answers), workflow (visible in the diagram) or assumption (yours). What the person says about a tool is not a tested integration. Never invent tool capabilities, test results, citations or sources.`;
+- Evidence: label each item user (the person said it, in step details or answers), workflow (visible in the diagram) or assumption (yours). What the person says about a tool is not a tested integration. Never invent tool capabilities, test results, citations or sources.
+- Be concise and concrete; people scan these. reasoning: ONE sentence (at most 25 words) giving the deciding reason. automatable and human: one short phrase each (at most 20 words), naming the concrete work. Each of the six dimensions: at most 15 words. At most 2 evidence items, the ones that decide the class. questions and prerequisites together: at most 2, most important first; the first is shown as the step's next action, so phrase it as something the person can check or answer. value: one sentence or "".`;
 
 export const ANALYSIS_SYSTEM = `You are Flico's workflow analyst. You assess how a business process works today and propose practical improvements that the person reviews one by one. Flico maps and assesses workflows; it never executes them.
 

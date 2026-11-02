@@ -122,6 +122,26 @@ describe('assessments in an analysis', () => {
     expect(a!.recommendations).toHaveLength(1);
   });
 
+  it('stores concise assessments: one-sentence reasoning, at most two points to verify (questions first), at most three pieces of evidence', async () => {
+    const wordy = analysis([
+      assessment('s2', 'unknown', {
+        reasoning: 'The price source is unknown. It might come from a list. Or from a person.',
+        questions: ['Where does the price come from?', 'Who approves discounts?', 'Is there a template?'],
+        prerequisites: ['Check the price list is current.'],
+        evidence: [1, 2, 3, 4].map((i) => ({ source: 'workflow', text: `Fact ${i}.` })),
+      }),
+      assessment('s3', 'assisted', { prerequisites: ['Confirm the approver.', 'Confirm the limit.', 'Confirm the backup.'] }),
+    ]);
+    const { t, alice, workflow } = await setup([wordy]);
+    const [a] = await analyses(t, alice.cookie, workflow.id);
+    const [quote, approve] = a!.assessments!;
+    expect(quote!.reasoning).toBe('The price source is unknown.');
+    expect(quote!.questions).toEqual(['Where does the price come from?', 'Who approves discounts?']);
+    expect(quote!.prerequisites).toEqual([]);
+    expect(quote!.evidence).toHaveLength(3);
+    expect(approve!.prerequisites).toEqual(['Confirm the approver.', 'Confirm the limit.']);
+  });
+
   it('older analyses stay readable and say they have no assessments', async () => {
     const { t, alice, workflow } = await setup();
     t.db.prepare('UPDATE analyses SET assessments_json = NULL').run();

@@ -377,6 +377,21 @@ type CheckedAnalysis = { value: Omit<AnalysisResult, 'usage' | 'dropped'>; probl
 
 export type AssessmentDraft = Omit<StepAssessment, 'basis' | 'revision' | 'updatedAt'>;
 
+const MAX_TO_VERIFY = 2;
+const MAX_EVIDENCE = 3;
+
+/**
+ * Keep an assessment field short: its first sentence (unless `firstSentence` is false), at most
+ * `maxWords` words, ending with "…" when cut.
+ */
+export function brief(text: string, maxWords: number, firstSentence = true): string {
+  let out = text.trim().replace(/\s+/g, ' ');
+  if (firstSentence) out = out.split(/(?<=[.!?])\s+(?=[A-Z“"(])/)[0] ?? out;
+  const words = out.split(' ');
+  if (words.length > maxWords) out = `${words.slice(0, maxWords).join(' ').replace(/[,;:.]+$/, '')}…`;
+  return out;
+}
+
 /**
  * Check assessments against the workflow and the decision rules. Returns the valid ones and, for the
  * correction retry, what was wrong with the others. Never fills gaps with invented content.
@@ -404,18 +419,28 @@ export function checkAssessments(items: AssessmentOutput[], graph: WorkflowGraph
       continue;
     }
     seen.add(id);
+    // Concise by design: what the model writes beyond the limits is trimmed, never sent back for a retry.
+    const questions = a.questions.map((q) => q.trim()).filter(Boolean).slice(0, MAX_TO_VERIFY).map((q) => brief(q, 25));
     valid.push({
       stepId: id,
       classification: a.classification,
       provisional: a.provisional,
-      reasoning: a.reasoning.trim(),
-      dimensions: { inputs: a.inputs.trim(), rules: a.rules.trim(), access: a.access.trim(), exceptions: a.exceptions.trim(), verification: a.verification.trim(), risk: a.risk.trim() },
-      automatable: a.automatable.trim(),
-      human: a.human.trim(),
-      evidence: a.evidence.filter((e) => e.text.trim()).map((e) => ({ source: e.source, text: e.text.trim() })),
-      prerequisites: a.prerequisites.map((p) => p.trim()).filter(Boolean),
-      questions: a.questions.map((q) => q.trim()).filter(Boolean),
-      value: a.value.trim(),
+      reasoning: brief(a.reasoning, 30),
+      dimensions: {
+        inputs: brief(a.inputs, 20),
+        rules: brief(a.rules, 20),
+        access: brief(a.access, 20),
+        exceptions: brief(a.exceptions, 20),
+        verification: brief(a.verification, 20),
+        risk: brief(a.risk, 20),
+      },
+      automatable: brief(a.automatable, 25),
+      human: brief(a.human, 25),
+      evidence: a.evidence.filter((e) => e.text.trim()).slice(0, MAX_EVIDENCE).map((e) => ({ source: e.source, text: brief(e.text, 30, false) })),
+      // Questions come first: the first item is shown as the step's next action.
+      prerequisites: a.prerequisites.map((p) => p.trim()).filter(Boolean).slice(0, MAX_TO_VERIFY - questions.length).map((p) => brief(p, 25)),
+      questions,
+      value: brief(a.value, 30),
     });
   }
   return { valid, problems };

@@ -112,6 +112,12 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Removed steps** are listed in a "Removed" box in the diagram's corner, each with where it was ("after “Receive order”"). Hovering one highlights where it was; clicking it selects the recommendation that removes it (in the Automation view: opens its assessment, and its class is shown).
 - View only: your own layout in the editor is never changed.
 
+## Concise automation assessment (owner feedback; awaiting owner review, branch `concise-assessment`)
+
+- **Shorter from Claude:** one sentence of reasoning (about 20 words), one short phrase for what to automate and what stays human, at most two points to verify and two or three pieces of evidence. The server trims anything longer (first sentence, word cap) without spending a retry.
+- **Top opportunities** at the top of the Automation tab: up to three automation candidates or human-assisted steps (candidates first, confirmed before provisional, steps with described business value first), each with what to automate and the next step. The four count boxes became one line.
+- **Compact card per step:** the verdict, then Automate, Keep human and **Next step** (its first open question or point to verify); evidence, other points to verify, the six areas and business value are folded under **Why**. Clicking a card highlights the step.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -139,4 +145,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/` and `docs/evidence/review-layout/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/` and `docs/evidence/concise-assessment/`.

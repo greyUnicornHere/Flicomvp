@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assessmentBasis, isAssessable, needsReassessment } from './assessment.js';
+import { nextStep, topOpportunities } from './assessment.js';
 import type { WorkflowGraph } from './graph.js';
 
 const g: WorkflowGraph = {
@@ -51,5 +52,22 @@ describe('assessment basis (what an assessment depends on)', () => {
     const without: WorkflowGraph = { nodes: g.nodes.filter((n) => n.id !== 'q'), edges: g.edges.filter((e) => e.sourceId !== 'q' && e.targetId !== 'q') };
     expect(assessmentBasis(without, 'q')).toBeNull();
     expect(needsReassessment(without, { stepId: 'q', basis })).toBe(true);
+  });
+});
+
+describe('concise summaries', () => {
+  const a = (classification: 'full' | 'assisted' | 'human' | 'unknown', provisional = false, value = '', id: string = classification) => ({ id, classification, provisional, value });
+
+  it('next step: the first open question, else the first point to verify', () => {
+    expect(nextStep({ questions: ['Where does the price come from?'], prerequisites: ['Test access.'] })).toBe('Where does the price come from?');
+    expect(nextStep({ questions: [], prerequisites: ['Test access.'] })).toBe('Test access.');
+    expect(nextStep({ questions: [], prerequisites: [] })).toBe('');
+  });
+
+  it('top opportunities: candidates before assisted, confirmed before provisional, described value first; never human-led, unknown or outdated', () => {
+    const list = [a('assisted', false, '', 'A'), a('human'), a('full', true, '', 'B'), a('unknown'), a('full', false, '', 'C'), a('assisted', true, 'Runs 40 times a week.', 'D'), a('full', false, '', 'E')];
+    expect(topOpportunities(list, () => false).map((x) => x.id)).toEqual(['C', 'E', 'B']);
+    expect(topOpportunities(list, (x) => x.id === 'C', 5).map((x) => x.id)).toEqual(['E', 'B', 'A', 'D']);
+    expect(topOpportunities([a('human'), a('unknown')], () => false)).toEqual([]);
   });
 });

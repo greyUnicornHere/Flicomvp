@@ -449,3 +449,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 | Side-panel tabs never wrap; filter on its own row | Pass | Visual check of the 1536 results screen; all analysis E2E |
 | Edge browser | Not tested | Only Chromium is available here |
 | Live Claude assessment | Not tested | No API key in this environment; to be checked by the owner on their PC |
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the automation assessment, Automation tab, labels, repeat-analysis rule and progress fix | Pass | Product owner approved on 2026-11-02 |

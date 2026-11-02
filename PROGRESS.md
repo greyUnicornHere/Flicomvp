@@ -95,7 +95,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - "More details" always starts closed; its summary line shows what's inside.
 - The diagram in the Analysis tab and the final preview opens **auto-arranged** and zoomed out to show the **whole workflow**, and refits when the tab is shown, the window is resized or full screen is toggled. This only affects the view: your own layout in the editor is not changed. Long workflows open small; zoom or Full screen to read them.
 
-## Automation assessment (owner request; awaiting owner review, branch `automation-assessment`)
+## Automation assessment (owner request; approved by owner 2026-11-02; merged to `main`)
 
 - Each new analysis also assesses every work step as **Full automation candidate**, **Human-assisted automation**, **Keep human-led** or **More information needed**, with a **Provisional** flag when it rests on unconfirmed points. Start, Finish and Wait steps aren't assessed.
 - Each assessment explains its reasoning across six areas (inputs, rules and judgment, system access, exceptions, verification, risk), what could be automated, what stays human, what to verify, and evidence tagged **You said**, **From the workflow** or **Assumption**. Business value appears only when you gave the figures; invented figures are rejected by the server.

@@ -56,9 +56,8 @@ test('analysis: diagram and recommendations together in full screen, then the fi
   await page.getByRole('button', { name: 'Analyze' }).click();
   await page.getByRole('menuitem', { name: 'Quick Analysis' }).click();
   await expect(page.locator('article[data-rec]')).toHaveCount(3);
-  // The long name shows in full in the review diagram too.
-  const review = page.locator('[aria-label="Workflow with proposed changes"]');
-  await expect(review.locator('.react-flow__node[data-id="n-check"] .fl-node-label')).toHaveText(LONG);
+  // The long-named step is removed by a recommendation: its full name shows in the diagram's Removed list.
+  await expect(page.getByTestId('removed-steps')).toContainText(LONG);
 
   await page.getByRole('button', { name: 'Full screen' }).click();
   await expect.poll(() => isFullscreen(page)).toBe(true);

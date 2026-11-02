@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider, useReactFlow, type NodeChange } from '@xyflow/react';
+import { CLASS_LABEL, CLASS_SHORT } from '../../../../shared/assessment';
 import type { WorkflowGraph } from '../../../../shared/graph';
 import { CanvasControls } from '../CanvasControls';
 import { EditorUiContext, type EditorUi } from '../EditorContext';
 import { FlowEdge, type FlowEdgeType } from '../FlowEdge';
 import { flowEdges, flowNodes, type Display, type Focus } from '../flowElements';
-import { autoLayout } from '../layout';
+import { removedSteps, reviewLayout, type RemovedStep } from './reviewLayout';
 import { motionDuration } from '../motion';
 import { StepNode, type StepFlowNode } from '../StepNode';
 
@@ -25,7 +26,10 @@ type Props = {
   onOpenAssessment?: (stepId: string) => void;
 };
 
-/** The single review diagram: read-only, with proposed changes drawn on the analysed workflow. */
+/**
+ * The single review diagram: read-only. It shows the proposed workflow (added and updated steps
+ * highlighted); removed steps are listed in a corner box instead of being drawn.
+ */
 export function ReviewDiagram(props: Props) {
   return (
     <ReactFlowProvider>
@@ -37,10 +41,15 @@ export function ReviewDiagram(props: Props) {
 function Diagram({ display: shown, focus, onSelectElement, revealIds, label, assessments, onOpenAssessment }: Props) {
   const rf = useReactFlow<StepFlowNode, FlowEdgeType>();
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
-  // The review always shows a tidy, auto-arranged diagram (view only: the saved layout is untouched).
-  const display = useMemo(() => ({ ...shown, graph: autoLayout(shown.graph) }), [shown]);
-  const nodes = useMemo(() => flowNodes(display, { dims, focus }), [display, dims, focus]);
-  const edges = useMemo(() => flowEdges(display, { dims, focus }), [display, dims, focus]);
+  // The proposed workflow, tidily auto-arranged (view only: the saved layout is untouched).
+  const display = useMemo(() => reviewLayout(shown), [shown]);
+  const removed = useMemo(() => removedSteps(shown), [shown]);
+  // Hovering a removed step highlights the steps it sat between.
+  const [hovered, setHovered] = useState<RemovedStep | null>(null);
+  const hoverIds = hovered ? new Set([...hovered.after, ...hovered.before].map((n) => n.id)) : null;
+  const shownFocus = (id: string): Focus | undefined => (hoverIds ? (hoverIds.has(id) ? 'on' : 'dim') : focus(id));
+  const nodes = flowNodes(display, { dims, focus: shownFocus });
+  const edges = flowEdges(display, { dims, focus: shownFocus });
 
   // Whenever the arrangement changes (e.g. a recommendation is rejected), show the whole workflow again.
   const layoutKey = display.graph.nodes.map((n) => `${n.id}:${n.position.x},${n.position.y}`).join('|');
@@ -90,7 +99,7 @@ function Diagram({ display: shown, focus, onSelectElement, revealIds, label, ass
     };
   }, [rf, label]);
 
-  const revealKey = revealIds.join(',');
+  const revealKey = revealIds.filter((id) => display.graph.nodes.some((n) => n.id === id)).join(',');
   useEffect(() => {
     if (!revealKey) return;
     const frame = requestAnimationFrame(() => {
@@ -146,7 +155,68 @@ function Diagram({ display: shown, focus, onSelectElement, revealIds, label, ass
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--fl-grid-dot)" bgColor="var(--fl-bg-page)" />
       </ReactFlow>
+      {removed.length > 0 && (
+        <RemovedList
+          steps={removed}
+          assessments={assessments}
+          highlighted={(id) => focus(id) === 'on'}
+          onHover={setHovered}
+          onSelect={(id) => onSelectElement(id)}
+        />
+      )}
       <CanvasControls compact />
     </EditorUiContext.Provider>
+  );
+}
+
+/** Removed steps, listed in the diagram's corner with where they were. */
+function RemovedList({
+  steps,
+  assessments,
+  highlighted,
+  onHover,
+  onSelect,
+}: {
+  steps: RemovedStep[];
+  /** In the Automation view: each removed step's assessment, shown beside it. */
+  assessments?: EditorUi['assessments'];
+  highlighted: (id: string) => boolean;
+  onHover: (step: RemovedStep | null) => void;
+  onSelect: (id: string) => void;
+}) {
+  const where = (s: RemovedStep) =>
+    s.after.length ? `after ${s.after.map((n) => `“${n.label}”`).join(' and ')}` : s.before.length ? `before ${s.before.map((n) => `“${n.label}”`).join(' and ')}` : 'not connected';
+  return (
+    <section
+      aria-label={`Removed steps (${steps.length})`}
+      className="absolute bottom-4 left-4 z-10 max-h-[45%] w-[260px] overflow-y-auto rounded-[12px] border border-fl-border bg-fl-surface/95 px-3 py-2.5 shadow-fl-card"
+      data-testid="removed-steps"
+      onMouseLeave={() => onHover(null)}
+    >
+      <h3 className="text-[11px] font-bold uppercase leading-4 tracking-[0.04em] text-fl-text-secondary">Removed ({steps.length})</h3>
+      <ul className="mt-1 space-y-0.5">
+        {steps.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              className={`w-full rounded-[8px] px-2 py-1.5 text-left hover:bg-[var(--fl-exception-fill)] focus-visible:bg-[var(--fl-exception-fill)] ${highlighted(s.id) ? 'bg-[var(--fl-exception-fill)] shadow-[inset_0_0_0_1px_var(--fl-exception-stroke)]' : ''}`}
+              aria-label={`Removed step “${s.label}”, ${where(s)}.${assessments?.get(s.id) ? ` Automation: ${CLASS_LABEL[assessments.get(s.id)!.assessment.classification]}. Open its assessment.` : ' Select the recommendation that removes it.'}`}
+              onMouseEnter={() => onHover(s)}
+              onFocus={() => onHover(s)}
+              onBlur={() => onHover(null)}
+              onClick={() => onSelect(s.id)}
+            >
+              <span className="block text-[13px] font-semibold leading-[18px] text-[var(--fl-exception-ink)] line-through decoration-1">− {s.label}</span>
+              <span className="block text-[12px] leading-[17px] text-fl-text-secondary">{where(s)}</span>
+              {assessments?.get(s.id) && (
+                <span className="mt-0.5 block text-[11.5px] font-semibold leading-4 text-fl-text" data-testid="removed-automation">
+                  {CLASS_SHORT[assessments.get(s.id)!.assessment.classification]}
+                </span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

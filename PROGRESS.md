@@ -106,6 +106,12 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Analyses made before this still open and say they have no automation assessment.
 - **No repeat Quick Analysis of an unchanged workflow** (moving blocks doesn't count as a change): the Analyze menu shows Quick Analysis as "Unchanged since last analysis" with a **View latest analysis** shortcut, and the server refuses it without using a credit. Guided Analysis stays available (new answers add information), and Quick is allowed again when the workflow changes or when the latest analysis has no automation assessment yet.
 
+## Change-aware analysis diagram (owner feedback; awaiting owner review, branch `analysis-layout`)
+
+- The Analysis diagram and the final preview show only the **proposed workflow**, neatly arranged (unchanged, updated and added steps highlighted). No red lines for old routes.
+- **Removed steps** are listed in a "Removed" box in the diagram's corner, each with where it was ("after “Receive order”"). Hovering one highlights where it was; clicking it selects the recommendation that removes it (in the Automation view: opens its assessment, and its class is shown).
+- View only: your own layout in the editor is never changed.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -133,4 +139,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/` and `docs/evidence/automation/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/` and `docs/evidence/review-layout/`.

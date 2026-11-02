@@ -533,3 +533,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Intervie
 | The owner's workflow (a "No" path from "Retry limit reached?" back to "Search Amazon") is detected as a path back; Auto-arrange puts the steps in columns 0–5 in order, Yes above No, no overlaps (it stacked them all in column 0 before) | Pass | `client/src/editor/layout.test.ts` "paths back to an earlier step" |
 | In the browser: the messy layout → Auto-arrange → left to right, the way back drawn below the steps it passes | Pass | E2E `back-paths.spec.ts`; `docs/evidence/back-paths/01-before-1536.png`, `02-after-auto-arrange-1536.png` |
 | Existing behaviour (Repeat loops, branches, parallel, insertion, analysis diagram) | Pass | all layout unit tests and E2E |
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of Clarify and briefs, and of the layout fix for paths back to earlier steps | Pass | Product owner approved both on 2026-11-02. Combined main re-tested after the merge: unit + API 304 / 304, E2E 73 / 73, lint, typecheck, build |

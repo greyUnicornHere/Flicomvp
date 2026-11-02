@@ -118,13 +118,13 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Top opportunities** at the top of the Automation tab: up to three automation candidates or human-assisted steps (candidates first, confirmed before provisional, steps with described business value first), each with what to automate and the next step. The four count boxes became one line.
 - **Compact card per step:** the verdict, then Automate, Keep human and **Next step** (its first open question or point to verify); evidence, other points to verify, the six areas and business value are folded under **Why**. Clicking a card highlights the step.
 
-## Clarify and briefs (owner request; awaiting owner review, branch `clarify-and-briefs`)
+## Clarify and briefs (owner request; approved by owner 2026-11-02; merged to `main`)
 
 - Every assessment card has **Clarify**: Flico asks one question at a time in Ask Flico about what decides the classification (starting with the card's next step), with **Skip for now** and **Stop**. Answers update the assessment (class, Provisional, evidence "You said"); at most 5 questions per run.
 - Then a class-specific brief: **Create automation brief** (automation candidates), **Create assist brief** (human-assisted) or **Support ideas** (human-led); "More information needed" steps must be clarified first. Flico asks up to 6 short questions, then writes a brief with fixed sections (for an automation brief: goal, trigger and inputs, steps, systems and access, exceptions, how to test it, owner, risks, possible approaches, assumptions to confirm). It is saved under the step: **View**, **Copy as text**, **Update brief**.
 - No analysis credit; questions and briefs count toward the daily Ask Flico limit. Advice only: Flico never builds, connects or tests anything. A step that changed since the analysis can't be clarified or planned until it's reassessed; a brief made before its step or classification changed says it's out of date.
 
-## Tidy layout for paths back to earlier steps (owner feedback; awaiting owner review, branch `layout-back-paths`)
+## Tidy layout for paths back to earlier steps (owner feedback; approved by owner 2026-11-02; merged to `main`)
 
 - A connection that goes back to an earlier step without being a Repeat loop (for example "Retry limit reached? → No → Search") used to leave Auto-arrange, and AI drafts, with most steps stacked in one column and crossing lines. Now such paths are recognised: steps are laid out left to right as usual, and the way back is drawn under the steps like a Repeat loop, keeping its label (for example "No").
 - Existing workflows keep their positions until you click **Auto-arrange** (owner choice); new AI drafts come out tidy.

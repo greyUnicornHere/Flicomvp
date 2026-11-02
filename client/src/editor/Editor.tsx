@@ -9,6 +9,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import { useLocation, useNavigate } from 'react-router';
+import { quickRepeatBlocked } from '../../../shared/analysis';
 import type { AiSource, Analysis, AnalysisMode, ApplyAnalysisResponse, Assumption, ChatMessage, ChatMode, StartAnalysisRequest, WorkflowDetail } from '../../../shared/api';
 import { applyOperations, diffGraphs, type GraphChanges } from '../../../shared/aiOps';
 import type { WorkflowGraph } from '../../../shared/graph';
@@ -714,8 +715,10 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             credits: credits?.balance ?? null,
             initialCredits: credits?.initial ?? null,
             disabledReason: analyzeBlocked,
+            quickBlockedReason: quickRepeatBlocked(currentAnalysisOf(analyses), graph) ? 'Unchanged since last analysis' : null,
             onQuick: () => startNew('quick'),
             onGuided: () => setGuidedOpen(true),
+            onViewAnalysis: () => setView('analysis'),
           }}
           onSuggestFix={() => {
             openChat();
@@ -723,6 +726,18 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           }}
         />
 
+        {progress && (
+          // Over the content area of either tab (Editor or Analysis), below the header, so a running,
+          // failed or cancelled analysis is always visible wherever it was started from.
+          <div className="fixed inset-x-0 bottom-0 top-[var(--fl-header-height)] z-40" data-testid="analysis-progress-layer">
+            <AnalysisProgress
+              state={progress}
+              onCancel={() => void cancelAnalysis()}
+              onRetry={retryAnalysis}
+              onClose={() => setProgress(null)}
+            />
+          </div>
+        )}
         {analyses.length > 0 && (
           <div className={view === 'analysis' ? 'min-h-0 flex-1' : 'hidden'}>
             <AnalysisView
@@ -840,14 +855,6 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
                 Undo
               </button>
             </div>
-          )}
-          {progress && (
-            <AnalysisProgress
-              state={progress}
-              onCancel={() => void cancelAnalysis()}
-              onRetry={retryAnalysis}
-              onClose={() => setProgress(null)}
-            />
           )}
           {notice && (
             <div role="alert" className="absolute bottom-6 left-1/2 z-20 flex max-w-[520px] -translate-x-1/2 items-center gap-3 rounded-[12px] border border-[var(--fl-exception-stroke)] bg-[var(--fl-exception-fill)] px-4 py-2.5 text-[13px] text-[var(--fl-exception-ink)] shadow-fl-card">
@@ -1012,4 +1019,9 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       )}
     </EditorUiContext.Provider>
   );
+}
+
+/** The analysis treated as current: the latest, or the only one. */
+function currentAnalysisOf(analyses: Analysis[]): Analysis | null {
+  return analyses.find((a) => a.slot === 'latest') ?? analyses[0] ?? null;
 }

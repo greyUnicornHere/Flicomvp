@@ -121,3 +121,17 @@
 .fl-node[data-focus="dim"] { opacity: .35; }
 .fl-node[data-focus="on"] { outline: 2.5px solid var(--fl-brand); outline-offset: 3px; }
 .react-flow__edgelabel-renderer [data-edge-focus="dim"] { opacity: .3; }
+
+/* ---------- Automation labels on the analysis diagram (Automation view only) ---------- */
+/* Neutral and icon + text, so they never compete with the added/updated/removed change colours. */
+.fl-auto-badge {
+  position: absolute; bottom: -11px; right: 10px; display: inline-flex; align-items: center; gap: 4px; height: 22px; max-width: 168px;
+  padding: 0 8px; border-radius: 999px; border: 1px solid var(--fl-border-strong); background: var(--fl-surface); color: var(--fl-text);
+  font-size: 10.5px; font-weight: 650; line-height: 1; white-space: nowrap; box-shadow: 0 1px 3px rgba(32, 45, 44, .08); cursor: pointer;
+}
+.fl-auto-badge:hover { border-color: var(--fl-brand); color: var(--fl-brand-active); }
+.fl-auto-badge:focus-visible { outline: 2px solid var(--fl-focus); outline-offset: 2px; }
+.fl-auto-badge[data-provisional="true"] { border-style: dashed; }
+.fl-auto-badge[data-stale="true"] { background: var(--fl-approval-fill); color: var(--fl-approval-ink); border: 1px dotted var(--fl-approval-ink); }
+.fl-auto-badge svg { flex: none; }
+.fl-auto-badge span { overflow: hidden; text-overflow: ellipsis; }

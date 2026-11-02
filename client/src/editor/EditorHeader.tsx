@@ -28,7 +28,16 @@ type Props = {
   view: 'editor' | 'analysis';
   hasAnalysis: boolean;
   onViewChange: (view: 'editor' | 'analysis') => void;
-  analyze: { credits: number | null; initialCredits: number | null; disabledReason: string | null; onQuick: () => void; onGuided: () => void };
+  analyze: {
+    credits: number | null;
+    initialCredits: number | null;
+    disabledReason: string | null;
+    /** Why Quick Analysis alone is unavailable (nothing changed since the latest analysis). */
+    quickBlockedReason: string | null;
+    onQuick: () => void;
+    onGuided: () => void;
+    onViewAnalysis: () => void;
+  };
 };
 
 const soon = 'Available in a later update';
@@ -218,7 +227,7 @@ function SaveIndicator({ status, error, retry }: Props['save']) {
 }
 
 /** Analyze: the pre-analysis check, remaining credits, and Quick or Guided analysis. */
-function AnalyzeMenu({ check, credits, initialCredits, disabledReason, onQuick, onGuided }: { check: PreAnalysisResult } & Props['analyze']) {
+function AnalyzeMenu({ check, credits, initialCredits, disabledReason, quickBlockedReason, onQuick, onGuided, onViewAnalysis }: { check: PreAnalysisResult } & Props['analyze']) {
   const summary = check.canAnalyze
     ? check.warnings.length
       ? `Ready, with ${check.warnings.length} ${check.warnings.length === 1 ? 'warning' : 'warnings'} you may want to fix first.`
@@ -250,8 +259,9 @@ function AnalyzeMenu({ check, credits, initialCredits, disabledReason, onQuick, 
         </div>
       }
       items={[
-        { label: 'Quick Analysis', ...(reason ? { disabled: true, hint: reason } : { onSelect: onQuick }) },
+        { label: 'Quick Analysis', ...(reason || quickBlockedReason ? { disabled: true, hint: reason ?? quickBlockedReason! } : { onSelect: onQuick }) },
         { label: 'Guided Analysis', ...(reason ? { disabled: true, hint: reason } : { onSelect: onGuided, hint: 'Up to 3 optional questions' }) },
+        ...(quickBlockedReason && !disabledReason ? [{ label: 'View latest analysis', onSelect: onViewAnalysis }] : []),
       ]}
     />
   );

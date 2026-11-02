@@ -1,5 +1,6 @@
 // Types shared by the API server and the web client.
 import type { ProposalOperation } from './aiOps.js';
+import type { StepAssessment } from './assessment.js';
 import type { StepType, WorkflowGraph } from './graph.js';
 
 export type User = { id: string; email: string };
@@ -164,6 +165,8 @@ export type Analysis = {
   assumptions: string[];
   answers: { question: string; answer: string }[];
   recommendations: Recommendation[];
+  /** Automation assessments of work steps. null: made before assessments existed. */
+  assessments: StepAssessment[] | null;
   createdAt: string;
   appliedAt: string | null;
 };

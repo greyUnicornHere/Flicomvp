@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, CircleHelp, Handshake, Plus, RefreshCw, User, Zap } from 'lucide-react';
+import { CLASS_LABEL, CLASS_SHORT, type AutomationClass } from '../../../shared/assessment';
 import type { WorkflowNode } from '../../../shared/graph';
 import { CHANGE_BADGE, type Change } from './changes';
 import { useEditorUi } from './EditorContext';
@@ -23,6 +24,7 @@ export function StepNode({ id, data, selected }: NodeProps<StepFlowNode>) {
   const open = ui.previewing ? [] : openBranches(ui.graph, id);
   const endsPath = !ui.previewing && step.type !== 'finish' && step.type !== 'decision' && flowOut(ui.graph, id).length === 0;
   const inferred = step.origin === 'ai-inferred' && step.assumptionStatus === 'unconfirmed';
+  const assessed = ui.assessments?.get(id);
 
   const add = (slot: Slot) => (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -60,6 +62,28 @@ export function StepNode({ id, data, selected }: NodeProps<StepFlowNode>) {
         <NameInput initial={step.label} onCommit={(label) => ui.commitName(id, label)} onCancel={ui.cancelName} />
       ) : (
         <span className="fl-node-label min-w-0 flex-1 text-left">{step.label || 'Untitled step'}</span>
+      )}
+
+      {assessed && (
+        <button
+          type="button"
+          className="fl-auto-badge nodrag nopan"
+          data-class={assessed.assessment.classification}
+          data-provisional={assessed.assessment.provisional || undefined}
+          data-stale={assessed.stale || undefined}
+          aria-label={`Automation assessment for “${step.label}”: ${automationLabel(assessed.assessment.classification, assessed.assessment.provisional, assessed.stale)}`}
+          title={automationLabel(assessed.assessment.classification, assessed.assessment.provisional, assessed.stale)}
+          // The label has its own action: it never selects the step or a recommendation.
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            ui.openAssessment?.(id);
+          }}
+        >
+          {assessed.stale ? <RefreshCw size={12} aria-hidden="true" /> : <ClassIcon kind={assessed.assessment.classification} />}
+          <span>{CLASS_SHORT[assessed.assessment.classification]}</span>
+        </button>
       )}
 
       {issues.length > 0 && (
@@ -122,4 +146,17 @@ function NameInput({ initial, onCommit, onCancel }: { initial: string; onCommit:
       onBlur={() => onCommit(value)}
     />
   );
+}
+
+const CLASS_ICON = { full: Zap, assisted: Handshake, human: User, unknown: CircleHelp } as const;
+
+function ClassIcon({ kind }: { kind: AutomationClass }) {
+  const Icon = CLASS_ICON[kind];
+  return <Icon size={12} aria-hidden="true" />;
+}
+
+/** The full meaning of an automation label (its visible text is shorter). */
+function automationLabel(kind: AutomationClass, provisional: boolean, stale: boolean): string {
+  if (stale) return `${CLASS_LABEL[kind]}, needs reassessment (the step changed after the analysis)`;
+  return `${CLASS_LABEL[kind]}${provisional ? ' (provisional)' : ''}`;
 }

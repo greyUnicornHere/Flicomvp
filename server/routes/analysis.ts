@@ -10,9 +10,10 @@ import {
   type CreditsResponse,
   type ReviewStatus,
 } from '../../shared/api.js';
+import { assessmentBasis } from '../../shared/assessment.js';
 import { diffGraphs } from '../../shared/aiOps.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
-import { planApply } from '../../shared/analysis.js';
+import { NO_CHANGES_MESSAGE, planApply, quickRepeatBlocked } from '../../shared/analysis.js';
 import { placeNewSteps } from '../../shared/layout.js';
 import { preAnalysisCheck } from '../../shared/validation.js';
 import { transaction } from '../db/database.js';
@@ -24,6 +25,7 @@ import { validateGraph } from '../workflows/graph.js';
 import { getWorkflow, saveGraph } from '../workflows/service.js';
 import {
   creditBalance,
+  currentAnalysis,
   debitForRun,
   ensureInitialGrant,
   failInterruptedRuns,
@@ -138,6 +140,10 @@ export const analysisRoutes =
       }
       const check = preAnalysisCheck(workflow.graph);
       if (!check.canAnalyze) return sendError(reply, 400, 'bad_request', `Fix before analysis: ${check.blockers.map((b) => b.message).join(' ')}`);
+      // A repeat Quick Analysis of an unchanged workflow would add nothing: refused, no credit used.
+      if (parsed.data.mode === 'quick' && quickRepeatBlocked(currentAnalysis(db, userId, workflowId), workflow.graph)) {
+        return sendError(reply, 409, 'conflict', NO_CHANGES_MESSAGE);
+      }
       if (balanceOf(userId) < 1) return sendError(reply, 402, 'no_credits', NO_CREDITS);
 
       const run = startRun(db, userId, workflowId, parsed.data.idempotencyKey, parsed.data.mode, ctx.now());
@@ -174,12 +180,15 @@ export const analysisRoutes =
             finishRun(db, runId, 'failed', ctx.now(), { error: NO_CREDITS });
             return;
           }
-          const { usage: _usage, dropped: _dropped, ...stored } = result;
+          const { usage: _usage, dropped: _dropped, assessments: drafts, ...stored } = result;
+          // Each assessment is bound to its step, this analysis and the analysed revision.
+          const assessedAt = new Date(ctx.now()).toISOString();
+          const assessments = drafts.map((a) => ({ ...a, basis: assessmentBasis(job.graph, a.stepId)!, revision: job.revision, updatedAt: assessedAt }));
           const analysisId = saveAnalysis(
             db,
             userId,
             job.workflowId,
-            { mode: job.mode, source: ai.source, baseRevision: job.revision, snapshot: job.graph, result: stored, answers: job.answers },
+            { mode: job.mode, source: ai.source, baseRevision: job.revision, snapshot: job.graph, result: stored, answers: job.answers, assessments },
             ctx.now(),
           );
           debitForRun(db, userId, runId, ctx.now());

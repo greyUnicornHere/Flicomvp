@@ -60,6 +60,7 @@ An AI proposal must reference existing IDs and express a finite list of schema-v
 - An analysis record contains: workflow ID + exact revision/snapshot, evidence-qualified summary, prioritized recommendations, graph operations per recommendation, risks/assumptions/verification steps, and improved-graph candidate. Derive the selected final combined preview from **accepted** operations, not from a prebuilt full graph that includes rejected ones.
 - Conflict/dependency checking must prevent double deletion, dangling edges, mutually incompatible patches and orphaned branches. Inform users when choices conflict rather than guessing.
 - Analysis snapshots: initial and latest only. If one record exists, do not represent it as two distinct results.
+- *Automation assessment (owner request after Milestone 4, see `DECISIONS.md`):* an analysis also carries **automation assessments** of its work steps (`analyses.assessments_json`; `NULL` for older analyses, shown as "no automation assessment in this analysis"). They come from the same model call (no extra credit). Each is bound to a stable step ID, the analysis and the analysed revision, with a fingerprint of the step and the steps feeding it, so relevant changes show "needs reassessment" while moving blocks does not. Classifications, evidence sources and required fields are validated server-side; invented figures are rejected.
 
 ## 4. Validation and resilience
 

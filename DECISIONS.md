@@ -287,3 +287,43 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - **Long names in the card header**: the name box wraps onto as many lines as the name needs (owner choice "wrap onto more lines"), so the full name is always visible, matching the blocks on the canvas. Enter still finishes the name and never adds a line break; pasted line breaks become spaces.
 - **More details always starts closed** (owner choice), even when the step has details; the summary line shows what's inside. Connections still opens by itself when a decision has a Yes/No path to set.
 - **Analysis diagram auto-arranged and fit to the whole workflow** (owner choice "Auto-arrange + fit all"): the review diagram and the final preview lay the shown workflow out with the same Auto-arrange as the editor, as a view only (the saved layout and positions are not changed). They open zoomed to show every step (minimum zoom lowered from 25% to 10%; the Milestone 4 "readable minimum zoom" is replaced), and refit when the arrangement changes (e.g. after rejecting a recommendation). Selecting a recommendation still pans to its steps without zooming in. It also refits whenever its area changes size (the hidden Analysis tab being shown, a window resize, full screen).
+
+## Automation assessment (owner request, 2026-11-01)
+
+### Owner decisions
+- Build the automation assessment as listed by the owner; **"Refine assessment" is not built** (owner: not now).
+- UI: mockups of three options were compared (automation section in the Analysis tab, badges on blocks, a Changes/Automation diagram switch). The owner chose **A: an Automation section in the Analysis tab**. Nothing is drawn on blocks, in the editor or the Analysis diagram.
+
+### What an assessment is
+- Produced by the same analysis call: no extra credit, no extra model request. Assessed: actions, decisions, approvals and exception handling. Not assessed: Start, Finish and Wait.
+- Four classes (Full automation candidate / Human-assisted automation / Keep human-led / More information needed) plus a **Provisional** flag (not a fifth class). No numerical scores.
+- Stored per step: class, provisional, reasoning, notes on six areas (inputs, rules and judgment, system access, exceptions, verification, risk and accountability), what could be automated, what stays human, evidence (each tagged You said / From the workflow / Assumption), prerequisites, open questions, and business value only where the person gave frequency/time/error figures (otherwise "Not assessed").
+- Server checks (problems trigger the existing single correction retry; anything still invalid is dropped, never shown): the step exists and is a work step, no duplicates, reasoning and evidence present, More information needed has a question, candidate/assisted say what could be automated, assisted/human say what stays human, no invented figures (the Milestone 4 `unsupportedFigures` guard).
+- Binding: stable step ID + analysis + analysed revision + a fingerprint of the step's type, name, owner/team, duration, tools and notes and of the connections and steps that feed it. Positions aren't part of it, so moving blocks never invalidates anything; other changes show **Needs reassessment** instead of presenting the old conclusion as current.
+- Older analyses have no assessments (`NULL`) and say so; they're never shown as "nothing could be automated".
+- Database: migration 5 adds `analyses.assessments_json` only. (A database that ran the withdrawn 4.1 branch also has an unused `workflow_chat_messages.refine_json` column; it is ignored.)
+
+### Automation tab (option A)
+- The side panel of the Analysis tab has **Recommendations | Automation** tabs; Recommendations stays the default. When an analysis has no recommendations but has assessments, only Automation is shown.
+- Automation: four counts, a "recommendations only" note, then steps grouped by class under icon + label headings (lightning, handshake, person, question mark). A row shows the step's current name, a dashed **Provisional** chip and a dotted amber **Needs reassessment** chip when relevant. Opening a row shows the explanation in place, with "Reasoning by area" folded.
+- Linked to the diagram: an open row highlights its step (others dimmed) and brings it into view; clicking a step in the diagram while on Automation opens its row. Change highlighting (added/updated/removed) is untouched.
+- The executive summary lists "N steps assessed for automation" or "No automation assessment in this analysis".
+
+### Labels on the diagram (owner request, 2026-11-02)
+- Owner choices: labels on the **analysis diagram only, while the Automation tab is open**; **clicking a label opens its assessment**.
+- Each assessed block gets a small neutral pill at its bottom-right: class icon + short name (Automation candidate / Human-assisted / Human-led / Needs info), the full class as its accessible name. Provisional = dashed border; needs reassessment = dotted amber with a refresh icon (the class name stays visible).
+- Clicking a label opens that step's row and highlights the step; it never selects a recommendation. With Recommendations open, in the editor and in the final preview there are no labels, so the change colours stand alone.
+- Labels scale with the diagram: with a long workflow fitted to the screen they are small; zoom in or use Full screen to read them.
+
+### Repeat analysis of an unchanged workflow (owner decision, 2026-11-02)
+- The owner asked whether analysing an unchanged workflow again is useful; it isn't, and in the pilot it costs one of 10 credits. Owner choice: **block Quick, allow Guided**.
+- "Unchanged" = the same steps, details and connections as the current analysis's snapshot (`unchangedSince`, built on the same `diffGraphs` comparison that marks an analysis as no longer applicable); positions don't count, so moving or auto-arranging blocks is not a change. Applying recommendations changes the workflow, so a new analysis is possible after Apply.
+- Exceptions: **Guided Analysis** is always allowed (the person's answers add information the workflow doesn't contain), and Quick is allowed when the current analysis has **no automation assessment** (made before it existed), so older analyses can get one.
+- The rule (`quickRepeatBlocked` in `shared/analysis.ts`) is used by both the Analyze menu (Quick disabled, hint "Unchanged since last analysis", plus "View latest analysis") and the server (409 with an explanation, checked before credits and before any model call, so nothing is charged).
+- Menu layout: item labels no longer wrap; a long hint wraps beside them instead.
+
+### Analysis progress on either tab (owner-reported bug, 2026-11-02)
+- Bug: the progress window (stages, Cancel, and the failed/cancelled messages) was drawn inside the Editor tab's area. An analysis started from the Analysis tab, or one still running when the person switched to it, showed no progress at all, so the Analyze menu's "An analysis is running" looked stuck.
+- Fix: the progress window now sits over the content area of whichever tab is open (below the header), so a running, failed or cancelled analysis is always visible and can be cancelled.
+- With live Claude a run can legitimately take a while: each model request has its own time limit (`AI_ANALYSIS_TIMEOUT_SECONDS`, default 180 s) and one transient retry, plus Flico's single correction attempt for invalid output, so a very slow run can take several minutes before it fails without a charge.
+- Analysis tab side panel: the Recommendations / Automation tabs never wrap; the category filter moved to its own row under them.

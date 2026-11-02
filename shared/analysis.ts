@@ -1,11 +1,27 @@
 // Recommendation review rules shared by the analysis screen (live checks) and the server (Apply).
 // Each recommendation is a list of operations against the analysed snapshot. Accepted ones are
 // combined in order; overlapping or dependent choices are reported, never guessed.
-import type { Level, Recommendation } from './api.js';
-import { applyOperations, type ProposalOperation } from './aiOps.js';
+import type { Analysis, Level, Recommendation } from './api.js';
+import { applyOperations, diffGraphs, type ProposalOperation } from './aiOps.js';
 import type { WorkflowGraph } from './graph.js';
 
 type Rec = Pick<Recommendation, 'id' | 'title' | 'operations' | 'dependsOn'>;
+
+/** The workflow is the same as the analysed one: steps, details and connections; where blocks sit doesn't count. */
+export function unchangedSince(snapshot: WorkflowGraph, graph: WorkflowGraph): boolean {
+  return Object.values(diffGraphs(snapshot, graph)).every((ids) => ids.length === 0);
+}
+
+/**
+ * A Quick Analysis would only repeat the current one: the workflow hasn't changed since it, and it
+ * already has the automation assessment. Guided Analysis stays possible (new answers add information).
+ */
+export function quickRepeatBlocked(current: Pick<Analysis, 'snapshot' | 'assessments'> | null, graph: WorkflowGraph): boolean {
+  return !!current && current.assessments !== null && unchangedSince(current.snapshot, graph);
+}
+
+export const NO_CHANGES_MESSAGE =
+  "Nothing has changed since the latest analysis, so a Quick Analysis would repeat it. Change the workflow, or use Guided Analysis to add information.";
 
 export type Touched = { added: Set<string>; modified: Set<string>; removed: Set<string>; referenced: Set<string> };
 

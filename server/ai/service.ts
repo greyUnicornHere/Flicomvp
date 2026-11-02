@@ -3,6 +3,7 @@
 // correction attempt. Nothing here writes to the database.
 import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type QuickAddType, type Recommendation } from '../../shared/api.js';
 import { unsupportedFigures } from '../../shared/analysis.js';
+import { isAssessable, type StepAssessment } from '../../shared/assessment.js';
 import { applyOperations, structuralProblems, type ProposalOperation } from '../../shared/aiOps.js';
 import type { EdgeType, StepType, WorkflowEdge, WorkflowGraph, WorkflowNode } from '../../shared/graph.js';
 import { autoLayout } from '../../shared/layout.js';
@@ -29,6 +30,7 @@ import {
   LIMITS,
   analysisJsonSchema,
   analysisOutput,
+  type AssessmentOutput,
   questionsJsonSchema,
   questionsOutput,
   type AnalysisOutput,
@@ -364,12 +366,60 @@ export type AnalysisResult = {
   outcome: 'improvements' | 'no_improvements';
   assumptions: string[];
   recommendations: Omit<Recommendation, 'status'>[];
+  /** Automation assessments; the caller binds them to the analysed revision. */
+  assessments: AssessmentDraft[];
   /** Recommendations left out because they stayed invalid after the correction attempt. */
   dropped: number;
   usage: Usage;
 };
 
 type CheckedAnalysis = { value: Omit<AnalysisResult, 'usage' | 'dropped'>; problems: string[]; invalidKeys: Set<string> };
+
+export type AssessmentDraft = Omit<StepAssessment, 'basis' | 'revision' | 'updatedAt'>;
+
+/**
+ * Check assessments against the workflow and the decision rules. Returns the valid ones and, for the
+ * correction retry, what was wrong with the others. Never fills gaps with invented content.
+ */
+export function checkAssessments(items: AssessmentOutput[], graph: WorkflowGraph, refs: RefMap, source: string): { valid: AssessmentDraft[]; problems: string[] } {
+  const problems: string[] = [];
+  const valid: AssessmentDraft[] = [];
+  const seen = new Set<string>();
+  for (const a of items) {
+    const own: string[] = [];
+    const id = refs.stepIds.get(a.step);
+    const node = id ? graph.nodes.find((n) => n.id === id) : undefined;
+    if (!node) own.push(`Assessment for "${a.step}": that step doesn't exist.`);
+    else if (!isAssessable(node)) own.push(`Assessment for ${a.step}: ${node.type} steps are not work to assess.`);
+    if (id && seen.has(id)) own.push(`Step ${a.step} is assessed more than once.`);
+    if (!a.reasoning.trim()) own.push(`Assessment for ${a.step} has no reasoning.`);
+    if (a.evidence.length === 0) own.push(`Assessment for ${a.step} cites no evidence.`);
+    if (a.classification === 'unknown' && a.questions.filter((q) => q.trim()).length === 0) own.push(`Assessment for ${a.step} needs more information but lists no question.`);
+    if ((a.classification === 'full' || a.classification === 'assisted') && !a.automatable.trim()) own.push(`Assessment for ${a.step} doesn't say what could be automated.`);
+    if ((a.classification === 'assisted' || a.classification === 'human') && !a.human.trim()) own.push(`Assessment for ${a.step} doesn't say what remains human and why.`);
+    const found = unsupportedFigures([a.reasoning, a.automatable, a.human, a.value, ...a.evidence.map((e) => e.text)].join(' '), source);
+    if (found.length) own.push(`Assessment for ${a.step} states figures that the workflow doesn't support (${found.join(', ')}).`);
+    if (own.length || !id) {
+      problems.push(...own);
+      continue;
+    }
+    seen.add(id);
+    valid.push({
+      stepId: id,
+      classification: a.classification,
+      provisional: a.provisional,
+      reasoning: a.reasoning.trim(),
+      dimensions: { inputs: a.inputs.trim(), rules: a.rules.trim(), access: a.access.trim(), exceptions: a.exceptions.trim(), verification: a.verification.trim(), risk: a.risk.trim() },
+      automatable: a.automatable.trim(),
+      human: a.human.trim(),
+      evidence: a.evidence.filter((e) => e.text.trim()).map((e) => ({ source: e.source, text: e.text.trim() })),
+      prerequisites: a.prerequisites.map((p) => p.trim()).filter(Boolean),
+      questions: a.questions.map((q) => q.trim()).filter(Boolean),
+      value: a.value.trim(),
+    });
+  }
+  return { valid, problems };
+}
 
 /** Validate the model's analysis: every recommendation must apply cleanly to the snapshot, and no invented figures. */
 function checkAnalysis(out: AnalysisOutput, graph: WorkflowGraph, refs: RefMap, source: string): CheckedAnalysis {
@@ -425,6 +475,8 @@ function checkAnalysis(out: AnalysisOutput, graph: WorkflowGraph, refs: RefMap, 
       operations: translated.ok ? translated.value : [],
     });
   }
+  const assessments = checkAssessments(out.automation, graph, refs, source);
+  problems.push(...assessments.problems);
   if (out.outcome === 'improvements' && out.recommendations.length === 0) problems.push('Outcome is "improvements" but there are no recommendations.');
   if (out.outcome === 'no_improvements' && out.recommendations.length > 0) problems.push('Outcome is "no_improvements" but recommendations were given.');
   if (!out.summary.trim()) problems.push('The summary is empty.');
@@ -435,6 +487,7 @@ function checkAnalysis(out: AnalysisOutput, graph: WorkflowGraph, refs: RefMap, 
       outcome: out.outcome,
       assumptions: out.assumptions.map((a) => a.trim()).filter(Boolean).slice(0, 5),
       recommendations,
+      assessments: assessments.valid,
     },
     problems,
     invalidKeys,
@@ -502,6 +555,8 @@ export async function analyzeWorkflow(
       verification: clean(r.verification),
       dependsOn: r.dependsOn.filter((id) => kept.has(id)),
     })),
+    // Invalid assessments were already left out; valid ones are kept.
+    assessments: value.assessments,
     dropped: invalidKeys.size,
     usage,
   };

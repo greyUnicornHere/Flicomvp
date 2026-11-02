@@ -95,3 +95,62 @@ describe('FixtureProvider analysis (development and tests only)', () => {
     expect(questions[2]!.question).toContain('Manager approves');
   });
 });
+
+describe('FixtureProvider automation assessments (acceptance fixtures)', () => {
+  /** Start → <step> → Finish, with the step's details. */
+  const single = (label: string, notes: string, type: 'action' | 'approval' = 'action'): WorkflowGraph => ({
+    nodes: [
+      { id: 'start', type: 'start', label: 'Start', position: { x: 0, y: 0 } },
+      { id: 'task', type, label, notes, position: { x: 0, y: 0 } },
+      { id: 'end', type: 'finish', label: 'Done', position: { x: 0, y: 0 } },
+    ],
+    edges: [
+      { id: '1', sourceId: 'start', targetId: 'task', type: 'normal' },
+      { id: '2', sourceId: 'task', targetId: 'end', type: 'normal' },
+    ],
+  });
+  const assessed = async (g: WorkflowGraph) => (await analyzeWorkflow(fixture, { graph: g, answers: [] }, 1000)).assessments.find((a) => a.stepId === 'task')!;
+
+  it('full automation candidate: supplied rules, inputs, access and checks; untested assumptions disclosed', async () => {
+    const a = await assessed(single('Match invoice to purchase order', 'Rule: the policy is to match amount and PO number. We have API access to the ERP. Finance can verify every match automatically.'));
+    expect(a).toMatchObject({ classification: 'full', provisional: true });
+    expect(a.prerequisites.join(' ')).toMatch(/test/i);
+    expect(a.evidence.some((e) => e.source === 'assumption')).toBe(true);
+  });
+
+  it('human-assisted: quotation comparison automates extraction, keeps the stated technical evaluation human', async () => {
+    const a = await assessed(single('Compare supplier quotations', 'The engineer does the technical evaluation and selects the supplier.'));
+    expect(a.classification).toBe('assisted');
+    expect(a.automatable).toMatch(/Extract prices/);
+    expect(a.human).toMatch(/technical evaluation.*\(you said\)/);
+  });
+
+  it('keep human-led: a stated physical requirement, explained concretely (not from the name)', async () => {
+    const a = await assessed(single('Check delivery', 'A physical inspection of the goods is required on arrival.'));
+    expect(a.classification).toBe('human');
+    expect(a.reasoning).toMatch(/physical/);
+  });
+
+  it('more information needed: an underspecified task gets questions, not invented access or a human-led verdict', async () => {
+    const a = await assessed(single('Process order', ''));
+    expect(a.classification).toBe('unknown');
+    expect(a.questions[0]).toMatch(/where does the information come from/);
+    expect(a.automatable).toBe('');
+  });
+
+  it('keeps feasibility separate from value', async () => {
+    // High volume does not override missing access or rules.
+    const busy = await assessed(single('Process order', 'About 400 orders a week.'));
+    expect(busy.classification).toBe('unknown');
+    expect(busy.value).toMatch(/400 times a week \(you said\).*can't be estimated/);
+    // Missing volume does not prevent a supported feasibility assessment.
+    const supported = await assessed(single('Match invoice', 'Rule: always match amount and PO. API access to the ERP. Each match is verified.'));
+    expect(supported.classification).toBe('full');
+    expect(supported.value).toBe('');
+  });
+
+  it('never assesses Start, Finish or waits', async () => {
+    const result = await analyzeWorkflow(fixture, { graph: single('Process order', ''), answers: [] }, 1000);
+    expect(result.assessments.map((a) => a.stepId)).toEqual(['task']);
+  });
+});

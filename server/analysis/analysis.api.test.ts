@@ -276,14 +276,44 @@ describe('running an analysis', () => {
     const { t, alice, workflow } = await setup([analysis([combine]), analysis([criteria]), analysis([log])]);
     await analyze(t, alice.cookie, workflow);
     expect((await analyses(t, alice.cookie, workflow.id)).map((a) => a.slot)).toEqual(['initial']);
-    await analyze(t, alice.cookie, workflow);
-    await analyze(t, alice.cookie, workflow);
+    // Unchanged workflow: repeats are Guided (a repeat Quick Analysis would be refused).
+    await analyze(t, alice.cookie, workflow, { mode: 'guided' });
+    await analyze(t, alice.cookie, workflow, { mode: 'guided' });
     const list = await analyses(t, alice.cookie, workflow.id);
     expect(list.map((a) => [a.slot, a.recommendations[0]!.title])).toEqual([
       ['initial', 'Recommendation r1'],
       ['latest', 'Recommendation r3'],
     ]);
     expect(await credits(t, alice.cookie)).toBe(7);
+  });
+
+  it('refuses a repeat Quick Analysis of an unchanged workflow without a charge; Guided, real changes and older analyses are allowed', async () => {
+    const { t, ai, alice, workflow } = await setup([analysis([combine]), analysis([criteria]), analysis([log]), analysis([combine])]);
+    expect((await analyze(t, alice.cookie, workflow)).status).toBe('succeeded');
+    const save = async (graph: WorkflowGraph) => {
+      const now = (await t.app.inject({ method: 'GET', url: `/api/workflows/${workflow.id}`, headers: { cookie: alice.cookie } })).json().workflow as WorkflowDetail;
+      const saved = await t.app.inject({ method: 'PUT', url: `/api/workflows/${workflow.id}/graph`, headers: { ...ORIGIN, cookie: alice.cookie }, payload: { graph, baseRevision: now.revision } });
+      expect(saved.statusCode).toBe(200);
+      return (await t.app.inject({ method: 'GET', url: `/api/workflows/${workflow.id}`, headers: { cookie: alice.cookie } })).json().workflow as WorkflowDetail;
+    };
+
+    // Moving blocks is not a change.
+    let current = await save({ ...GRAPH, nodes: GRAPH.nodes.map((n) => ({ ...n, position: { x: n.position.x + 40, y: n.position.y + 120 } })) });
+    const refused = await start(t, alice.cookie, current);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.message).toMatch(/Nothing has changed since the latest analysis/);
+    expect(ai.calls).toHaveLength(1); // the model was never asked
+    expect(await credits(t, alice.cookie)).toBe(9);
+
+    // Guided adds information, so it is allowed.
+    expect((await analyze(t, alice.cookie, current, { mode: 'guided' })).status).toBe('succeeded');
+    // An analysis made before automation assessments existed can be redone with Quick.
+    t.db.prepare('UPDATE analyses SET assessments_json = NULL').run();
+    expect((await analyze(t, alice.cookie, current)).status).toBe('succeeded');
+    // A real change (a renamed step) allows Quick again.
+    current = await save({ ...current.graph, nodes: current.graph.nodes.map((n, i) => (i === 1 ? { ...n, label: `${n.label} (renamed)` } : n)) });
+    expect((await analyze(t, alice.cookie, current)).status).toBe('succeeded');
+    expect(await credits(t, alice.cookie)).toBe(6);
   });
 
   it('gives Ask Flico the latest analysis', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProposalOperation } from './aiOps.js';
-import { findConflicts, orderRecommendations, overlayGraph, planApply, touched, unsupportedFigures } from './analysis.js';
+import { findConflicts, orderRecommendations, overlayGraph, planApply, quickRepeatBlocked, touched, unchangedSince, unsupportedFigures } from './analysis.js';
 import type { WorkflowGraph } from './graph.js';
 
 const base: WorkflowGraph = {
@@ -118,5 +118,30 @@ describe('unsupportedFigures', () => {
   it('allows figures the person provided and ordinary numbers', () => {
     expect(unsupportedFigures('Orders over 5,000 need approval; the 10% discount stays.', 'Discount 10% for orders over 5,000')).toEqual([]);
     expect(unsupportedFigures('Step 2 waits for 3 days.', '')).toEqual([]);
+  });
+});
+
+describe('repeat Quick Analysis', () => {
+  const base: WorkflowGraph = {
+    nodes: [
+      { id: 'a', type: 'start', label: 'Start', position: { x: 0, y: 0 } },
+      { id: 'b', type: 'action', label: 'Check order', position: { x: 288, y: 0 } },
+    ],
+    edges: [{ id: 'e', sourceId: 'a', targetId: 'b', type: 'normal' }],
+  };
+  const moved: WorkflowGraph = { ...base, nodes: base.nodes.map((n) => ({ ...n, position: { x: n.position.x + 50, y: 90 } })) };
+  const renamed: WorkflowGraph = { ...base, nodes: base.nodes.map((n) => (n.id === 'b' ? { ...n, notes: 'Use the checklist' } : n)) };
+
+  it('ignores where blocks sit, but not names, details or connections', () => {
+    expect(unchangedSince(base, moved)).toBe(true);
+    expect(unchangedSince(base, renamed)).toBe(false);
+    expect(unchangedSince(base, { ...base, edges: [] })).toBe(false);
+  });
+
+  it('blocks only when the current analysis already has the automation assessment and nothing changed', () => {
+    expect(quickRepeatBlocked(null, base)).toBe(false);
+    expect(quickRepeatBlocked({ snapshot: base, assessments: [] }, moved)).toBe(true);
+    expect(quickRepeatBlocked({ snapshot: base, assessments: [] }, renamed)).toBe(false);
+    expect(quickRepeatBlocked({ snapshot: base, assessments: null }, moved)).toBe(false);
   });
 });

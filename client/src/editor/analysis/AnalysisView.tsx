@@ -10,6 +10,8 @@ import { applyAnalysis, saveReview } from '../../lib/analysis';
 import { formatModifiedFull } from '../../lib/workflows';
 import { useFullscreen } from '../../lib/useFullscreen';
 import { withChanges, type Focus } from '../flowElements';
+import { needsReassessment } from '../../../../shared/assessment';
+import { AutomationPanel } from './AutomationPanel';
 import { ReviewDiagram } from './ReviewDiagram';
 
 const CATEGORY_LABEL: Record<RecommendationCategory, string> = { quick_win: 'Quick Win', strategic: 'Strategic Improvement', complex: 'Complex Change' };
@@ -30,6 +32,9 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
   const [slot, setSlot] = useState<'initial' | 'latest'>('latest');
   const analysis = analyses.find((a) => a.slot === slot) ?? analyses.at(-1)!;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The side panel shows recommendations or the automation assessment; one step's assessment can be open.
+  const [panel, setPanel] = useState<'recs' | 'automation'>('recs');
+  const [assessId, setAssessId] = useState<string | null>(null);
   const [filter, setFilter] = useState<RecommendationCategory | 'all'>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showRejected, setShowRejected] = useState(false);
@@ -79,8 +84,24 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
   const shown = selected && overlay.skipped.includes(selected.id) ? overlayGraph(snapshot, [selected]) : overlay;
   const display = withChanges(snapshot, placeNewSteps(snapshot, shown.graph));
 
+  const assessments = analysis.assessments;
+  const hasAssessments = !!assessments?.length;
+  // Without recommendations, the side panel shows only the automation assessment (when there is one).
+  const sidePanel = noImprovementsOf(analysis) ? 'automation' : panel;
+  const showSide = !noImprovementsOf(analysis) || hasAssessments;
+
+  // Labels on the diagram's blocks while the Automation view is open.
+  const automationLabels = new Map((assessments ?? []).map((a) => [a.stepId, { assessment: a, stale: needsReassessment(currentGraph, a) }]));
+
   const selectedTouch = selected ? touchedBy.get(selected.id)! : null;
-  const focusIds = selectedTouch ? new Set([...selectedTouch.added, ...selectedTouch.modified, ...selectedTouch.removed, ...selectedTouch.referenced]) : null;
+  const focusIds =
+    sidePanel === 'automation'
+      ? assessId && display.graph.nodes.some((n) => n.id === assessId)
+        ? new Set([assessId])
+        : null
+      : selectedTouch
+        ? new Set([...selectedTouch.added, ...selectedTouch.modified, ...selectedTouch.removed, ...selectedTouch.referenced])
+        : null;
   const focus = (id: string): Focus | undefined => (focusIds ? (focusIds.has(id) ? 'on' : 'dim') : undefined);
   const revealIds = focusIds ? [...focusIds].filter((id) => display.graph.nodes.some((n) => n.id === id)) : [];
 
@@ -116,7 +137,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
 
   const visible = (list: Recommendation[]) => (filter === 'all' ? list : list.filter((r) => r.category === filter));
   const verifyCount = inPlay.filter((r) => r.evidence === 'verify').length;
-  const noImprovements = analysis.outcome === 'no_improvements' || recommendations.length === 0;
+  const noImprovements = noImprovementsOf(analysis);
 
   return (
     <div className="h-full overflow-y-auto bg-[var(--fl-bg-results)]">
@@ -134,7 +155,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
             {analyses.length > 1 && (
               <label className="flex items-center gap-2 text-[13px] text-fl-text-secondary">
                 <span className="fl-sr-only">Show analysis</span>
-                <select className="fl-input !min-h-11 !w-auto !py-2 !text-[13px] font-semibold" value={analysis.slot} onChange={(e) => (setSlot(e.target.value as 'initial' | 'latest'), setSelectedId(null))}>
+                <select className="fl-input !min-h-11 !w-auto !py-2 !text-[13px] font-semibold" value={analysis.slot} onChange={(e) => (setSlot(e.target.value as 'initial' | 'latest'), setSelectedId(null), setAssessId(null))}>
                   <option value="latest">Latest Analysis</option>
                   <option value="initial">Initial Analysis</option>
                 </select>
@@ -201,6 +222,16 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               <span className="h-2.5 w-2.5 rounded-full bg-[var(--fl-diff-change)]" aria-hidden="true" />
               <strong className="text-fl-text">{verifyCount}</strong> require{verifyCount === 1 ? 's' : ''} verification
             </li>
+            <li className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full border border-fl-border-strong" aria-hidden="true" />
+              {assessments === null ? (
+                'No automation assessment in this analysis'
+              ) : (
+                <>
+                  <strong className="text-fl-text">{assessments.length}</strong> step{assessments.length === 1 ? '' : 's'} assessed for automation
+                </>
+              )}
+            </li>
             <li className="flex items-center gap-2 font-semibold text-fl-text">
               <span className="h-2.5 w-2.5 rounded-full bg-fl-text-muted" aria-hidden="true" /> No numerical savings assumed
             </li>
@@ -225,7 +256,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
           </button>
         </div>
 
-        <div className={`mt-4 grid gap-5 ${noImprovements ? '' : 'grid-cols-[minmax(0,62fr)_minmax(0,38fr)]'} ${fullView ? 'min-h-0 flex-1' : ''}`}>
+        <div className={`mt-4 grid gap-5 ${showSide ? 'grid-cols-[minmax(0,62fr)_minmax(0,38fr)]' : ''} ${fullView ? 'min-h-0 flex-1' : ''}`}>
           <div className={`fl-card relative overflow-hidden !p-0 ${fullView ? 'h-full' : 'h-[560px]'}`}>
             <div className="pointer-events-none absolute left-5 right-5 top-4 z-10 flex items-center justify-between">
               <p className="text-[11px] font-bold uppercase tracking-[0.04em] text-fl-text-muted">{noImprovements ? 'Analysed workflow' : 'Change preview'}</p>
@@ -242,29 +273,65 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               focus={focus}
               revealIds={revealIds}
               label={noImprovements ? 'Analysed workflow' : 'Workflow with proposed changes'}
+              assessments={sidePanel === 'automation' ? automationLabels : undefined}
+              onOpenAssessment={(id) => setAssessId(id)}
               onSelectElement={(id) => {
+                if (sidePanel === 'automation') {
+                  if (assessments?.some((a) => a.stepId === id)) setAssessId(assessId === id ? null : id);
+                  return;
+                }
                 const recs = owners.get(id);
                 if (recs?.length) setSelectedId(recs.includes(selectedId ?? '') ? selectedId : recs[0]!);
               }}
             />
           </div>
 
-          {!noImprovements && (
-            <section className={`fl-card flex flex-col !p-0 ${fullView ? 'h-full min-h-0' : 'h-[560px]'}`} aria-labelledby="recs-heading">
-              <div className="flex items-center justify-between gap-3 border-b border-fl-border px-5 py-4">
-                <h2 id="recs-heading" className="text-[16px] font-bold">
-                  Recommendations <span className="font-normal text-fl-text-muted">({inPlay.length})</span>
-                </h2>
-                <label>
-                  <span className="fl-sr-only">Filter recommendations</span>
-                  <select className="fl-input !min-h-9 !w-auto !py-1 !text-[12px]" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
-                    <option value="all">All categories</option>
-                    <option value="quick_win">Quick Wins</option>
-                    <option value="strategic">Strategic Improvements</option>
-                    <option value="complex">Complex Changes</option>
-                  </select>
-                </label>
+          {showSide && (
+            <section className={`fl-card flex flex-col !p-0 ${fullView ? 'h-full min-h-0' : 'h-[560px]'}`} aria-labelledby={sidePanel === 'recs' ? 'recs-heading' : 'automation-heading'}>
+              <div className="flex items-center justify-between gap-3 border-b border-fl-border px-4 pt-2">
+                <div role="tablist" aria-label="Analysis details" className="flex gap-1">
+                  {!noImprovements && (
+                    <button
+                      type="button"
+                      role="tab"
+                      id="recs-heading"
+                      aria-selected={sidePanel === 'recs'}
+                      className={`-mb-px min-h-11 whitespace-nowrap border-b-2 px-2.5 text-[15px] ${sidePanel === 'recs' ? 'border-fl-brand font-bold text-fl-text' : 'border-transparent font-medium text-fl-text-secondary hover:text-fl-text'}`}
+                      onClick={() => setPanel('recs')}
+                    >
+                      Recommendations <span className="font-normal text-fl-text-muted">({inPlay.length})</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    role="tab"
+                    id="automation-heading"
+                    aria-selected={sidePanel === 'automation'}
+                    className={`-mb-px min-h-11 whitespace-nowrap border-b-2 px-2.5 text-[15px] ${sidePanel === 'automation' ? 'border-fl-brand font-bold text-fl-text' : 'border-transparent font-medium text-fl-text-secondary hover:text-fl-text'}`}
+                    onClick={() => setPanel('automation')}
+                  >
+                    Automation {assessments && <span className="font-normal text-fl-text-muted">({assessments.length})</span>}
+                  </button>
+                </div>
               </div>
+              {sidePanel === 'recs' && (
+                <div className="flex justify-end border-b border-fl-border px-4 py-2">
+                  <label>
+                    <span className="fl-sr-only">Filter recommendations</span>
+                    <select className="fl-input !min-h-9 !w-auto !py-1 !text-[12px]" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+                      <option value="all">All categories</option>
+                      <option value="quick_win">Quick Wins</option>
+                      <option value="strategic">Strategic Improvements</option>
+                      <option value="complex">Complex Changes</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+              {sidePanel === 'automation' && (
+                <AutomationPanel assessments={assessments} snapshot={snapshot} currentGraph={currentGraph} selectedId={assessId} onSelect={setAssessId} />
+              )}
+              {sidePanel === 'recs' && (
+              <>
               <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                 {visible(inPlay).map((r) => (
                   <RecommendationCard
@@ -329,6 +396,8 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                   </button>
                 </div>
               )}
+              </>
+              )}
             </section>
           )}
         </div>
@@ -359,6 +428,11 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
       )}
     </div>
   );
+}
+
+/** The analysis found nothing worth recommending. */
+function noImprovementsOf(analysis: Analysis): boolean {
+  return analysis.outcome === 'no_improvements' || analysis.recommendations.length === 0;
 }
 
 function Notice({ tone, children, role }: { tone: 'success' | 'warning' | 'error'; children: React.ReactNode; role?: string }) {

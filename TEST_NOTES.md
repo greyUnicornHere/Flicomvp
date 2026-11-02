@@ -596,3 +596,25 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 |---|---|---|
 | Owner review of the assessment page revamp, step 1 (Action plan, Reassess, Clarify inside the card) | Pass | Product owner approved on 2026-11-02 and asked to proceed with step 2 (blueprints). Merged to `main`; the branch had passed unit + API 317 / 317, E2E 76 / 76, lint, typecheck, build |
 
+## Assessment page revamp, step 2: agent-ready blueprints — 2026-11-02 (branch `agent-blueprints`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **328 / 328 pass** (new: `blueprintExport.test.ts` for readiness, helpers and exports; blueprint API tests in `assist.api.test.ts`; migration 8) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **79 / 79 pass** (3 new in `tests/e2e/blueprint.spec.ts`; analysis, automation and Clarify specs updated from briefs to blueprints) |
+
+All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=fixture`), never a live model.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Create blueprint asks up to 6 questions inside the card (suggested answers, Other, Skip), then the page opens by itself | Pass | E2E `blueprint.spec.ts`; `docs/evidence/blueprints/01-blueprint-questions-1536-test-fixture.png` |
+| Page: build type with reason; trigger, tools (read/write), steps, rules, checkpoints and hand-over, never, test cases; fixture label | Pass | `02-blueprint-page-1536-test-fixture.png` |
+| Readiness: "Ready to build" when complete; "Not ready yet" lists what's missing (rules, open questions) | Pass | unit `blueprintExport.test.ts`; E2E; `04-not-ready-assistant-1536-test-fixture.png` |
+| Exports: suggested format by build type; Claude agent setup (valid tool JSON, never/checkpoints in the prompt), outline (IF on the rules, hand-over), Markdown (readiness), JSON (no fingerprints); downloaded file name and content; every export marked as a starting point and as test fixture | Pass | unit; E2E download; `03-export-json-1536-test-fixture.png` |
+| Journey: Assessed → Clarified → Blueprint; done when the blueprint is current; then only View blueprint | Pass | unit `actionPlan.test.ts`; E2E |
+| Only automation candidates and human-assisted steps (needs-info refused); skipped questions become open questions; no credit used | Pass | API `assist.api.test.ts`; E2E |
+| An older brief stays readable next to Create blueprint; human-led steps keep Support ideas | Pass | E2E `blueprint.spec.ts`, `assist.spec.ts` |
+| Out of date only when the step itself or its classification changes | Pass | unit `blueprintExport.test.ts` |
+| 1280 px: no horizontal scroll | Pass | `05-blueprint-page-1280-test-fixture.png` |
+

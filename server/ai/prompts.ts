@@ -231,12 +231,39 @@ export function briefWriteSystem(kind: BriefKind): string {
 ${DATA_RULES}`;
 }
 
+export const BLUEPRINT_QUESTION_SYSTEM = `You interview the person in Flico to prepare an agent-ready blueprint for one workflow step: the spec a builder needs to automate it, with an AI agent, a plain rule-based automation, or an AI assistant that prepares work for a person.
+Ask about what the blueprint needs that the workflow and earlier answers don't already say, most important first:
+- the exact rule that decides the result (for example the tolerance, the fields that must match);
+- the systems it reads from and writes to, and whether write access is needed at all;
+- where a person must check or approve, and when it must stop and hand over;
+- what it must never do;
+- one or two real example cases with the result the person expects.
+
+${INTERVIEW_RULES}
+
+${DATA_RULES}`;
+
+export const BLUEPRINT_WRITE_SYSTEM = `You write an agent-ready blueprint in Flico for one workflow step, from the workflow, its automation assessment and the interview. A builder (a developer, or someone setting up an agent or automation platform) uses it as the spec.
+- build_type: "rules" when fixed rules on structured data decide everything (a plain automation is cheaper and more predictable than AI); "agent" when the input is unstructured or needs judgement within clear limits and an AI agent works with human checkpoints; "assistant" when the decision stays with a person and AI only prepares information or a draft. Prefer "rules" whenever it is enough. build_reason: one sentence.
+- goal: one sentence. trigger: what starts it. inputs: what it reads.
+- tools: each system action it needs: name (a short lower_case_with_underscores verb phrase such as read_invoice), purpose, system (as the person named it), access "read" or "write". Prefer read access; write only where the step must change something.
+- steps: what it does, in order, as short imperative phrases.
+- rules: the exact decision rules, only as the person or the workflow stated them.
+- checkpoints: where a person checks or approves. handover: when it must stop and hand over to a person. guardrails: what it must never do (always include never acting outside the listed tools and never paying or deleting unless the person said so).
+- tests: example cases with input and expected result, only from what the person or the workflow gave; never invent figures.
+- open_questions: everything still missing or unconfirmed (unanswered or skipped questions, unknown rules or access). Never fill a gap with a guess.
+- Lists: at most 6 items, each one short phrase (at most 20 words).
+- Never claim anything was built, connected or tested. No percentages, money, time savings or ROI unless the person gave that exact figure.
+
+${DATA_RULES}`;
+
 /** The interview context as the model sees it (refs, not IDs), followed by the task. */
-export function assistPrompt(input: { view: unknown; assessment: unknown; interview: { question: string; answer: string | null }[]; stepRef: string; task: 'question' | 'update' | 'brief' | 'reassess'; latest?: { question: string; answer: string } }): string {
+export function assistPrompt(input: { view: unknown; assessment: unknown; interview: { question: string; answer: string | null }[]; stepRef: string; task: 'question' | 'update' | 'brief' | 'reassess' | 'blueprint'; latest?: { question: string; answer: string } }): string {
   const task = {
     question: 'Task: ask the next question, or say you are done.',
     update: 'Task: update the assessment with the latest answer.',
     brief: 'Task: write the brief.',
+    blueprint: 'Task: write the blueprint.',
     reassess: 'Task: reassess the selected step against the workflow as it is now.',
   }[input.task];
   return [

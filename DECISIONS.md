@@ -387,3 +387,19 @@ The owner asked for a way to clarify each assessment and then, based on its clas
   - These messages are still stored as chat messages for history and AI context. Ask Flico hides them, and Ask Flico's own conversation no longer sends them to the model.
   - A written brief opens by itself. The note that an earlier brief is out of date appears only when the step has a brief.
 
+## Agent-ready blueprints (assessment page revamp, step 2; owner request, 2026-11-02)
+- Owner choices: build part 2 after merging part 1; the blueprint opens as a full page; existing briefs stay readable and steps can be upgraded to a blueprint.
+- Blueprints replace briefs for automation candidates and human-assisted steps (`BLUEPRINT_CLASSES`). Human-led steps keep "Support ideas". A step that needs more information must be clarified first.
+- Each blueprint recommends a build type: `rules` (prefer it whenever fixed rules on structured data are enough), `agent` (unstructured input or judgement within clear limits, with human checkpoints) or `assistant` (a person decides). The reason: many automation candidates don't need an AI agent, and a plain automation is cheaper and more predictable.
+- Readiness is computed by `readiness()` in `shared/blueprint.ts`, never claimed by the model. It checks: trigger and inputs, tools, rules, checkpoints or hand-over, hard limits, at least 2 test cases, no open questions.
+- The model must put unknown values in open questions; figures not given by the workflow or the person are refused. Tool names are normalised to lower_case_with_underscores.
+- Storage: table `automation_blueprints` (migration 8), one blueprint per step per analysis, with `basis` and `step_basis`.
+  - A blueprint is out of date if its step itself, or its classification, changed (`blueprintOutdated`).
+  - A blueprint records its `source`, so test-fixture output is labelled on the page and in every export.
+- Interviews: mode `blueprint` (at most 6 questions), inline in the card like Clarify. The final message kind `blueprint` opens the page. Earlier answers to Clarify and to older brief interviews are reused.
+- Exports are generated in the browser from the saved blueprint, with no AI call (`blueprintExport.ts`):
+  - Claude agent setup: system prompt, tool list with an empty input_schema for the builder to fill in, and test cases.
+  - Automation outline: trigger, nodes, an IF on the rules, approvals, hand-over and never.
+  - Markdown, and JSON (`format: flico-blueprint`, version 1, without internal fingerprints).
+  - Each starts with the notice that nothing has been built, connected or tested.
+

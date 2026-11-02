@@ -199,6 +199,25 @@ export const migrations: Migration[] = [
       ALTER TABLE automation_briefs ADD COLUMN step_basis TEXT;
     `,
   },
+  {
+    id: 8,
+    name: 'automation_blueprints',
+    sql: `
+      -- One agent-ready blueprint per step per analysis (automation candidates and human-assisted steps).
+      CREATE TABLE automation_blueprints (
+        analysis_id TEXT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        step_id TEXT NOT NULL,
+        classification TEXT NOT NULL,
+        content_json TEXT NOT NULL,
+        basis TEXT NOT NULL,
+        step_basis TEXT,
+        revision INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (analysis_id, step_id)
+      );
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

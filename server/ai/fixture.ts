@@ -475,6 +475,12 @@ function assist(input: string, system: string) {
         ? ['From the ERP, with API access', 'From emails and PDFs', 'From a shared spreadsheet']
         : /rule|criteria|decide/i.test(question)
           ? ['A fixed written rule', 'Judgement case by case', 'It depends on the customer']
+          : /check or approve/i.test(question)
+            ? ['Only exceptions are checked', 'A person approves each one', 'Nobody, it runs alone']
+            : /never do/i.test(question)
+              ? ['Never pay or change records', 'Never contact customers', 'Never delete anything']
+              : /example/i.test(question)
+                ? []
           : /who|own/i.test(question)
             ? ['A person checks each result', 'Only exceptions are checked', 'Nobody checks it yet']
             : ['Yes', 'No', 'Not sure yet'];
@@ -490,9 +496,20 @@ function assist(input: string, system: string) {
     };
   }
   if (input.includes('Task: write the brief.')) return writeFixtureBrief(system, label, interview);
+  if (input.includes('Task: write the blueprint.')) return writeFixtureBlueprint(view, ref, label, decode<{ classification?: string }>(tagged(input, 'assessment'), {}), interview);
   // Reassess: the step as it is now, with the person's earlier answers.
   if (input.includes('Task: reassess the selected step')) return assess(view, ref, turns());
 
+  if (/agent-ready blueprint/.test(system)) {
+    const question = nextOf([
+      `Which exact rule decides the result of “${label}”?`,
+      'Which systems does it read from, and does it need to change anything?',
+      'Where must a person check or approve, and when should it stop?',
+      'What must it never do?',
+      'Can you give a real example case and the result you expect?',
+    ]);
+    return { done: !question, question, options: optionsFor(question) };
+  }
   const kind = /automation brief/.test(system) ? 'automation' : /assist brief/.test(system) ? 'assist' : /support ideas/.test(system) ? 'support' : null;
   const candidates = !kind
     ? clarifyQuestions
@@ -503,6 +520,39 @@ function assist(input: string, system: string) {
       }[kind];
   const question = nextOf(candidates);
   return { done: !question, question, options: optionsFor(question) };
+}
+
+function writeFixtureBlueprint(view: View, ref: string, label: string, assessment: { classification?: string }, interview: { question: string; answer: string }[]) {
+  const step = view.steps.find((s) => s.ref === ref);
+  const answered = interview.filter((t) => t.answer !== '(skipped)');
+  const about = (pattern: RegExp) => answered.filter((t) => pattern.test(t.question)).map((t) => `You said: ${quoteOf(t.answer)}`);
+  const text = `${step?.notes ?? ''} ${answered.map((t) => t.answer).join(' ')}`.toLowerCase();
+  const build = assessment.classification === 'assisted' ? 'assistant' : /pdf|email|scan|document|free text/.test(text) ? 'agent' : 'rules';
+  const rules = [...about(/rule|criteria|decide/i), ...(/rule|policy/.test(step?.notes?.toLowerCase() ?? '') ? ['Apply the rule written in the step notes.'] : [])];
+  const never = about(/never/i);
+  const people = about(/check or approve/i);
+  const example = answered.find((t) => /example/i.test(t.question));
+  return {
+    build_type: build,
+    build_reason: build === 'rules' ? 'Fixed rules on structured data decide the result, so a plain automation is enough.' : build === 'agent' ? 'The input needs reading and judgement within clear rules, with a person at set points.' : 'A person keeps the decision; AI prepares the information.',
+    goal: `Handle “${label}” consistently, with people only where they add judgement.`,
+    trigger: `A new case for “${label}” arrives.`,
+    inputs: [`The information “${label}” needs.`],
+    tools: [
+      { name: 'read_inputs', purpose: `Read the inputs for “${label}”.`, system: 'The source system', access: 'read' },
+      { name: 'notify_person', purpose: 'Send cases that need a person to the responsible team.', system: 'Email or chat', access: 'write' },
+    ],
+    steps: ['Read the new case.', 'Check it against the rules.', 'Record the result.', 'Send exceptions to a person.'],
+    rules,
+    checkpoints: people.length ? people : [assessment.classification === 'assisted' ? 'A person reviews the prepared result and decides.' : 'A person reviews every case the rules do not cover.'],
+    handover: ['The input is missing or unreadable.', 'The case is not covered by the rules.'],
+    guardrails: [...never, 'Never act outside the listed tools.', 'Never pay, delete or change master data.'],
+    tests: [
+      { name: 'Normal case', input: example ? example.answer : `A typical “${label}” case that meets the rules.`, expected: 'Handled without a person, result recorded.' },
+      { name: 'Exception', input: 'A case the rules do not cover.', expected: 'Stopped and handed to a person with the reason.' },
+    ],
+    open_questions: [...interview.filter((t) => t.answer === '(skipped)').map((t) => t.question), ...(rules.length ? [] : ['Which exact rule decides the result?'])],
+  };
 }
 
 function writeFixtureBrief(system: string, label: string, interview: { question: string; answer: string }[]) {

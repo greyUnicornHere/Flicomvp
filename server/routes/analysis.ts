@@ -11,6 +11,7 @@ import {
   type ReviewStatus,
 } from '../../shared/api.js';
 import { basesOf, isAssessable, BRIEF_KIND, BRIEF_MAX_QUESTIONS, BRIEF_TITLE, CLARIFY_MAX_QUESTIONS, needsReassessment, type StepAssessment } from '../../shared/assessment.js';
+import { BLUEPRINT_CLASSES, BLUEPRINT_MAX_QUESTIONS } from '../../shared/blueprint.js';
 import type { AssistInfo, AssistMode, AssistResponse, ChatMessage } from '../../shared/api.js';
 import { diffGraphs } from '../../shared/aiOps.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
@@ -20,7 +21,7 @@ import { preAnalysisCheck } from '../../shared/validation.js';
 import { transaction } from '../db/database.js';
 import { requireAuth, sendError, type AppContext } from '../http.js';
 import { AI_ERROR_MESSAGES, AiError, type AiProvider } from '../ai/provider.js';
-import { AiOutputError, analyzeWorkflow, assistQuestion, clarifyUpdate, reassessStep, suggestQuestions, writeBrief, type InterviewTurn } from '../ai/service.js';
+import { AiOutputError, analyzeWorkflow, assistQuestion, clarifyUpdate, reassessStep, suggestQuestions, writeBlueprint, writeBrief, type InterviewTurn } from '../ai/service.js';
 import { appendExchange, getMessage, listMessages, recordUsage, setAssistStatus, usedToday } from '../ai/store.js';
 import { validateGraph } from '../workflows/graph.js';
 import { getWorkflow, saveGraph } from '../workflows/service.js';
@@ -36,6 +37,7 @@ import {
   getRun,
   listAnalyses,
   saveAssessments,
+  saveBlueprint,
   saveBrief,
   markApplied,
   runningRun,
@@ -242,7 +244,7 @@ export const analysisRoutes =
 
     // ---------- interviews about one step: Clarify and briefs (Ask Flico, one question at a time, no credit) ----------
 
-    const assistStartBody = z.strictObject({ stepId: z.string().min(1).max(64), mode: z.enum(['clarify', 'brief']), baseRevision: z.number().int().positive() });
+    const assistStartBody = z.strictObject({ stepId: z.string().min(1).max(64), mode: z.enum(['clarify', 'brief', 'blueprint']), baseRevision: z.number().int().positive() });
     const assistAnswerBody = z.union([
       z.strictObject({ messageId: z.string().min(1).max(64), baseRevision: z.number().int().positive(), answer: z.string().trim().min(1, 'Please type an answer, or skip for now.').max(ANALYSIS_ANSWER_MAX) }),
       z.strictObject({ messageId: z.string().min(1).max(64), baseRevision: z.number().int().positive(), skip: z.literal(true) }),
@@ -279,9 +281,9 @@ export const analysisRoutes =
     /** Questions asked in the current run of this interview (since it last finished). */
     const askedThisRun = (messages: ChatMessage[], mode: AssistMode) => {
       const own = messages.filter((m) => m.assist?.mode === mode);
-      const lastEnd = own.map((m) => m.assist!.kind).lastIndexOf('done');
-      const lastBrief = own.map((m) => m.assist!.kind).lastIndexOf('brief');
-      return own.slice(Math.max(lastEnd, lastBrief) + 1).filter((m) => m.assist!.kind === 'question').length;
+      const kinds = own.map((m) => m.assist!.kind);
+      const lastEnd = Math.max(kinds.lastIndexOf('done'), kinds.lastIndexOf('brief'), kinds.lastIndexOf('blueprint'));
+      return own.slice(lastEnd + 1).filter((m) => m.assist!.kind === 'question').length;
     };
     const label = (graph: WorkflowGraph, stepId: string) => graph.nodes.find((n) => n.id === stepId)?.label ?? 'this step';
     const chatAvailable = (userId: string) => usedToday(db, userId, 'chat', ctx.now()) < config.AI_DAILY_CHAT;
@@ -301,6 +303,20 @@ export const analysisRoutes =
       });
     };
 
+    /** Write and save the step's blueprint, and the message that announces it. */
+    const finishBlueprint = async (userId: string, ai: AiProvider, found: Exclude<ReturnType<typeof assistContext>, Fail>, meta: Omit<AssistInfo, 'kind'>) => {
+      const { analysis, workflow, assessment } = found;
+      const written = await writeBlueprint(ai, { graph: workflow.graph, assessment, turns: turnsOf(stepMessages(userId, workflow.id, analysis.id, assessment.stepId)) }, timeout());
+      return transaction(db, () => {
+        const latest = getWorkflow(db, userId, workflow.id);
+        if (!latest || needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was writing, so no blueprint was saved. Reassess it first.'] as Fail;
+        saveBlueprint(db, userId, { ...written.blueprint, source: ai.source, analysisId: analysis.id, stepId: assessment.stepId, classification: assessment.classification, ...basesOf(latest.graph, assessment.stepId)!, revision: latest.revision }, ctx.now());
+        recordUsage(db, userId, 'chat', ai.source, written.usage, ctx.now());
+        return appendExchange(db, userId, workflow.id, [{ role: 'assistant', content: `The blueprint for “${meta.stepLabel}” is ready.`, source: ai.source, assist: { ...meta, kind: 'blueprint' } }], ctx.now());
+      });
+    };
+    const finishWriting = (mode: AssistMode, ...args: Parameters<typeof finishBrief>) => (mode === 'blueprint' ? finishBlueprint(...args) : finishBrief(...args));
+
     app.post<IdParams>('/analyses/:id/assist', rateLimit, async (request, reply) => {
       const parsed = assistStartBody.safeParse(request.body);
       if (!parsed.success) return sendError(reply, 400, 'bad_request', 'Invalid request.');
@@ -312,6 +328,9 @@ export const analysisRoutes =
       if (mode === 'brief' && !BRIEF_KIND[assessment.classification]) {
         return sendError(reply, 409, 'conflict', 'This step needs more information first. Use Clarify, then create its brief.');
       }
+      if (mode === 'blueprint' && !BLUEPRINT_CLASSES.includes(assessment.classification)) {
+        return sendError(reply, 409, 'conflict', 'Blueprints are for automation candidates and human-assisted steps. Use Clarify first if this step needs more information.');
+      }
       const messages = stepMessages(userId, workflow.id, analysis.id, stepId);
       // An open question is simply shown again: one question at a time.
       const open = messages.find((m) => m.assist?.kind === 'question' && m.assist.status === 'pending');
@@ -321,10 +340,10 @@ export const analysisRoutes =
       const meta = { analysisId: analysis.id, stepId, stepLabel: label(workflow.graph, stepId), mode, revision: workflow.revision };
       try {
         const next = await assistQuestion(provider, { graph: workflow.graph, assessment, turns: turnsOf(messages), mode, kind: BRIEF_KIND[assessment.classification] ?? undefined }, timeout());
-        if (next.done && mode === 'brief') {
-          // Nothing left to ask: write the brief straight away.
+        if (next.done && mode !== 'clarify') {
+          // Nothing left to ask: write the brief or blueprint straight away.
           recordUsage(db, userId, 'chat', provider.source, next.usage, ctx.now());
-          const written = await finishBrief(userId, provider, found, meta);
+          const written = await finishWriting(mode, userId, provider, found, meta);
           if (typeof written[0] === 'number') return sendError(reply, ...(written as unknown as Fail));
           return { messages: written as ChatMessage[], analysis: getAnalysis(db, userId, analysis.id)! } satisfies AssistResponse;
         }
@@ -369,7 +388,7 @@ export const analysisRoutes =
       const earlier = turnsOf(messages);
       const meta = { analysisId: analysis.id, stepId, stepLabel: label(workflow.graph, stepId), mode, revision: workflow.revision };
       const runCount = askedThisRun(messages, mode);
-      const cap = mode === 'clarify' ? CLARIFY_MAX_QUESTIONS : BRIEF_MAX_QUESTIONS;
+      const cap = mode === 'clarify' ? CLARIFY_MAX_QUESTIONS : mode === 'blueprint' ? BLUEPRINT_MAX_QUESTIONS : BRIEF_MAX_QUESTIONS;
       const now = () => new Date(ctx.now()).toISOString();
       try {
         // The model is asked first; nothing is stored unless the whole step succeeds.
@@ -419,8 +438,8 @@ export const analysisRoutes =
           if (updated) saveAssessments(db, userId, analysis.id, current.assessments.map((a) => (a.stepId === stepId ? updated! : a)));
           setAssistStatus(db, userId, question.id, skip ? 'skipped' : 'answered');
           recordUsage(db, userId, 'chat', provider.source, usage, ctx.now());
-          // Mention an outdated brief only when the step has one.
-          const changed = updated && updated.classification !== assessment.classification && current.briefs.some((b) => b.stepId === stepId);
+          // Mention an outdated brief or blueprint only when the step has one.
+          const changed = updated && updated.classification !== assessment.classification && [...current.briefs, ...current.blueprints].some((b) => b.stepId === stepId);
           return appendExchange(
             db,
             userId,
@@ -428,7 +447,7 @@ export const analysisRoutes =
             [
               skip ? { role: 'user', content: 'Skipped for now', assist: { ...meta, kind: 'skip', questionId: question.id } } : { role: 'user', content: answer, assist: { ...meta, kind: 'answer', questionId: question.id } },
               ...(mode === 'clarify' && !skip
-                ? [{ role: 'assistant' as const, content: replyText + (changed ? ' The classification changed, so any earlier brief for this step is out of date.' : ''), source: provider.source, assist: { ...meta, kind: 'update' as const } }]
+                ? [{ role: 'assistant' as const, content: replyText + (changed ? ' The classification changed, so the earlier brief or blueprint for this step is out of date.' : ''), source: provider.source, assist: { ...meta, kind: 'update' as const } }]
                 : []),
               ...(nextQuestion
                 ? [{ role: 'assistant' as const, content: nextQuestion, source: provider.source, assist: { ...meta, kind: 'question' as const, status: 'pending' as const, options: nextOptions } }]
@@ -442,10 +461,10 @@ export const analysisRoutes =
         if (Array.isArray(outcome) && typeof outcome[0] === 'number') return sendError(reply, ...(outcome as unknown as Fail));
         let added = outcome as ChatMessage[];
         // The brief interview is over: write the brief.
-        if (mode === 'brief' && !nextQuestion) {
+        if (mode !== 'clarify' && !nextQuestion) {
           const refreshed = assistContext(userId, analysis.id, stepId, workflow.revision);
           if (Array.isArray(refreshed)) return sendError(reply, ...refreshed);
-          const written = await finishBrief(userId, provider, refreshed, meta);
+          const written = await finishWriting(mode, userId, provider, refreshed, meta);
           if (Array.isArray(written) && typeof written[0] === 'number') return sendError(reply, ...(written as unknown as Fail));
           added = [...added, ...(written as ChatMessage[])];
         }

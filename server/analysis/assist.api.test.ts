@@ -160,6 +160,46 @@ describe('briefs', () => {
   });
 });
 
+describe('blueprints', () => {
+  it('interviews, then writes a blueprint with a build type, tools, limits and tests; saved and readable; no credit', async () => {
+    const { t, alice, workflow, analysis } = await setup();
+    let msg = (await start(t, alice.cookie, analysis.id, { stepId: 'n-match', mode: 'blueprint', baseRevision: workflow.revision })).json().messages.at(-1) as ChatMessage;
+    expect(msg.assist).toMatchObject({ mode: 'blueprint', kind: 'question', status: 'pending' });
+    expect(msg.content).toMatch(/rule/i);
+    const answers = ['Amount and PO number must match exactly.', 'Read from the ERP; it never needs to change anything.', 'Finance approves every mismatch.', 'Never pay an invoice.', 'Invoice INV-7 for PO-7 matches, so it is marked matched.'];
+    for (let i = 0; i < 8 && msg?.assist?.kind === 'question'; i++) {
+      msg = (await answer(t, alice.cookie, analysis.id, { messageId: msg.id, baseRevision: workflow.revision, answer: answers[i] ?? 'Not sure.' })).json().messages.at(-1);
+    }
+    expect(msg.assist).toMatchObject({ mode: 'blueprint', kind: 'blueprint' });
+    const [saved] = await analyses(t, alice.cookie, workflow.id);
+    const bp = saved!.blueprints.find((b) => b.stepId === 'n-match')!;
+    expect(bp).toMatchObject({ classification: 'full', buildType: 'rules', analysisId: analysis.id });
+    expect(bp.rules.join(' ')).toMatch(/Amount and PO number/);
+    expect(bp.guardrails.join(' ')).toMatch(/Never pay an invoice/);
+    expect(bp.tools.every((tool) => /^[a-z][a-z0-9_]*$/.test(tool.name))).toBe(true);
+    expect(bp.tests.length).toBeGreaterThanOrEqual(2);
+    expect(bp.stepBasis).toEqual(expect.any(String));
+    const { readiness } = await import('../../shared/blueprint.js');
+    expect(readiness(bp).ready).toBe(true);
+    expect(await credits(t, alice.cookie)).toBe(9);
+  });
+
+  it('only for automation candidates and human-assisted steps; skipped questions stay open in the blueprint', async () => {
+    const { t, alice, workflow, analysis } = await setup();
+    const refused = await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'blueprint', baseRevision: workflow.revision });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.message).toMatch(/automation candidates and human-assisted/);
+    let msg = (await start(t, alice.cookie, analysis.id, { stepId: 'n-compare', mode: 'blueprint', baseRevision: workflow.revision })).json().messages.at(-1) as ChatMessage;
+    for (let i = 0; i < 8 && msg?.assist?.kind === 'question'; i++) msg = (await answer(t, alice.cookie, analysis.id, { messageId: msg.id, baseRevision: workflow.revision, skip: true })).json().messages.at(-1);
+    const [saved] = await analyses(t, alice.cookie, workflow.id);
+    const bp = saved!.blueprints.find((b) => b.stepId === 'n-compare')!;
+    expect(bp.buildType).toBe('assistant');
+    expect(bp.openQuestions.length).toBeGreaterThan(0);
+    const { readiness } = await import('../../shared/blueprint.js');
+    expect(readiness(bp).ready).toBe(false);
+  });
+});
+
 describe('safety', () => {
   it('refuses changed steps and older analyses; moving blocks is fine', async () => {
     const { t, alice, workflow, analysis } = await setup();

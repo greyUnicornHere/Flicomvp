@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronUp, CircleHelp, ClipboardList, Handshake, MessageCircleQuestion, RefreshCw, Star, User, Workflow, X, Zap, type LucideIcon } from 'lucide-react';
+import { Check, ChevronDown, FileCode2, ChevronRight, ChevronUp, CircleHelp, ClipboardList, Handshake, MessageCircleQuestion, RefreshCw, Star, User, Workflow, X, Zap, type LucideIcon } from 'lucide-react';
 import type { Recommendation, RecommendationCategory, ReviewStatus } from '../../../../shared/api';
 import { BRIEF_KIND, BRIEF_TITLE, CLASS_SHORT, DIMENSIONS, DIMENSION_LABEL, EVIDENCE_LABEL as SOURCE_LABEL, nextStep, type AutomationClass, type EvidenceSource } from '../../../../shared/assessment';
 import type { ActionPlan, AutomationItem, ProcessItem, Stage } from './actionPlan';
@@ -47,6 +47,10 @@ type Props = {
   actionsBlocked: string | null;
   onClarify?: (stepId: string) => void;
   onBrief?: (stepId: string) => void;
+  /** Start (or update) the step's agent-ready blueprint. */
+  onBlueprint?: (stepId: string) => void;
+  /** Open the step's blueprint page. */
+  onOpenBlueprint: (stepId: string) => void;
   /** Reassess one step against the workflow as it is now; rejects with a readable message. */
   onReassess?: (stepId: string) => Promise<void>;
   /** The Clarify or brief interview in progress, shown inside its step's card. */
@@ -230,6 +234,8 @@ export function ActionPlanPanel(props: Props) {
                     reassessError={reassessError?.id === item.id ? reassessError.message : null}
                     interview={props.interview?.stepId === item.id ? props.interview : null}
                     onViewBrief={() => setViewing(item.id)}
+                    onBlueprint={props.onBlueprint && (() => props.onBlueprint!(item.id))}
+                    onOpenBlueprint={() => props.onOpenBlueprint(item.id)}
                   />
                 ))}
               </ol>
@@ -405,13 +411,28 @@ function ProcessCard(props: {
 
 type Action = { key: string; label: string; aria: string; icon: LucideIcon; primary: boolean; onClick: () => void; gated: boolean };
 
-/** The actions an automation step offers, the most useful next one first and filled. */
-function automationActions(item: AutomationItem, name: string, handlers: { onClarify?: () => void; onBrief?: () => void; onViewBrief: () => void; onReassess?: () => void; reassessing?: boolean }): Action[] {
-  const { assessment: a, brief, briefCurrent } = item;
-  // The step itself changed: reassessing it comes first; the brief can still be read.
+/** What a step card's buttons can do. */
+type Handlers = {
+  onClarify?: () => void;
+  onBrief?: () => void;
+  onViewBrief: () => void;
+  onBlueprint?: () => void;
+  onOpenBlueprint: () => void;
+  onReassess?: () => void;
+  reassessing?: boolean;
+};
+
+/** The actions an automation step offers; the most useful next one is filled. */
+function automationActions(item: AutomationItem, name: string, handlers: Handlers): Action[] {
+  const { assessment: a, brief, briefCurrent, blueprint, blueprintCurrent } = item;
+  const viewBrief = (primary: boolean): Action[] =>
+    brief ? [{ key: 'view', label: `View ${brief.kind === 'support' ? 'ideas' : 'brief'}`, aria: `View ${BRIEF_TITLE[brief.kind].toLowerCase()} for “${name}”`, icon: ClipboardList, primary, onClick: handlers.onViewBrief, gated: false }] : [];
+  const viewBlueprint = (primary: boolean): Action[] =>
+    blueprint ? [{ key: 'blueprint-view', label: 'View blueprint', aria: `View blueprint for “${name}”`, icon: FileCode2, primary, onClick: handlers.onOpenBlueprint, gated: false }] : [];
+  // The step itself changed: reassessing it comes first; what was written can still be read.
   if (item.outdated) {
     return [
-      ...(brief ? [{ key: 'view', label: `View ${brief.kind === 'support' ? 'ideas' : 'brief'}`, aria: `View ${BRIEF_TITLE[brief.kind].toLowerCase()} for “${name}”`, icon: ClipboardList, primary: false, onClick: handlers.onViewBrief, gated: false }] : []),
+      ...(blueprint ? viewBlueprint(false) : viewBrief(false)),
       ...(handlers.onReassess
         ? [{ key: 'reassess', label: handlers.reassessing ? 'Reassessing…' : 'Reassess', aria: `Reassess “${name}”`, icon: RefreshCw, primary: true, onClick: handlers.onReassess, gated: true }]
         : []),
@@ -420,29 +441,25 @@ function automationActions(item: AutomationItem, name: string, handlers: { onCla
   const kind = BRIEF_KIND[a.classification];
   const clarify = (primary: boolean): Action[] =>
     handlers.onClarify ? [{ key: 'clarify', label: 'Clarify', aria: `Clarify “${name}”`, icon: MessageCircleQuestion, primary, onClick: handlers.onClarify, gated: true }] : [];
-  const view = (primary: boolean): Action[] =>
-    brief ? [{ key: 'view', label: `View ${brief.kind === 'support' ? 'ideas' : 'brief'}`, aria: `View ${BRIEF_TITLE[brief.kind].toLowerCase()} for “${name}”`, icon: ClipboardList, primary, onClick: handlers.onViewBrief, gated: false }] : [];
-  const create = (primary: boolean): Action[] =>
-    kind && handlers.onBrief
-      ? [
-          {
-            key: 'brief',
-            label: brief ? 'Update brief' : kind === 'support' ? 'Support ideas' : 'Create brief',
-            aria: brief ? `Update ${BRIEF_TITLE[kind].toLowerCase()} for “${name}”` : `Create ${BRIEF_TITLE[kind].toLowerCase()} for “${name}”`,
-            icon: ClipboardList,
-            primary,
-            onClick: handlers.onBrief,
-            gated: true,
-          },
-        ]
-      : [];
 
   if (!kind) return clarify(true);
-  // Once the brief is ready it is the only action; "Update brief" lives in the brief itself.
-  if (briefCurrent) return view(a.classification !== 'human');
-  if (a.classification === 'human') return [...clarify(false), ...(brief ? [...view(false), ...create(false)] : create(false))];
-  if (brief) return [...view(false), ...create(true)];
-  return a.clarified ? [...clarify(false), ...create(true)] : [...create(false), ...clarify(true)];
+  // Human-led steps keep the short "Support ideas".
+  if (a.classification === 'human') {
+    const ideas: Action[] = handlers.onBrief
+      ? [{ key: 'brief', label: brief ? 'Update ideas' : 'Support ideas', aria: `${brief ? 'Update' : 'Create'} support ideas for “${name}”`, icon: ClipboardList, primary: false, onClick: handlers.onBrief, gated: true }]
+      : [];
+    if (briefCurrent) return viewBrief(false);
+    return [...clarify(false), ...viewBrief(false), ...ideas];
+  }
+  // Automation candidates and human-assisted steps end with an agent-ready blueprint.
+  const create: Action[] = handlers.onBlueprint
+    ? [{ key: 'blueprint', label: blueprint ? 'Update blueprint' : 'Create blueprint', aria: `${blueprint ? 'Update' : 'Create'} blueprint for “${name}”`, icon: FileCode2, primary: true, onClick: handlers.onBlueprint, gated: true }]
+    : [];
+  if (blueprintCurrent) return viewBlueprint(true);
+  if (blueprint) return [...viewBlueprint(false), ...create];
+  // An older brief stays readable next to the upgrade.
+  if (brief) return [...viewBrief(false), ...create];
+  return a.clarified ? [...clarify(false), ...create] : [...create.map((x) => ({ ...x, primary: false })), ...clarify(true)];
 }
 
 function AutomationCard(props: {
@@ -454,6 +471,8 @@ function AutomationCard(props: {
   onClarify?: () => void;
   onBrief?: () => void;
   onViewBrief: () => void;
+  onBlueprint?: () => void;
+  onOpenBlueprint: () => void;
   onReassess?: () => void;
   reassessing: boolean;
   reassessError: string | null;
@@ -558,7 +577,15 @@ function AutomationCard(props: {
             <InterviewPanel
               view={props.interview}
               stepName={name}
-              onCreateBrief={props.interview.mode === 'clarify' && BRIEF_KIND[a.classification] && !item.briefCurrent && !item.outdated ? props.onBrief : undefined}
+              next={
+                props.interview.mode !== 'clarify' || item.outdated
+                  ? undefined
+                  : (a.classification === 'full' || a.classification === 'assisted') && !item.blueprintCurrent && props.onBlueprint
+                    ? { label: item.blueprint ? 'Update blueprint' : 'Create blueprint', onClick: props.onBlueprint }
+                    : a.classification === 'human' && !item.briefCurrent && props.onBrief
+                      ? { label: 'Support ideas', onClick: props.onBrief }
+                      : undefined
+              }
             />
           )}
           {why && (

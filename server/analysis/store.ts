@@ -11,6 +11,7 @@ import type {
   ReviewStatus,
 } from '../../shared/api.js';
 import type { AutomationBrief, BriefKind, StepAssessment } from '../../shared/assessment.js';
+import type { Blueprint } from '../../shared/blueprint.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
 import type { Db } from '../db/database.js';
 import { newId } from '../auth/tokens.js';
@@ -155,6 +156,7 @@ const toAnalysis = (row: AnalysisRow): Analysis => {
     recommendations: result.recommendations.map((r) => ({ ...r, status: review[r.id] ?? 'pending' })),
     assessments: row.assessments_json === null ? null : (JSON.parse(row.assessments_json) as StepAssessment[]),
     briefs: [],
+    blueprints: [],
     createdAt: new Date(row.created_at).toISOString(),
     appliedAt: row.applied_at === null ? null : new Date(row.applied_at).toISOString(),
   };
@@ -164,12 +166,12 @@ export function listAnalyses(db: Db, ownerId: string, workflowId: string): Analy
   const rows = db
     .prepare("SELECT * FROM analyses WHERE workflow_id = ? AND owner_id = ? ORDER BY CASE slot WHEN 'initial' THEN 0 ELSE 1 END")
     .all(workflowId, ownerId) as AnalysisRow[];
-  return rows.map((row) => withBriefs(db, toAnalysis(row)));
+  return rows.map((row) => withBlueprints(db, withBriefs(db, toAnalysis(row))));
 }
 
 export function getAnalysis(db: Db, ownerId: string, id: string): Analysis | null {
   const row = db.prepare('SELECT * FROM analyses WHERE id = ? AND owner_id = ?').get(id, ownerId) as AnalysisRow | undefined;
-  return row ? withBriefs(db, toAnalysis(row)) : null;
+  return row ? withBlueprints(db, withBriefs(db, toAnalysis(row))) : null;
 }
 
 type BriefRow = {
@@ -202,6 +204,46 @@ function withBriefs(db: Db, analysis: Analysis): Analysis {
       createdAt: new Date(r.created_at).toISOString(),
     })),
   };
+}
+
+type BlueprintRow = {
+  analysis_id: string;
+  step_id: string;
+  classification: Blueprint['classification'];
+  content_json: string;
+  basis: string;
+  step_basis: string | null;
+  revision: number;
+  created_at: number;
+};
+type BlueprintContent = Omit<Blueprint, 'analysisId' | 'stepId' | 'classification' | 'basis' | 'stepBasis' | 'revision' | 'createdAt'>;
+
+function withBlueprints(db: Db, analysis: Analysis): Analysis {
+  const rows = db.prepare('SELECT * FROM automation_blueprints WHERE analysis_id = ? ORDER BY created_at').all(analysis.id) as BlueprintRow[];
+  return {
+    ...analysis,
+    blueprints: rows.map((r) => ({
+      ...(JSON.parse(r.content_json) as BlueprintContent),
+      analysisId: r.analysis_id,
+      stepId: r.step_id,
+      classification: r.classification,
+      basis: r.basis,
+      ...(r.step_basis ? { stepBasis: r.step_basis } : {}),
+      revision: r.revision,
+      createdAt: new Date(r.created_at).toISOString(),
+    })),
+  };
+}
+
+/** Save a step's blueprint, replacing an earlier one for the same step of the same analysis. */
+export function saveBlueprint(db: Db, ownerId: string, bp: Omit<Blueprint, 'createdAt'>, now: number): void {
+  const { analysisId, stepId, classification, basis, stepBasis, revision, ...content } = bp;
+  db.prepare(
+    `INSERT INTO automation_blueprints (analysis_id, owner_id, step_id, classification, content_json, basis, step_basis, revision, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (analysis_id, step_id) DO UPDATE SET classification = excluded.classification, content_json = excluded.content_json,
+       basis = excluded.basis, step_basis = excluded.step_basis, revision = excluded.revision, created_at = excluded.created_at`,
+  ).run(analysisId, ownerId, stepId, classification, JSON.stringify(content satisfies BlueprintContent), basis, stepBasis ?? null, revision, now);
 }
 
 /** Replace an analysis's assessments (after Clarify). Other analyses and the snapshot are untouched. */

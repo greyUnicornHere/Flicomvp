@@ -73,9 +73,9 @@ test('Automation in the Action plan: top opportunities first, compact cards, exp
   await expect(row(page, 'Send quotation')).toContainText('Needs info');
   // Start, Finish and the wait are not work, so they are not assessed.
   await expect(panel(page)).not.toContainText('Wait for delivery');
-  // Each step shows where it is in its journey: assessed, then clarified, then its brief.
+  // Each step shows where it is in its journey: assessed, then clarified, then its blueprint.
   await expect(row(page, 'Match invoice to order').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: Assessed (step 1 of 3)');
-  await expect(row(page, 'Match invoice to order').getByTestId('stage-track')).toContainText('Automation brief');
+  await expect(row(page, 'Match invoice to order').getByTestId('stage-track')).toContainText('Blueprint');
   await expect(row(page, 'Send quotation').getByTestId('stage-track')).not.toContainText('brief');
   // Human-led steps are settled: they count as done.
   await expect(row(page, 'Check delivery').getByTestId('stage-track')).toContainText('Support ideas');

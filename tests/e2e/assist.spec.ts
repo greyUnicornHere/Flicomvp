@@ -91,7 +91,7 @@ test('Clarify inside the card: one question at a time with suggested answers; an
     await panel.getByRole('button', { name: 'Skip for now' }).click();
   }
   await expect(outcome).toContainText('Assessment updated');
-  await expect(outcome.getByRole('button', { name: 'Create brief for “Send quotation”' })).toBeVisible();
+  await expect(outcome.getByRole('button', { name: 'Create blueprint for “Send quotation”' })).toBeVisible();
   // No brief exists yet, so there is no talk of an outdated one.
   await expect(outcome).not.toContainText('out of date');
   await quote.evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -112,22 +112,22 @@ test('Clarify inside the card: one question at a time with suggested answers; an
   expect((await (await page.request.get('/api/credits')).json()).balance).toBe(9);
 });
 
-test('a brief: a few questions inside the card, then the brief opens; saved with fixed sections, readable later; changed steps need Reassess', async ({ page }) => {
+test('support ideas (human-led steps): a few questions inside the card, then they open; saved with fixed sections, readable later; changed steps need Reassess', async ({ page }) => {
   const id = await analysed(page);
   await openAutomation(page);
-  const compare = card(page, 'Compare supplier quotations');
-  await compare.getByRole('button', { name: 'Create assist brief for “Compare supplier quotations”' }).click();
+  const compare = card(page, 'Check delivery');
+  await compare.getByRole('button', { name: 'Create support ideas for “Check delivery”' }).click();
   const panel = compare.getByTestId('interview-panel');
   await expect(panel).toHaveAttribute('data-mode', 'brief');
   await expect(panel).toContainText('Questions for the brief');
-  const written = page.getByRole('dialog', { name: /Assist brief · Compare supplier quotations/ });
+  const written = page.getByRole('dialog', { name: /Support ideas · Check delivery/ });
   for (let i = 0; i < 6 && !(await written.isVisible()); i++) {
     await expect(panel.getByRole('button', { name: /^Answer/ }).or(written)).toBeVisible();
     if (await written.isVisible()) break;
     if (i === 0) await page.screenshot({ path: `${SHOTS}/02-brief-interview-1536-test-fixture.png` });
     if (i === 1) await panel.getByRole('button', { name: 'Skip for now' }).click();
     else {
-      await panel.getByLabel('Other answer').fill(`The engineer reviews the comparison and picks the supplier (${i + 1}).`);
+      await panel.getByLabel('Other answer').fill(`Labels are hard to read in the warehouse (${i + 1}).`);
       await panel.getByRole('button', { name: /^Answer/ }).click();
     }
   }
@@ -139,13 +139,13 @@ test('a brief: a few questions inside the card, then the brief opens; saved with
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await openAutomation(page);
-  await expect(card(page, 'Compare supplier quotations').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: All stages done');
-  // With the brief ready, View brief is the only action on the card.
-  await expect(card(page, 'Compare supplier quotations').getByRole('button', { name: /^Clarify/ })).toHaveCount(0);
-  await card(page, 'Compare supplier quotations').getByRole('button', { name: 'View assist brief for “Compare supplier quotations”' }).click();
-  const brief = page.getByRole('dialog', { name: /Assist brief · Compare supplier quotations/ });
+  await expect(card(page, 'Check delivery').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: All stages done');
+  // With the ideas ready, viewing them is the only action on the card.
+  await expect(card(page, 'Check delivery').getByRole('button', { name: /^Clarify/ })).toHaveCount(0);
+  await card(page, 'Check delivery').getByRole('button', { name: 'View support ideas for “Check delivery”' }).click();
+  const brief = page.getByRole('dialog', { name: /Support ideas · Check delivery/ });
   await expect(brief).toBeVisible();
-  for (const heading of ['Goal', 'What gets automated', 'Where a person checks or decides', 'Handover', 'Systems and access needed', 'How to test it', 'Risks', 'Assumptions to confirm']) {
+  for (const heading of ['Goal', 'Ideas', 'Assumptions to confirm']) {
     await expect(brief.getByRole('heading', { name: heading, exact: true })).toBeVisible();
   }
   await expect(brief).toContainText('Unanswered');
@@ -159,7 +159,7 @@ test('a brief: a few questions inside the card, then the brief opens; saved with
   await expect(brief.getByRole('heading', { level: 2 })).toBeInViewport();
   await page.screenshot({ path: `${SHOTS}/03-assist-brief-1536-test-fixture.png` });
   // In a small window the brief scrolls inside the dialog; the title and the buttons stay on screen.
-  await page.setViewportSize({ width: 1280, height: 520 });
+  await page.setViewportSize({ width: 1280, height: 400 });
   await expect(brief.getByRole('button', { name: 'Close' })).toBeInViewport();
   await expect(brief.getByRole('heading', { level: 2 })).toBeInViewport();
   expect(await brief.getByTestId('modal-body').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);

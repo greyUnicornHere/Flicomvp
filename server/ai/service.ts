@@ -3,6 +3,7 @@
 // correction attempt. Nothing here writes to the database.
 import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type QuickAddType, type Recommendation } from '../../shared/api.js';
 import { unsupportedFigures } from '../../shared/analysis.js';
+import { toolName, type Blueprint } from '../../shared/blueprint.js';
 import { BRIEF_SECTIONS, isAssessable, type AutomationBrief, type BriefKind, type StepAssessment } from '../../shared/assessment.js';
 import { applyOperations, structuralProblems, type ProposalOperation } from '../../shared/aiOps.js';
 import type { EdgeType, StepType, WorkflowEdge, WorkflowGraph, WorkflowNode } from '../../shared/graph.js';
@@ -21,6 +22,8 @@ import {
   DRAFT_SYSTEM,
   QUESTIONS_SYSTEM,
   QUICK_ADD_SYSTEM,
+  BLUEPRINT_QUESTION_SYSTEM,
+  BLUEPRINT_WRITE_SYSTEM,
   REASSESS_SYSTEM,
   analysisPrompt,
   chatPrompt,
@@ -35,6 +38,8 @@ import {
 import {
   LIMITS,
   assessmentJsonSchema,
+  blueprintJsonSchema,
+  blueprintOutput,
   assessmentOutput,
   assistQuestionJsonSchema,
   assistQuestionOutput,
@@ -656,13 +661,13 @@ export function suggestedAnswers(options: string[], source: string): string[] {
 /** The next interview question, or done. Nothing is stored here. */
 export async function assistQuestion(
   provider: AiProvider,
-  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; mode: 'clarify' | 'brief'; kind?: BriefKind },
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; mode: 'clarify' | 'brief' | 'blueprint'; kind?: BriefKind },
   timeoutMs: number,
 ): Promise<{ done: boolean; question: string; options: string[]; usage: Usage }> {
   const context = interviewContext(input.graph, input.assessment, input.turns);
   const request: AiRequest = {
     task: 'assist',
-    system: input.mode === 'clarify' ? CLARIFY_QUESTION_SYSTEM : briefQuestionSystem(input.kind!),
+    system: input.mode === 'clarify' ? CLARIFY_QUESTION_SYSTEM : input.mode === 'blueprint' ? BLUEPRINT_QUESTION_SYSTEM : briefQuestionSystem(input.kind!),
     messages: [{ role: 'user', content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'question' }) }],
     schema: assistQuestionJsonSchema,
     maxTokens: 2000,
@@ -746,6 +751,68 @@ export async function reassessStep(
   });
   if (!result.ok) throw new AiOutputError("Flico couldn't reassess this step. Nothing was changed; please try again.");
   return { updated: result.value, usage };
+}
+
+export type BlueprintDraft = Omit<Blueprint, 'analysisId' | 'stepId' | 'classification' | 'basis' | 'stepBasis' | 'revision' | 'createdAt' | 'source'>;
+
+/** Write a step's agent-ready blueprint from the workflow, its assessment and the interview. Nothing is stored here. */
+export async function writeBlueprint(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[] },
+  timeoutMs: number,
+): Promise<{ blueprint: BlueprintDraft; usage: Usage }> {
+  const context = interviewContext(input.graph, input.assessment, input.turns);
+  const request: AiRequest = {
+    task: 'assist',
+    system: BLUEPRINT_WRITE_SYSTEM,
+    messages: [{ role: 'user', content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'blueprint' }) }],
+    schema: blueprintJsonSchema,
+    maxTokens: 8000,
+    effort: 'medium',
+    timeoutMs,
+  };
+  // Concise by design: at most 6 short items per list.
+  const items = (list: string[], words = 25) => list.map((i) => i.trim()).filter(Boolean).slice(0, 6).map((i) => brief(i, words, false));
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, blueprintOutput);
+    if (!parsed.ok) return parsed;
+    const v = parsed.value;
+    const problems: string[] = [];
+    if (!v.goal.trim()) problems.push('Give the goal in one sentence.');
+    if (items(v.steps).length === 0) problems.push('List at least one step.');
+    if (items(v.guardrails).length === 0) problems.push('List at least one thing it must never do.');
+    const all = [v.build_reason, v.goal, v.trigger, ...v.inputs, ...v.tools.flatMap((t) => [t.purpose, t.system]), ...v.steps, ...v.rules, ...v.checkpoints, ...v.handover, ...v.guardrails, ...v.tests.flatMap((t) => [t.name, t.input, t.expected])].join(' ');
+    const found = unsupportedFigures(all, context.source);
+    if (found.length) problems.push(`The blueprint states figures the workflow and answers don't support (${found.join(', ')}). Put unknown values under open_questions instead.`);
+    if (problems.length) return { ok: false, problems };
+    const seen = new Set<string>();
+    return {
+      ok: true,
+      value: {
+        buildType: v.build_type,
+        buildReason: brief(v.build_reason, 35),
+        goal: brief(v.goal, 35),
+        trigger: brief(v.trigger, 30, false),
+        inputs: items(v.inputs),
+        tools: v.tools
+          .map((t) => ({ name: toolName(t.name || t.purpose), purpose: brief(t.purpose, 25, false), system: brief(t.system, 8, false), access: t.access }))
+          .filter((t) => !seen.has(t.name) && seen.add(t.name))
+          .slice(0, 6),
+        steps: items(v.steps),
+        rules: items(v.rules),
+        checkpoints: items(v.checkpoints),
+        handover: items(v.handover),
+        guardrails: items(v.guardrails),
+        tests: v.tests
+          .filter((t) => t.input.trim() && t.expected.trim())
+          .slice(0, 6)
+          .map((t) => ({ name: brief(t.name || t.input, 10, false), input: brief(t.input, 40, false), expected: brief(t.expected, 40, false) })),
+        openQuestions: items(v.open_questions, 30),
+      } satisfies BlueprintDraft,
+    };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't write a usable blueprint this time. Your answers are kept; please try again.");
+  return { blueprint: result.value, usage };
 }
 
 /** Write a step's brief from the workflow, its assessment and the interview. Nothing is stored here. */

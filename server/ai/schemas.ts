@@ -277,6 +277,43 @@ export const briefJsonSchema = object({
 });
 export const briefOutput = z.object({ summary: shortText(600), sections: z.array(z.object({ heading: shortText(120), items: z.array(shortText(600)).max(10) })).max(16) });
 
+const shortList = (description: string) => ({ type: 'array', items: { type: 'string' }, description });
+export const blueprintJsonSchema = object({
+  build_type: { type: 'string', enum: ['rules', 'agent', 'assistant'], description: 'rules = plain rule-based automation; agent = AI agent with human checkpoints; assistant = AI prepares, a person decides.' },
+  build_reason: str('One sentence: why this build type fits.'),
+  goal: str('One sentence.'),
+  trigger: str('What starts it.'),
+  inputs: shortList('What it reads (at most 6).'),
+  tools: {
+    type: 'array',
+    description: 'System actions it needs (at most 6).',
+    items: object({ name: str('lower_case_with_underscores, e.g. read_invoice'), purpose: str('What it is used for.'), system: str('The system, as the person named it.'), access: { type: 'string', enum: ['read', 'write'] } }),
+  },
+  steps: shortList('What it does, in order (at most 6).'),
+  rules: shortList('Exact decision rules, only as stated (at most 6).'),
+  checkpoints: shortList('Where a person checks or approves (at most 6).'),
+  handover: shortList('When it must stop and hand over to a person (at most 6).'),
+  guardrails: shortList('What it must never do (at most 6).'),
+  tests: { type: 'array', description: 'Example cases (at most 6).', items: object({ name: str('Short name.'), input: str('The case.'), expected: str('The expected result.') }) },
+  open_questions: shortList('What is still missing or unconfirmed.'),
+});
+const list = z.array(shortText(600)).max(12);
+export const blueprintOutput = z.object({
+  build_type: z.enum(['rules', 'agent', 'assistant']),
+  build_reason: shortText(600),
+  goal: shortText(600),
+  trigger: shortText(600),
+  inputs: list,
+  tools: z.array(z.object({ name: shortText(120), purpose: shortText(600), system: shortText(200), access: z.enum(['read', 'write']) })).max(12),
+  steps: list,
+  rules: list,
+  checkpoints: list,
+  handover: list,
+  guardrails: list,
+  tests: z.array(z.object({ name: shortText(200), input: shortText(800), expected: shortText(800) })).max(12),
+  open_questions: list,
+});
+
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; problems: string[] };
 
 /** Parse model text as JSON and check it against a schema. Problems are phrased for the correction retry. */

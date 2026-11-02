@@ -5,6 +5,7 @@
 import type { Analysis, Recommendation } from '../../../../shared/api';
 import { orderRecommendations } from '../../../../shared/analysis';
 import { BRIEF_KIND, BRIEF_TITLE, briefOutdated, freshness, topOpportunities, type AutomationBrief, type AutomationClass, type Freshness, type StepAssessment } from '../../../../shared/assessment';
+import { blueprintOutdated, type Blueprint } from '../../../../shared/blueprint';
 import type { WorkflowGraph } from '../../../../shared/graph';
 
 export type StageState = 'done' | 'current' | 'todo';
@@ -18,6 +19,9 @@ export type AutomationItem = {
   /** The step's brief, if one was written (it may be out of date). */
   brief?: AutomationBrief;
   briefCurrent: boolean;
+  /** The step's agent-ready blueprint, if one was written (it may be out of date). */
+  blueprint?: Blueprint;
+  blueprintCurrent: boolean;
   /** The step itself changed (or was deleted) since it was assessed: reassess it before anything else. */
   outdated: boolean;
   /** current, upstream (only an earlier step changed: still usable) or changed (same as `outdated`). */
@@ -50,18 +54,18 @@ export function processStages(rec: Recommendation, applied: boolean): Stage[] {
 }
 
 /**
- * An automation opportunity: Assessed, then Clarified (optional), then its brief. A step that needs
- * more information can't get a brief until Clarify settles its classification. A human-led step is
- * already settled; support ideas are optional.
+ * An automation opportunity: Assessed, then Clarified (optional), then its agent-ready blueprint
+ * (automation candidates and human-assisted steps). A step that needs more information can't get a
+ * blueprint until Clarify settles its classification. A human-led step is already settled; support
+ * ideas are optional.
  */
-export function automationStages(a: StepAssessment, briefCurrent: boolean): Stage[] {
-  const kind = BRIEF_KIND[a.classification];
-  if (a.classification === 'human') return track(['Assessed', BRIEF_TITLE.support], briefCurrent ? 2 : 0);
-  if (!kind) return track(['Assessed', 'Clarified'], a.clarified ? 1 : 0);
-  return track(['Assessed', 'Clarified', BRIEF_TITLE[kind]], briefCurrent ? 3 : a.clarified ? 1 : 0);
+export function automationStages(a: StepAssessment, current: { brief: boolean; blueprint: boolean }): Stage[] {
+  if (a.classification === 'human') return track(['Assessed', BRIEF_TITLE.support], current.brief ? 2 : 0);
+  if (!BRIEF_KIND[a.classification]) return track(['Assessed', 'Clarified'], a.clarified ? 1 : 0);
+  return track(['Assessed', 'Clarified', 'Blueprint'], current.blueprint ? 3 : a.clarified ? 1 : 0);
 }
 
-export function buildActionPlan(analysis: Pick<Analysis, 'recommendations' | 'assessments' | 'briefs' | 'appliedAt'>, currentGraph: WorkflowGraph): ActionPlan {
+export function buildActionPlan(analysis: Pick<Analysis, 'recommendations' | 'assessments' | 'briefs' | 'blueprints' | 'appliedAt'>, currentGraph: WorkflowGraph): ActionPlan {
   const applied = analysis.appliedAt !== null;
   const toItem = (rec: Recommendation): ProcessItem => {
     const stages = processStages(rec, applied);
@@ -82,9 +86,11 @@ export function buildActionPlan(analysis: Pick<Analysis, 'recommendations' | 'as
     const fresh = freshness(currentGraph, a);
     const isOutdated = fresh === 'changed';
     const briefCurrent = !!brief && !briefOutdated(brief, a, currentGraph);
-    const stages = automationStages(a, briefCurrent);
+    const blueprint = analysis.blueprints.find((b) => b.stepId === a.stepId);
+    const blueprintCurrent = !!blueprint && !blueprintOutdated(blueprint, a, currentGraph);
+    const stages = automationStages(a, { brief: briefCurrent, blueprint: blueprintCurrent });
     const done = !isOutdated && (a.classification === 'human' || stages.every((s) => s.state === 'done'));
-    return { type: 'automation', id: a.stepId, assessment: a, brief, briefCurrent, outdated: isOutdated, freshness: fresh, top: top.includes(a), stages, done };
+    return { type: 'automation', id: a.stepId, assessment: a, brief, briefCurrent, blueprint, blueprintCurrent, outdated: isOutdated, freshness: fresh, top: top.includes(a), stages, done };
   });
 
   // Once the changes are applied, the ones that weren't accepted are settled too: they no longer count.

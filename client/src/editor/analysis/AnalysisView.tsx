@@ -14,6 +14,8 @@ import { needsReassessment } from '../../../../shared/assessment';
 import { buildActionPlan } from './actionPlan';
 import { ActionPlanPanel, type PlanFilter, type PlanSelection } from './ActionPlanPanel';
 import type { InterviewView } from './InterviewPanel';
+import { BlueprintPage } from './BlueprintPage';
+import { blueprintOutdated } from '../../../../shared/blueprint';
 import { ReviewDiagram } from './ReviewDiagram';
 
 const CATEGORY_LABEL: Record<RecommendationCategory, string> = { quick_win: 'Quick Win', strategic: 'Strategic Improvement', complex: 'Complex Change' };
@@ -31,6 +33,11 @@ type Props = {
   interview?: InterviewView | null;
   /** A brief that was just written: it opens by itself. */
   briefToOpen?: { stepId: string; key: number } | null;
+  /** Start (or update) a step's agent-ready blueprint. */
+  onBlueprint?: (stepId: string) => void;
+  /** A blueprint that was just written: its page opens by itself. */
+  blueprintToOpen?: { stepId: string; key: number } | null;
+  workflowName?: string;
   onAnalysisChange: (analysis: Analysis) => void;
   onApplied: (result: ApplyAnalysisResponse) => void;
   onBackToEditor: () => void;
@@ -41,7 +48,7 @@ type Props = {
  * plan that combines process changes and automation opportunities, each with its journey stages.
  * The executive summary is a compact card at the bottom.
  */
-export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief, onReassess, interview = null, briefToOpen = null }: Props) {
+export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief, onReassess, interview = null, briefToOpen = null, onBlueprint, blueprintToOpen = null, workflowName = 'Workflow' }: Props) {
   const [slot, setSlot] = useState<'initial' | 'latest'>('latest');
   const analysis = analyses.find((a) => a.slot === slot) ?? analyses.at(-1)!;
   const [selected, setSelected] = useState<PlanSelection>(null);
@@ -68,6 +75,13 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
     }
   };
   const [error, setError] = useState<string | null>(null);
+  // The blueprint page of one step, shown in place of the assessment (Back returns to the Action plan).
+  const [blueprintStep, setBlueprintStep] = useState<string | null>(null);
+  const [openedBlueprintKey, setOpenedBlueprintKey] = useState<number | null>(null);
+  if (blueprintToOpen && blueprintToOpen.key !== openedBlueprintKey) {
+    setOpenedBlueprintKey(blueprintToOpen.key);
+    setBlueprintStep(blueprintToOpen.stepId);
+  }
 
   const { snapshot, recommendations } = analysis;
   const ordered = orderRecommendations(recommendations);
@@ -147,6 +161,35 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
       Apply accepted changes <ArrowRight size={16} aria-hidden="true" />
     </button>
   );
+  const actionsBlocked = analysis.slot === 'initial' && analyses.some((a) => a.slot === 'latest') ? 'Only the latest analysis can be clarified or planned' : interviewBlocked;
+  const shownBlueprint = blueprintStep ? analysis.blueprints.find((b) => b.stepId === blueprintStep) : undefined;
+  if (shownBlueprint) {
+    const assessment = assessments?.find((a) => a.stepId === shownBlueprint.stepId);
+    return (
+      <BlueprintPage
+        blueprint={shownBlueprint}
+        stepName={name(shownBlueprint.stepId)}
+        workflowName={workflowName}
+        outdated={blueprintOutdated(shownBlueprint, assessment, currentGraph)}
+        stepChanged={!assessment || needsReassessment(currentGraph, assessment)}
+        blocked={actionsBlocked}
+        onUpdate={
+          onBlueprint && assessment && !needsReassessment(currentGraph, assessment) && (assessment.classification === 'full' || assessment.classification === 'assisted')
+            ? () => {
+                setBlueprintStep(null);
+                setSelected({ type: 'automation', id: shownBlueprint.stepId });
+                onBlueprint(shownBlueprint.stepId);
+              }
+            : undefined
+        }
+        onBack={() => {
+          setBlueprintStep(null);
+          setSelected({ type: 'automation', id: shownBlueprint.stepId });
+        }}
+      />
+    );
+  }
+
   const stats = [
     noImprovements ? 'No changes proposed' : `${recommendations.length} change${recommendations.length === 1 ? '' : 's'}`,
     assessments === null ? 'No automation assessment' : `${assessments.length} step${assessments.length === 1 ? '' : 's'} assessed`,
@@ -258,7 +301,9 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               dependsOnOf={(r: Recommendation) => r.dependsOn.map((id) => recommendations.find((x) => x.id === id)?.title).filter((t): t is string => !!t)}
               onStatus={(statuses) => void setStatuses(statuses)}
               // Only the current analysis (the latest, or the only one) can be clarified or planned.
-              actionsBlocked={analysis.slot === 'initial' && analyses.some((a) => a.slot === 'latest') ? 'Only the latest analysis can be clarified or planned' : interviewBlocked}
+              actionsBlocked={actionsBlocked}
+              onBlueprint={onBlueprint}
+              onOpenBlueprint={setBlueprintStep}
               onClarify={onClarify}
               onBrief={onBrief}
               onReassess={onReassess}

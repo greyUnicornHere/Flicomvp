@@ -97,9 +97,9 @@ test('filters, and the automation journey: the next action is the filled button'
   await plan(page).getByRole('button', { name: /^Automation \(\d+\)$/ }).click();
   await expect(plan(page).locator('li[data-rec]')).toHaveCount(0);
   const match = plan(page).locator('li[data-assessment="match"]');
-  // Not yet clarified: Clarify is the suggested next action, the brief is offered beside it.
+  // Not yet clarified: Clarify is the suggested next action, the blueprint is offered beside it.
   await expect(match.getByRole('button', { name: 'Clarify “Match invoice to order”' })).toHaveClass(/bg-fl-brand /);
-  await expect(match.getByRole('button', { name: 'Create automation brief for “Match invoice to order”' })).toBeVisible();
+  await expect(match.getByRole('button', { name: 'Create blueprint for “Match invoice to order”' })).toBeVisible();
   // Needs info: only Clarify.
   const quote = plan(page).locator('li[data-assessment="quote"]');
   await expect(quote.getByRole('button', { name: /Create/ })).toHaveCount(0);

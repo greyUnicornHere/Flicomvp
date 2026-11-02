@@ -145,6 +145,18 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
   - When Clarify finishes, the card shows what changed, with **Done** and **Create brief →**. The questions before a brief work the same way; when they're done, the brief is written and opens by itself.
   - Ask Flico no longer shows these questions and answers. They stay saved with the analysis, and the answers appear under "Why" (as "You said").
 
+## Assessment page revamp, step 2: agent-ready blueprints (owner request; awaiting owner review on branch `agent-blueprints`)
+
+- For automation candidates and human-assisted steps, the journey now ends in a **blueprint** instead of a brief: Assessed → Clarified → Blueprint. **Create blueprint** asks up to 6 questions inside the card, with suggested answers to pick. The questions cover the exact rule, the systems used (read or write), where a person checks or approves, what it must never do, and a real example with the expected result. The blueprint then opens on its own page.
+- **The blueprint page** (Back returns to the Action plan) has:
+  - **What to build**: Flico recommends one of **Rule-based automation** (fixed rules on structured data, cheaper and more predictable than AI), **AI agent with checkpoints**, or **AI assistant, a person decides**, and says why.
+  - The spec a builder needs: trigger and inputs, tools and access (each read or write), steps, rules, human checkpoints and when to hand over, what it must never do, test cases, and open questions.
+  - **Readiness**: a checklist ending in "Ready to build" or "Not ready yet", which says exactly what is missing. Flico computes it; the AI doesn't claim it.
+  - **Export**: **Claude agent setup** (instructions, tool list and test cases), **n8n / Power Automate outline**, **Markdown** or **JSON**, with Download and Copy. The export that fits the build type is marked "Suggested". Every export says it is a starting point: nothing has been built, connected or tested.
+- **Update blueprint** asks only what is still missing. Earlier answers, including those given for an older brief, are reused.
+- Existing briefs stay readable (**View brief**) next to **Create blueprint**. Human-led steps keep the shorter **Support ideas**. No credit is used; the questions count toward the daily Ask Flico limit.
+- Still advice only: Flico never connects to systems or runs anything.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -174,4 +186,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/` and `docs/evidence/action-plan/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/`, `docs/evidence/action-plan/` and `docs/evidence/blueprints/`.

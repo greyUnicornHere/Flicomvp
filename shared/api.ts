@@ -1,6 +1,7 @@
 // Types shared by the API server and the web client.
 import type { ProposalOperation } from './aiOps.js';
 import type { AutomationBrief, StepAssessment } from './assessment.js';
+import type { Blueprint } from './blueprint.js';
 import type { StepType, WorkflowGraph } from './graph.js';
 
 export type User = { id: string; email: string };
@@ -114,14 +115,14 @@ export type ChatMessage = {
   assist?: AssistInfo;
 };
 
-export type AssistMode = 'clarify' | 'brief';
+export type AssistMode = 'clarify' | 'brief' | 'blueprint';
 export type AssistInfo = {
   analysisId: string;
   stepId: string;
   stepLabel: string;
   mode: AssistMode;
-  /** question: Flico asks; answer / skip: the person's reply; update: what changed; done: interview over; brief: the brief was written. */
-  kind: 'question' | 'answer' | 'skip' | 'update' | 'done' | 'brief';
+  /** question: Flico asks; answer / skip: the person's reply; update: what changed; done: interview over; brief / blueprint: it was written. */
+  kind: 'question' | 'answer' | 'skip' | 'update' | 'done' | 'brief' | 'blueprint';
   /** For questions: still open, answered, or skipped. */
   status?: 'pending' | 'answered' | 'skipped';
   /** For answers and skips: the question they reply to. */
@@ -189,6 +190,8 @@ export type Analysis = {
   assessments: StepAssessment[] | null;
   /** Briefs written for steps of this analysis (at most one per step). */
   briefs: AutomationBrief[];
+  /** Agent-ready blueprints for automation candidates and human-assisted steps. */
+  blueprints: Blueprint[];
   createdAt: string;
   appliedAt: string | null;
 };

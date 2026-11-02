@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { ArrowRight, ClipboardList } from 'lucide-react';
 import type { AssistMode, ChatMessage } from '../../../../shared/api';
 import { BRIEF_MAX_QUESTIONS, CLARIFY_MAX_QUESTIONS } from '../../../../shared/assessment';
+import { BLUEPRINT_MAX_QUESTIONS } from '../../../../shared/blueprint';
 
 /** An interview about one step (Clarify, or the questions before a brief), as the editor runs it. */
 export type InterviewView = {
@@ -23,7 +24,7 @@ export type InterviewView = {
 
 /** The messages of the current run: since the previous end of an interview (or, once finished, up to its end). */
 function currentRun(messages: ChatMessage[], finished: boolean): ChatMessage[] {
-  const ends = messages.flatMap((m, i) => (m.assist?.kind === 'done' || m.assist?.kind === 'brief' ? [i] : []));
+  const ends = messages.flatMap((m, i) => (m.assist?.kind === 'done' || m.assist?.kind === 'brief' || m.assist?.kind === 'blueprint' ? [i] : []));
   if (finished && ends.length) return messages.slice((ends.at(-2) ?? -1) + 1, ends.at(-1)! + 1);
   return messages.slice((ends.at(-1) ?? -1) + 1);
 }
@@ -34,11 +35,11 @@ const label = 'text-[11px] font-bold uppercase leading-4 tracking-[0.05em] text-
  * Clarify (and the questions before a brief) inside the step's card (owner choice, 2026-11-02): one
  * question at a time with suggested answers to pick, an "Other" box, Skip and Stop. No chat window.
  */
-export function InterviewPanel({ view, stepName, onCreateBrief }: { view: InterviewView; stepName: string; onCreateBrief?: () => void }) {
+export function InterviewPanel({ view, stepName, next }: { view: InterviewView; stepName: string; next?: { label: string; onClick: () => void } }) {
   const run = currentRun(view.messages, view.finished);
   const asked = run.filter((m) => m.assist?.kind === 'question').length;
-  const max = view.mode === 'clarify' ? CLARIFY_MAX_QUESTIONS : BRIEF_MAX_QUESTIONS;
-  const title = view.mode === 'clarify' ? 'Clarifying' : 'Questions for the brief';
+  const max = view.mode === 'clarify' ? CLARIFY_MAX_QUESTIONS : view.mode === 'blueprint' ? BLUEPRINT_MAX_QUESTIONS : BRIEF_MAX_QUESTIONS;
+  const title = { clarify: 'Clarifying', brief: 'Questions for the brief', blueprint: 'Questions for the blueprint' }[view.mode];
   const updates = run.filter((m) => m.assist?.kind === 'update');
 
   return (
@@ -81,7 +82,7 @@ export function InterviewPanel({ view, stepName, onCreateBrief }: { view: Interv
             <span />
             <span />
           </span>
-          {view.mode === 'brief' && asked > 0 ? 'Flico is writing the brief…' : 'Flico is preparing a question…'}
+          {view.mode !== 'clarify' && asked > 0 ? `Flico is writing the ${view.mode}…` : 'Flico is preparing a question…'}
         </p>
       )}
 
@@ -103,17 +104,17 @@ export function InterviewPanel({ view, stepName, onCreateBrief }: { view: Interv
             <button type="button" className="fl-btn !min-h-9 !px-3 !text-[13px]" onClick={view.onClose}>
               Done
             </button>
-            {onCreateBrief && (
+            {next && (
               <button
                 type="button"
                 className="fl-btn fl-btn-primary !min-h-9 gap-1 !px-3 !text-[13px]"
-                aria-label={`Create brief for “${stepName}”`}
+                aria-label={`${next.label} for “${stepName}”`}
                 onClick={() => {
                   view.onClose();
-                  onCreateBrief();
+                  next.onClick();
                 }}
               >
-                <ClipboardList size={14} aria-hidden="true" /> Create brief <ArrowRight size={14} aria-hidden="true" />
+                <ClipboardList size={14} aria-hidden="true" /> {next.label} <ArrowRight size={14} aria-hidden="true" />
               </button>
             )}
           </div>

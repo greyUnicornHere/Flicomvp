@@ -589,6 +589,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   const [interview, setInterview] = useState<{ stepId: string; mode: AssistMode; finished: boolean } | null>(null);
   // A brief that was just written opens by itself (a new key each time).
   const [briefToOpen, setBriefToOpen] = useState<{ stepId: string; key: number } | null>(null);
+  const [blueprintToOpen, setBlueprintToOpen] = useState<{ stepId: string; key: number } | null>(null);
   const [interviewBusy, setInterviewBusy] = useState(false);
   const [interviewError, setInterviewError] = useState<string | null>(null);
 
@@ -605,6 +606,10 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       if (last?.kind === 'brief') {
         setInterview(null);
         setBriefToOpen({ stepId: last.stepId, key: Date.now() });
+      }
+      if (last?.kind === 'blueprint') {
+        setInterview(null);
+        setBlueprintToOpen({ stepId: last.stepId, key: Date.now() });
       }
     } catch (error) {
       setInterviewError((error as Error).message);
@@ -823,6 +828,9 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               onReassess={reassessAssessment}
               interview={interviewView}
               briefToOpen={briefToOpen}
+              onBlueprint={(stepId) => startInterview(stepId, 'blueprint')}
+              blueprintToOpen={blueprintToOpen}
+              workflowName={workflow.name}
               onBrief={(stepId) => startInterview(stepId, 'brief')}
             />
           </div>

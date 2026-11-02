@@ -591,3 +591,8 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 | Ask Flico shows none of the interview messages; still saved (refresh) | Pass | E2E `assist.spec.ts` |
 | Suggested answers: at most four, distinct, shortened, none with unsupported figures | Pass | unit `suggestions.test.ts` |
 
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the assessment page revamp, step 1 (Action plan, Reassess, Clarify inside the card) | Pass | Product owner approved on 2026-11-02 and asked to proceed with step 2 (blueprints). Merged to `main`; the branch had passed unit + API 317 / 317, E2E 76 / 76, lint, typecheck, build |
+

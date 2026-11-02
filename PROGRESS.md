@@ -129,7 +129,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - A connection that goes back to an earlier step without being a Repeat loop (for example "Retry limit reached? → No → Search") used to leave Auto-arrange, and AI drafts, with most steps stacked in one column and crossing lines. Now such paths are recognised: steps are laid out left to right as usual, and the way back is drawn under the steps like a Repeat loop, keeping its label (for example "No").
 - Existing workflows keep their positions until you click **Auto-arrange** (owner choice); new AI drafts come out tidy.
 
-## Assessment page revamp, step 1: one Action plan (owner request; awaiting owner review on branch `assessment-action-plan`)
+## Assessment page revamp, step 1: one Action plan (owner request; approved by owner 2026-11-02; merged to `main`)
 
 - The Analysis page now shows the proposed workflow beside one **Action plan** (owner chose option A from the mockups). It combines the process changes and the automation opportunities in one list with a progress bar ("1 of 6 done") and the filters **All**, **Process** and **Automation**.
 - Each item shows where it is in its journey. A process change goes **Suggested → Accepted → Applied**. An automation opportunity goes **Assessed → Clarified → brief** (automation or assist brief). A "needs information" step goes **Assessed → Clarified**, and a human-led step goes **Assessed → Support ideas (optional)**. The most useful next action is the filled button; the top opportunities carry a "Top opportunity" tag and come first.

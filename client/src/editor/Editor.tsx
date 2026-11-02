@@ -9,6 +9,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import { useLocation, useNavigate } from 'react-router';
+import { quickRepeatBlocked } from '../../../shared/analysis';
 import type { AiSource, Analysis, AnalysisMode, ApplyAnalysisResponse, Assumption, ChatMessage, ChatMode, StartAnalysisRequest, WorkflowDetail } from '../../../shared/api';
 import { applyOperations, diffGraphs, type GraphChanges } from '../../../shared/aiOps';
 import type { WorkflowGraph } from '../../../shared/graph';
@@ -714,8 +715,10 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             credits: credits?.balance ?? null,
             initialCredits: credits?.initial ?? null,
             disabledReason: analyzeBlocked,
+            quickBlockedReason: quickRepeatBlocked(currentAnalysisOf(analyses), graph) ? 'Unchanged since last analysis' : null,
             onQuick: () => startNew('quick'),
             onGuided: () => setGuidedOpen(true),
+            onViewAnalysis: () => setView('analysis'),
           }}
           onSuggestFix={() => {
             openChat();
@@ -1012,4 +1015,9 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       )}
     </EditorUiContext.Provider>
   );
+}
+
+/** The analysis treated as current: the latest, or the only one. */
+function currentAnalysisOf(analyses: Analysis[]): Analysis | null {
+  return analyses.find((a) => a.slot === 'latest') ?? analyses[0] ?? null;
 }

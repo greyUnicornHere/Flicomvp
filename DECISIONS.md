@@ -314,3 +314,10 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - Each assessed block gets a small neutral pill at its bottom-right: class icon + short name (Automation candidate / Human-assisted / Human-led / Needs info), the full class as its accessible name. Provisional = dashed border; needs reassessment = dotted amber with a refresh icon (the class name stays visible).
 - Clicking a label opens that step's row and highlights the step; it never selects a recommendation. With Recommendations open, in the editor and in the final preview there are no labels, so the change colours stand alone.
 - Labels scale with the diagram: with a long workflow fitted to the screen they are small; zoom in or use Full screen to read them.
+
+### Repeat analysis of an unchanged workflow (owner decision, 2026-11-02)
+- The owner asked whether analysing an unchanged workflow again is useful; it isn't, and in the pilot it costs one of 10 credits. Owner choice: **block Quick, allow Guided**.
+- "Unchanged" = the same steps, details and connections as the current analysis's snapshot (`unchangedSince`, built on the same `diffGraphs` comparison that marks an analysis as no longer applicable); positions don't count, so moving or auto-arranging blocks is not a change. Applying recommendations changes the workflow, so a new analysis is possible after Apply.
+- Exceptions: **Guided Analysis** is always allowed (the person's answers add information the workflow doesn't contain), and Quick is allowed when the current analysis has **no automation assessment** (made before it existed), so older analyses can get one.
+- The rule (`quickRepeatBlocked` in `shared/analysis.ts`) is used by both the Analyze menu (Quick disabled, hint "Unchanged since last analysis", plus "View latest analysis") and the server (409 with an explanation, checked before credits and before any model call, so nothing is charged).
+- Menu layout: item labels no longer wrap; a long hint wraps beside them instead.

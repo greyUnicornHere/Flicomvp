@@ -179,11 +179,11 @@ export function Menu({ label, triggerContent, triggerClassName, items, header, w
               onClick={() => select(item)}
             >
               {item.icon}
-              <span className="flex-1">
+              <span className={item.hint ? 'flex-none whitespace-nowrap' : 'flex-1'}>
                 {item.label}
               </span>
               {item.hint && (
-                <span className="text-[12px] font-normal text-fl-text-muted" aria-hidden="true">
+                <span className="min-w-0 flex-1 text-right text-[12px] font-normal leading-4 text-fl-text-muted" aria-hidden="true">
                   {item.hint}
                 </span>
               )}

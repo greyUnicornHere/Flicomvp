@@ -104,6 +104,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - While the Automation tab is open, each assessed block in the analysis diagram also carries a small **label** (icon + short class name); clicking it opens that step's assessment. Not shown with Recommendations open, in the editor or in the final preview.
 - Changing a step, or a step that feeds it, shows **Needs reassessment**; moving blocks doesn't.
 - Analyses made before this still open and say they have no automation assessment.
+- **No repeat Quick Analysis of an unchanged workflow** (moving blocks doesn't count as a change): the Analyze menu shows Quick Analysis as "Unchanged since last analysis" with a **View latest analysis** shortcut, and the server refuses it without using a credit. Guided Analysis stays available (new answers add information), and Quick is allowed again when the workflow changes or when the latest analysis has no automation assessment yet.
 
 ## Known issues / limitations
 

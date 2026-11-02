@@ -176,7 +176,19 @@ test('R10: Initial and Latest analysis; a single analysis shows no version switc
   const markerIds = await page.locator('svg marker[id]').evaluateAll((els) => els.map((el) => el.id));
   expect(markerIds.length).toBeGreaterThan(0);
   expect(new Set(markerIds).size).toBe(markerIds.length);
-  await quickAnalysis(page);
+  // Nothing changed: a second Quick Analysis would only repeat the first, so it's unavailable; Guided still works.
+  await page.getByRole('button', { name: 'Analyze' }).click();
+  const menu = page.getByRole('menu', { name: 'Analyze' });
+  await expect(menu.getByRole('menuitem', { name: /Quick Analysis/ })).toBeDisabled();
+  await expect(menu.getByRole('menuitem', { name: /Quick Analysis/ })).toContainText('Unchanged since last analysis');
+  await expect(menu.getByRole('menuitem', { name: /Guided Analysis/ })).toBeEnabled();
+  await page.screenshot({ path: 'docs/evidence/automation/06-quick-blocked-unchanged-1536-test-fixture.png' });
+  await menu.getByRole('menuitem', { name: 'View latest analysis' }).click();
+  await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Editor' }).click();
+  await page.getByRole('button', { name: 'Analyze' }).click();
+  await page.getByRole('menuitem', { name: /Guided Analysis/ }).click();
+  await page.getByRole('dialog', { name: 'Guided Analysis' }).getByRole('button', { name: 'Skip questions' }).click();
   const versions = page.getByRole('combobox', { name: 'Show analysis' });
   await expect(versions).toHaveValue('latest');
   await versions.selectOption('initial');

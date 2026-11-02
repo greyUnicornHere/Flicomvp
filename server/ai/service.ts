@@ -21,6 +21,7 @@ import {
   DRAFT_SYSTEM,
   QUESTIONS_SYSTEM,
   QUICK_ADD_SYSTEM,
+  REASSESS_SYSTEM,
   analysisPrompt,
   chatPrompt,
   questionsPrompt,
@@ -33,6 +34,8 @@ import {
 } from './prompts.js';
 import {
   LIMITS,
+  assessmentJsonSchema,
+  assessmentOutput,
   assistQuestionJsonSchema,
   assistQuestionOutput,
   briefJsonSchema,
@@ -632,12 +635,30 @@ function questionProblems(question: string, turns: InterviewTurn[]): string[] {
   return problems;
 }
 
+/**
+ * Suggested answers to show as choices: at most four, short, distinct, and without figures the
+ * workflow or the person didn't give (an unsupported suggestion is dropped, not corrected).
+ */
+export function suggestedAnswers(options: string[], source: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of options) {
+    const text = brief(raw.replace(/\s+/g, ' ').trim(), 10, false).replace(/[.?!]+$/, '');
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || unsupportedFigures(text, source).length) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length === 4) break;
+  }
+  return out;
+}
+
 /** The next interview question, or done. Nothing is stored here. */
 export async function assistQuestion(
   provider: AiProvider,
   input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; mode: 'clarify' | 'brief'; kind?: BriefKind },
   timeoutMs: number,
-): Promise<{ done: boolean; question: string; usage: Usage }> {
+): Promise<{ done: boolean; question: string; options: string[]; usage: Usage }> {
   const context = interviewContext(input.graph, input.assessment, input.turns);
   const request: AiRequest = {
     task: 'assist',
@@ -652,9 +673,9 @@ export async function assistQuestion(
     const parsed = parseOutput(text, assistQuestionOutput);
     if (!parsed.ok) return parsed;
     const question = brief(parsed.value.question, 30, false);
-    if (parsed.value.done || !question) return { ok: true, value: { done: true, question: '' } };
+    if (parsed.value.done || !question) return { ok: true, value: { done: true, question: '', options: [] as string[] } };
     const problems = questionProblems(question, input.turns);
-    return problems.length ? { ok: false, problems } : { ok: true, value: { done: false, question } };
+    return problems.length ? { ok: false, problems } : { ok: true, value: { done: false, question, options: suggestedAnswers(parsed.value.options, context.source) } };
   });
   if (!result.ok) throw new AiOutputError("Flico couldn't prepare a clear question this time. Please try again.");
   return { ...result.value, usage };
@@ -665,7 +686,7 @@ export async function clarifyUpdate(
   provider: AiProvider,
   input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; latest: { question: string; answer: string } },
   timeoutMs: number,
-): Promise<{ reply: string; updated: AssessmentDraft; nextQuestion: string; usage: Usage }> {
+): Promise<{ reply: string; updated: AssessmentDraft; nextQuestion: string; nextOptions: string[]; usage: Usage }> {
   const context = interviewContext(input.graph, input.assessment, [...input.turns, { question: input.latest.question, answer: input.latest.answer }]);
   const request: AiRequest = {
     task: 'assist',
@@ -693,10 +714,38 @@ export async function clarifyUpdate(
     const found = unsupportedFigures(parsed.value.reply, context.source);
     if (found.length) return { ok: false, problems: [`The reply states figures the workflow doesn't support (${found.join(', ')}).`] };
     // The reply may be two sentences (what changed, and why): capped, never cut to the first sentence.
-    return { ok: true, value: { reply: brief(parsed.value.reply, 50, false), updated: checked.valid[0], nextQuestion } };
+    return { ok: true, value: { reply: brief(parsed.value.reply, 50, false), updated: checked.valid[0], nextQuestion, nextOptions: nextQuestion ? suggestedAnswers(parsed.value.next_options, context.source) : [] } };
   });
   if (!result.ok) throw new AiOutputError("Flico couldn't update the assessment from that answer. Nothing was changed; please try again.");
   return { ...result.value, usage };
+}
+
+/** Reassess one step against the workflow as it is now, keeping the person's answers where they still apply. Nothing is stored here. */
+export async function reassessStep(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[] },
+  timeoutMs: number,
+): Promise<{ updated: AssessmentDraft; usage: Usage }> {
+  const context = interviewContext(input.graph, input.assessment, input.turns);
+  const request: AiRequest = {
+    task: 'assist',
+    system: REASSESS_SYSTEM,
+    messages: [{ role: 'user', content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'reassess' }) }],
+    schema: assessmentJsonSchema,
+    maxTokens: 5000,
+    effort: 'medium',
+    timeoutMs,
+  };
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, assessmentOutput);
+    if (!parsed.ok) return parsed;
+    if (parsed.value.step !== context.stepRef) return { ok: false, problems: [`Assess only the selected step ${context.stepRef}.`] };
+    const checked = checkAssessments([parsed.value], input.graph, context.refs, context.source);
+    if (checked.problems.length || !checked.valid[0]) return { ok: false, problems: checked.problems.length ? checked.problems : ['The assessment is incomplete.'] };
+    return { ok: true, value: checked.valid[0] };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't reassess this step. Nothing was changed; please try again.");
+  return { updated: result.value, usage };
 }
 
 /** Write a step's brief from the workflow, its assessment and the interview. Nothing is stored here. */

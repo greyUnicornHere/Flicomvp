@@ -538,3 +538,56 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Intervie
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of Clarify and briefs, and of the layout fix for paths back to earlier steps | Pass | Product owner approved both on 2026-11-02. Combined main re-tested after the merge: unit + API 304 / 304, E2E 73 / 73, lint, typecheck, build |
+
+## Assessment page revamp, step 1: Action plan — 2026-11-02 (branch `assessment-action-plan`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **311 / 311 pass** (7 new in `client/src/editor/analysis/actionPlan.test.ts`; the Clarify API test now checks `clarified`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **76 / 76 pass** (3 new in `tests/e2e/action-plan.spec.ts`; analysis, automation, Clarify and full-screen specs updated to the new layout) |
+
+All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=fixture`), never a live model.
+
+| Check | Result | Evidence |
+|---|---|---|
+| One Action plan beside the diagram: process changes first, then automation (top opportunities first); progress bar and "N of M done" | Pass | E2E `action-plan.spec.ts`; `docs/evidence/action-plan/01-action-plan-1536-test-fixture.png` |
+| Summary is a compact card below the diagram and plan (under 70 px); Details shows assumptions, answers and the full counts | Pass | `02-summary-details-1536-test-fixture.png` |
+| Stages: Suggested → Accepted → Applied; Assessed → Clarified → brief; needs-info has no brief; human-led is settled; outdated items aren't done | Pass | unit `actionPlan.test.ts`; E2E `analysis.spec.ts`, `assist.spec.ts`, `automation.spec.ts` |
+| Filters All / Process / Automation; the diagram's automation labels hide with Process; selecting a hidden item shows everything again | Pass | E2E `action-plan.spec.ts`, `automation.spec.ts`; `03-automation-filter-1536-test-fixture.png` |
+| The next action is the filled button (for example Clarify before Create brief until the step is clarified) | Pass | E2E `action-plan.spec.ts` |
+| Apply, the final preview, conflicts and Undo work as before; Apply stays within reach in full screen | Pass | E2E `analysis.spec.ts`, `feedback.spec.ts`; `05-full-screen-1280-test-fixture.png` |
+| 1280 px: no horizontal scroll; keyboard review (title → Details → Reject → Accept) | Pass | `04-action-plan-1280-test-fixture.png`; E2E `analysis.spec.ts` |
+
+### Owner feedback round 1 (same branch): brief window, View brief only, Reassess
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **314 / 314 pass** (new: Reassess API, earlier-step changes API, earlier-step changes in the plan model; migration 7) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **76 / 76 pass** |
+
+| Check | Result | Evidence |
+|---|---|---|
+| A long brief scrolls inside its window; the title and Close stay on screen, including in a 1280×520 window | Pass | E2E `assist.spec.ts` |
+| With a current brief, View brief is the only button on the card | Pass | E2E `assist.spec.ts` |
+| The step itself changed: "Needs reassessment", only Reassess (plus View brief if one exists); Reassess re-checks that step, unblocks Clarify, uses no credit | Pass | E2E `assist.spec.ts`; API `assist.api.test.ts`; `docs/evidence/action-plan/06-needs-reassessment-1536-test-fixture.png` |
+| Only an earlier step changed: no block, a note with a Reassess link, the brief stays current | Pass | API `assist.api.test.ts`; unit `actionPlan.test.ts`; E2E `assist.spec.ts`, `automation.spec.ts` |
+| Reassess refuses unsaved changes, deleted steps and other people's analyses; nothing is saved if the workflow changed meanwhile | Pass | API `assist.api.test.ts` |
+
+### Owner feedback round 2 (same branch): Clarify inside the card (mockup A)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **317 / 317 pass** (new: suggested answers, `server/ai/suggestions.test.ts`; questions carry 2 to 4 options) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **76 / 76 pass** (`assist.spec.ts` rewritten for the inline panel) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Clarify opens inside the card (no chat window): one question at a time, "question N of up to 5", suggested answers as choices, Other, Skip, Stop | Pass | E2E `assist.spec.ts`; `docs/evidence/action-plan/07-clarify-inline-1536-test-fixture.png` |
+| Answers update the assessment; the outcome lists what changed, with Done and Create brief; no outdated-brief remark without a brief | Pass | `08-clarify-outcome-1536-test-fixture.png` |
+| Brief questions inline; the written brief opens by itself and is saved | Pass | E2E `assist.spec.ts` |
+| Ask Flico shows none of the interview messages; still saved (refresh) | Pass | E2E `assist.spec.ts` |
+| Suggested answers: at most four, distinct, shortened, none with unsupported figures | Pass | unit `suggestions.test.ts` |
+

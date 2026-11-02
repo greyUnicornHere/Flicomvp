@@ -191,6 +191,14 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: 7,
+    name: 'brief_step_basis',
+    sql: `
+      -- Fingerprint of the step alone when a brief was written: a change to an earlier step no longer outdates it. NULL on older briefs.
+      ALTER TABLE automation_briefs ADD COLUMN step_basis TEXT;
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

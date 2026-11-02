@@ -55,7 +55,7 @@ test('analysis: diagram and recommendations together in full screen, then the fi
   await open(page);
   await page.getByRole('button', { name: 'Analyze' }).click();
   await page.getByRole('menuitem', { name: 'Quick Analysis' }).click();
-  await expect(page.locator('article[data-rec]')).toHaveCount(3);
+  await expect(page.locator('li[data-rec]')).toHaveCount(3);
   // The long-named step is removed by a recommendation: its full name shows in the diagram's Removed list.
   await expect(page.getByTestId('removed-steps')).toContainText(LONG);
 
@@ -67,13 +67,15 @@ test('analysis: diagram and recommendations together in full screen, then the fi
   expect(box.height).toBeGreaterThan(800); // fills the screen below the header
   // Reviewing still works in full screen.
   await page.getByRole('button', { name: /^Accept: Combine/ }).click();
-  await expect(page.locator('article[data-rec]').filter({ hasText: 'Combine' })).toContainText('Accepted');
+  await expect(page.locator('li[data-rec]').filter({ hasText: 'Combine' }).getByTestId('stage-track')).toHaveAttribute('aria-label', /Accepted/);
+  // Applying stays within reach in full screen.
+  await expect(section.getByRole('button', { name: 'Apply accepted changes' })).toBeEnabled();
   await page.screenshot({ path: `${SHOTS}/03-analysis-full-screen-test-fixture.png` });
   await page.getByRole('button', { name: 'Exit full screen' }).click();
   await expect.poll(() => isFullscreen(page)).toBe(false);
   await expect(section).not.toHaveAttribute('data-expanded', 'true');
 
-  await page.getByRole('button', { name: 'Review & confirm' }).click();
+  await page.getByRole('button', { name: 'Apply accepted changes' }).click();
   const dialog = page.getByRole('dialog', { name: 'Review accepted changes' });
   await dialog.getByRole('button', { name: 'Full screen' }).click();
   await expect.poll(() => isFullscreen(page)).toBe(true);

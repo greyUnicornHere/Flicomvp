@@ -82,14 +82,17 @@ export function Modal({ title, children, footer, onClose, initialFocusRef, onFoc
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`fl-popover w-full !p-6 ${fill ? 'flex h-full max-w-none flex-col' : wide ? 'max-w-[1040px]' : 'max-w-[440px]'}`}
+        className={`fl-popover flex max-h-full w-full flex-col !p-6 ${fill ? 'h-full max-w-none' : wide ? 'max-w-[1040px]' : 'max-w-[440px]'}`}
         onKeyDown={onKeyDown}
       >
-        <h2 id={titleId} className="text-[18px] font-bold leading-[26px]">
+        <h2 id={titleId} className="flex-none text-[18px] font-bold leading-[26px]">
           {title}
         </h2>
-        <div className={`mt-2 text-fl-text-secondary ${fill ? 'flex min-h-0 flex-1 flex-col' : ''}`}>{children}</div>
-        <div className="mt-6 flex justify-end gap-3">{footer}</div>
+        {/* Long content scrolls inside the dialog; the title and the buttons always stay on screen. */}
+        <div className={`mt-2 min-h-0 text-fl-text-secondary ${fill ? 'flex flex-1 flex-col' : '-mx-1 overflow-y-auto px-1'}`} data-testid="modal-body">
+          {children}
+        </div>
+        <div className="mt-6 flex flex-none justify-end gap-3">{footer}</div>
       </div>
     </div>,
     document.body,

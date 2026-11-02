@@ -255,15 +255,17 @@ export const questionsOutput = z.object({ questions: z.array(z.object({ question
 export const assistQuestionJsonSchema = object({
   done: { type: 'boolean', description: 'True when nothing that changes the outcome is left to ask.' },
   question: str('ONE short question (max 25 words, one question mark), or "" when done.'),
+  options: { type: 'array', items: str('A likely answer, max 8 words.'), description: '2 to 4 short suggested answers the person can pick, or [] when the answer is open-ended or done.' },
 });
-export const assistQuestionOutput = z.object({ done: z.boolean(), question: shortText(400) });
+export const assistQuestionOutput = z.object({ done: z.boolean(), question: shortText(400), options: z.array(shortText(200)).max(8) });
 
 export const clarifyUpdateJsonSchema = object({
   reply: str('One or two short sentences: what the answer changed (or did not) and why.'),
   assessment: assessmentJsonSchema,
   next_question: str('The next single question if a decision-critical unknown remains, otherwise "".'),
+  next_options: { type: 'array', items: str('A likely answer, max 8 words.'), description: '2 to 4 short suggested answers to next_question, or [] when there is none or it is open-ended.' },
 });
-export const clarifyUpdateOutput = z.object({ reply: shortText(800), assessment: assessmentOutput, next_question: shortText(400) });
+export const clarifyUpdateOutput = z.object({ reply: shortText(800), assessment: assessmentOutput, next_question: shortText(400), next_options: z.array(shortText(200)).max(8) });
 
 export const briefJsonSchema = object({
   summary: str('One sentence summing up the brief.'),

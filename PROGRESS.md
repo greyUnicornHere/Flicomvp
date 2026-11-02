@@ -129,6 +129,22 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - A connection that goes back to an earlier step without being a Repeat loop (for example "Retry limit reached? → No → Search") used to leave Auto-arrange, and AI drafts, with most steps stacked in one column and crossing lines. Now such paths are recognised: steps are laid out left to right as usual, and the way back is drawn under the steps like a Repeat loop, keeping its label (for example "No").
 - Existing workflows keep their positions until you click **Auto-arrange** (owner choice); new AI drafts come out tidy.
 
+## Assessment page revamp, step 1: one Action plan (owner request; awaiting owner review on branch `assessment-action-plan`)
+
+- The Analysis page now shows the proposed workflow beside one **Action plan** (owner chose option A from the mockups). It combines the process changes and the automation opportunities in one list with a progress bar ("1 of 6 done") and the filters **All**, **Process** and **Automation**.
+- Each item shows where it is in its journey. A process change goes **Suggested → Accepted → Applied**. An automation opportunity goes **Assessed → Clarified → brief** (automation or assist brief). A "needs information" step goes **Assessed → Clarified**, and a human-led step goes **Assessed → Support ideas (optional)**. The most useful next action is the filled button; the top opportunities carry a "Top opportunity" tag and come first.
+- The executive summary is a compact card at the bottom: one line, the counts, and **Details** for the assumptions and your answers.
+- **Apply accepted changes** sits at the top, and also in full screen. **Accept all** only accepts; you apply when ready.
+- Still advice only: Flico never runs automations or connects to your systems. Step 2 (agent-ready blueprints that replace the brief at the end of the journey) comes after this is approved.
+- Owner feedback after testing (2026-11-02):
+  - The brief window no longer runs off the screen. Long content scrolls inside it, and the title and buttons always stay visible. This applies to every dialog.
+  - Once a brief is ready, **View brief** is the only button on the card. **Update brief** is inside the brief.
+  - **Reassess**: when a step itself changed since the analysis, its card offers **Reassess**. Flico re-checks just that step against the current workflow and keeps your earlier answers where they still apply. It uses no credit and counts toward the daily Ask Flico limit. When only an earlier step changed, the step stays usable: the card shows a note with a Reassess link, and its brief stays current.
+  - Clarify without the chat: two mockups are on the design canvas for the owner to choose from (A: inline in the card; B: one short form).
+  - **Clarify inside the card** (owner chose A): **Clarify** opens a question panel inside the step's card. Flico asks one question at a time and offers 2 to 4 suggested answers you can click. You can also type your own, **Skip for now**, or **Stop**. A progress bar shows "question N of up to 5".
+  - When Clarify finishes, the card shows what changed, with **Done** and **Create brief →**. The questions before a brief work the same way; when they're done, the brief is written and opens by itself.
+  - Ask Flico no longer shows these questions and answers. They stay saved with the analysis, and the answers appear under "Why" (as "You said").
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -158,4 +174,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/` and `docs/evidence/clarify-briefs/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/` and `docs/evidence/action-plan/`.

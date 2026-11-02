@@ -367,3 +367,23 @@ The owner asked for a way to clarify each assessment and then, based on its clas
 - Bug: Auto-arrange (also used for AI drafts and the Analysis diagram) only understood cycles made of Repeat (loop) connections. A decision's Yes/No path, or a normal connection, back to an earlier step left the ordering stuck, so every step after the cycle stayed in the first column.
 - Fix: `backEdges` (shared/layout.ts) walks the workflow from Start (depth-first, Yes before normal before No) and marks every connection that points to a step still on the current path, plus connections from a step to itself. Auto-arrange and the placement of new steps leave these out when ordering columns; the diagram draws them like Repeat loops (out to the right, along a lane under the steps in between, back into the earlier step) and keeps their own label and type. The workflow itself is unchanged.
 - Owner choices: the way back runs **under** the steps; existing workflows are tidied only when the person clicks Auto-arrange (Flico never moves blocks by itself).
+
+## Assessment page revamp: one Action plan, advisory blueprints (owner request, 2026-11-02)
+- Direction (owner choice): Flico stays advisory and never runs anything. The automation journey ends in an exportable **agent-ready blueprint** (tools and access, agent steps, human checkpoints, guardrails, test cases); a dry run on test cases may come later. Mockups: Design canvas "Flico assessment page revamp" (options A, B and C plus the blueprint page).
+- Layout (owner choice: option A): the proposed workflow beside one Action plan of process changes and automation opportunities, each with its journey stages and next action, and the executive summary as a compact card at the bottom. Built in two steps, each reviewed: 1) the page using today's Clarify and briefs; 2) blueprints.
+- Journey stages: a process change is Suggested, Accepted, then Applied. An automation step is Assessed, Clarified (optional), then its brief. A step that needs more information can't get a brief until Clarify settles its class. A human-led step counts as done once assessed; its support ideas are optional. A step that changed since the analysis, or whose brief is out of date, is not done.
+- Progress counts the items in the plan. Rejected changes don't count, and once changes are applied the ones that weren't accepted stop counting too.
+- An assessment records `clarified: true` once an answer in Clarify updates it; skipping doesn't set it, and older assessments simply lack it. No migration is needed: assessments are stored as JSON.
+- "Accept all" no longer opens the final preview. Accepting and applying are separate actions, so the plan's progress reads correctly.
+- Reassessment (owner choice, 2026-11-02): assessments and briefs record two fingerprints, one for the step and what feeds it (`basis`) and one for the step alone (`stepBasis`; briefs store it in `automation_briefs.step_basis`, migration 7).
+  - If the step itself changed or was deleted, the assessment needs reassessing: Clarify and briefs are refused until **Reassess** (`POST /api/analyses/:id/reassess`) re-checks that one step against the current workflow.
+  - Reassess uses no credit, counts toward the daily Ask Flico limit, and keeps the person's earlier Clarify answers as context. It is saved only if the workflow didn't change meanwhile.
+  - If only an earlier step changed, nothing is blocked; the card shows a note. A brief is out of date only if its step itself, or its classification, changed.
+  - Older records without a step fingerprint behave as before: any change needs reassessing.
+- Once a brief is current, the card shows only View brief (owner choice). Clarify is no longer offered next to it; Update brief is in the brief window.
+- Dialogs never grow taller than the window: the body scrolls, and the title and buttons stay visible (owner bug report: a long brief ran off screen).
+- Clarify and brief interviews run inside the step's Action plan card (owner chose mockup A, 2026-11-02), not in Ask Flico.
+  - Each question carries 2 to 4 suggested answers (`AssistInfo.options`). The model offers them; the server keeps at most four short, distinct ones and drops any that state figures the workflow or the person didn't give. The person can always type their own answer.
+  - These messages are still stored as chat messages for history and AI context. Ask Flico hides them, and Ask Flico's own conversation no longer sends them to the model.
+  - A written brief opens by itself. The note that an earlier brief is out of date appears only when the step has a brief.
+

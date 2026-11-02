@@ -1,5 +1,5 @@
-// Automation assessment in the Analysis tab (option A): counts per classification, steps grouped by
-// classification, explanation in place, linked to the diagram. AI output comes from Flico's labelled
+// Automation assessment in the Action plan of the Analysis tab: top opportunities first, compact cards
+// with journey stages, explanation in place, linked to the diagram. AI output comes from Flico's labelled
 // test fixture (AI_PROVIDER=fixture), never a live model.
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test, type Page } from '@playwright/test';
@@ -44,43 +44,51 @@ async function analysed(page: Page, viewport = { width: 1536, height: 960 }) {
   return workflow.id as string;
 }
 
-const panel = (page: Page) => page.getByTestId('automation-panel');
+const panel = (page: Page) => page.getByTestId('action-plan');
+const showAutomation = (page: Page) => panel(page).getByRole('button', { name: /^Automation \(\d+\)$/ }).click();
 const row = (page: Page, name: string) => panel(page).locator('li[data-assessment]').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}`) }) });
 const label = (page: Page, id: string) => page.locator(`[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="${id}"] .fl-auto-badge`);
 const diagramStep = (page: Page, id: string) => page.locator(`[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="${id}"] .fl-step`);
 
-test('Automation tab: counts, steps grouped by class, explanation in place, linked to the diagram; no extra credit', async ({ page }) => {
+test('Automation in the Action plan: top opportunities first, compact cards, explanation in place, linked to the diagram; no extra credit', async ({ page }) => {
   await analysed(page);
-  await expect(page.getByText(/4 steps assessed for automation/)).toBeVisible();
-  // Recommendations stay the default view.
-  await expect(page.getByRole('tab', { name: /Recommendations/, selected: true })).toBeVisible();
-  await page.getByRole('tab', { name: /Automation \(4\)/ }).click();
+  await expect(page.getByTestId('summary-card')).toContainText('4 steps assessed');
+  // Everything is shown by default; the Automation filter shows only the assessed steps.
+  await expect(panel(page).getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true');
+  await showAutomation(page);
+  await expect(panel(page).locator('li[data-rec]')).toHaveCount(0);
 
   // Top opportunities first: the candidate, then the human-assisted step, each with what to automate and the next step.
-  const top = panel(page).getByTestId('top-opportunities').getByRole('listitem');
-  await expect(top).toHaveCount(2);
-  await expect(top.nth(0)).toContainText('Match invoice to order');
-  await expect(top.nth(0)).toContainText('Next:');
-  await expect(top.nth(1)).toContainText('Compare supplier quotations');
-  await expect(top.nth(1)).toContainText('Extract prices');
-  await expect(panel(page).getByLabel('Automation summary')).toHaveText('1 automation candidate · 1 human-assisted · 1 keep human-led · 1 needs more information');
-  await expect(panel(page).getByRole('region', { name: 'Human-assisted automation' })).toContainText('Compare supplier quotations');
-  await expect(panel(page).getByRole('region', { name: 'Keep human-led' })).toContainText('Check delivery');
-  await expect(panel(page).getByRole('region', { name: 'More information needed' })).toContainText('Send quotation');
+  const rows = panel(page).locator('li[data-assessment]');
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(0)).toContainText('Match invoice to order');
+  await expect(rows.nth(0)).toContainText('Top opportunity');
+  await expect(rows.nth(0)).toContainText('Next:');
+  await expect(rows.nth(1)).toContainText('Compare supplier quotations');
+  await expect(rows.nth(1)).toContainText('Top opportunity');
+  await expect(rows.nth(1)).toContainText('Extract prices');
+  await expect(rows.filter({ hasText: 'Top opportunity' })).toHaveCount(2);
+  await expect(row(page, 'Compare supplier quotations')).toContainText('Human-assisted');
+  await expect(row(page, 'Check delivery')).toContainText('Human-led');
+  await expect(row(page, 'Send quotation')).toContainText('Needs info');
   // Start, Finish and the wait are not work, so they are not assessed.
   await expect(panel(page)).not.toContainText('Wait for delivery');
-  await expect(panel(page).locator('li[data-assessment]')).toHaveCount(4);
+  // Each step shows where it is in its journey: assessed, then clarified, then its brief.
+  await expect(row(page, 'Match invoice to order').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: Assessed (step 1 of 3)');
+  await expect(row(page, 'Match invoice to order').getByTestId('stage-track')).toContainText('Automation brief');
+  await expect(row(page, 'Send quotation').getByTestId('stage-track')).not.toContainText('brief');
+  // Human-led steps are settled: they count as done.
+  await expect(row(page, 'Check delivery').getByTestId('stage-track')).toContainText('Support ideas');
+  await expect(page.getByTestId('plan-progress')).toHaveText('1 of 6 done');
 
-  // Each step is a compact card: verdict, Automate, Keep human, Next step; the rest is under "Why".
+  // Compact card: the verdict line and the next step; the rest is under "Why".
   const open = row(page, 'Compare supplier quotations');
-  await expect(open).toContainText('Automate');
-  await expect(open).toContainText('Keep human');
-  await expect(open).toContainText('Next step');
   await expect(open).not.toContainText('Business value');
   // Selecting a step highlights it in the diagram (here: in the Removed list, as a recommendation removes it).
   await open.getByRole('button').first().click();
   await expect(open.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
   await open.getByRole('button', { name: 'Why' }).click();
+  await expect(open).toContainText('Keep human');
   await expect(open).toContainText('You said');
   await expect(open).toContainText('Business value');
   // This step is removed by a recommendation, so it isn't drawn: its entry in the Removed list is highlighted.
@@ -100,9 +108,10 @@ test('Automation tab: counts, steps grouped by class, explanation in place, link
   await removedEntry.click();
   await expect(row(page, 'Compare supplier quotations').getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
 
-  // Back to recommendations: the diagram follows recommendation selection again.
-  await page.getByRole('tab', { name: /Recommendations/ }).click();
-  await expect(page.locator('article[data-rec]').first()).toBeVisible();
+  // Process changes only: the diagram follows recommendation selection again.
+  await panel(page).getByRole('button', { name: /^Process/ }).click();
+  await expect(page.locator('li[data-rec]').first()).toBeVisible();
+  await expect(panel(page).locator('li[data-assessment]')).toHaveCount(0);
   // One analysis, one credit: the assessment needed no extra credit.
   expect((await (await page.request.get('/api/credits')).json()).balance).toBe(9);
 });
@@ -119,15 +128,16 @@ test('changing a step (or what feeds it) shows Needs reassessment; moving blocks
   expect((await page.request.put(`/api/workflows/${id}/graph`, { data: { graph: next, baseRevision: current.revision } })).status()).toBe(200);
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
-  await page.getByRole('tab', { name: /Automation/ }).click();
   await expect(row(page, 'Check delivery')).toContainText('Needs reassessment');
-  await expect(row(page, 'Send quotation')).toContainText('Needs reassessment'); // fed by the changed step
+  // Fed by the changed step: still usable, with a note.
+  await expect(row(page, 'Send quotation')).not.toContainText('Needs reassessment');
+  await expect(row(page, 'Send quotation').getByTestId('freshness-note')).toContainText('An earlier step changed');
   await expect(row(page, 'Match invoice to order')).not.toContainText('Needs reassessment'); // only moved
   // The labels on the diagram say so too.
   await expect(label(page, 'inspect')).toHaveAttribute('data-stale', 'true');
   await expect(label(page, 'match')).not.toHaveAttribute('data-stale', 'true');
   await row(page, 'Check delivery').getByRole('button').first().click();
-  await expect(row(page, 'Check delivery')).toContainText('run a new analysis to reassess');
+  await expect(row(page, 'Check delivery')).toContainText('Reassess it to continue');
   await page.screenshot({ path: `${SHOTS}/02-needs-reassessment-1536-test-fixture.png` });
 });
 
@@ -138,28 +148,31 @@ test('an analysis made before assessments existed still opens and says it has no
   db.close();
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
-  await expect(page.getByText('No automation assessment in this analysis')).toBeVisible();
-  await page.getByRole('tab', { name: /^Automation$/ }).click();
-  await expect(panel(page).or(page.getByText(/made before automation assessments were added/))).toBeVisible();
+  await expect(page.getByTestId('summary-card')).toContainText('No automation assessment');
   await expect(page.getByText(/made before automation assessments were added/)).toBeVisible();
-  await expect(page.locator('article[data-rec]')).toHaveCount(0);
+  // The process changes are still there.
+  await expect(page.locator('li[data-rec]').first()).toBeVisible();
+  await showAutomation(page);
+  await expect(page.getByText(/made before automation assessments were added/)).toBeVisible();
+  await expect(page.locator('li[data-rec]')).toHaveCount(0);
 });
 
-test('1280px: the Automation tab stays readable next to the diagram', async ({ page }) => {
+test('1280px: the Action plan stays readable next to the diagram', async ({ page }) => {
   await analysed(page, { width: 1280, height: 800 });
-  await page.getByRole('tab', { name: /Automation/ }).click();
+  await showAutomation(page);
   await row(page, 'Match invoice to order').getByRole('button').first().click();
-  await expect(row(page, 'Match invoice to order')).toContainText('Provisional');
+  await expect(row(page, 'Match invoice to order')).toContainText('provisional');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/03-automation-tab-1280-test-fixture.png` });
 });
 
-test('labels on the analysis diagram: only in the Automation view; a label opens its assessment', async ({ page }) => {
+test('labels on the analysis diagram: hidden when only process changes are shown; a label opens its assessment', async ({ page }) => {
   await analysed(page);
   const labels = page.locator('[aria-label="Workflow with proposed changes"] .fl-auto-badge');
-  // Recommendations view: change highlighting only.
+  // Process changes only: change highlighting only.
+  await panel(page).getByRole('button', { name: /^Process/ }).click();
   await expect(labels).toHaveCount(0);
-  await page.getByRole('tab', { name: /Automation/ }).click();
+  await panel(page).getByRole('button', { name: /^All/ }).click();
   await expect(labels).toHaveCount(3); // Start, Finish and the wait have none; the removed step is listed instead
   await expect(page.getByTestId('removed-steps').getByTestId('removed-automation')).toHaveText('Human-assisted');
   await expect(label(page, 'match')).toHaveAttribute('data-provisional', 'true');
@@ -178,9 +191,9 @@ test('labels on the analysis diagram: only in the Automation view; a label opens
   for (let i = 0; i < 4; i++) await zoomIn.click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/05-labels-zoomed-in-1536-test-fixture.png` });
-  await page.getByRole('tab', { name: /Recommendations/ }).click();
+  await expect(page.locator('li[data-rec] button[aria-pressed="true"]')).toHaveCount(0);
+  await panel(page).getByRole('button', { name: /^Process/ }).click();
   await expect(labels).toHaveCount(0);
-  await expect(page.locator('article[data-rec] button[aria-pressed="true"]')).toHaveCount(0);
 
   // The editor never shows them.
   await page.getByRole('tab', { name: 'Editor' }).click();

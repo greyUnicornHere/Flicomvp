@@ -467,6 +467,17 @@ function assist(input: string, system: string) {
   const asked = (extra: string[] = []) => [...interview.map((t) => t.question), ...extra];
   const clarifyQuestions = [`Where does the information for “${label}” come from?`, `Which rule or criteria decide the result of “${label}”?`, `Who checks the result of “${label}”?`];
   const nextOf = (candidates: string[], extra: string[] = []) => candidates.find((q) => !asked(extra).includes(q)) ?? '';
+  // Suggested answers by what the question is about (test fixture).
+  const optionsFor = (question: string): string[] =>
+    !question
+      ? []
+      : /come from|hold the inputs|systems/i.test(question)
+        ? ['From the ERP, with API access', 'From emails and PDFs', 'From a shared spreadsheet']
+        : /rule|criteria|decide/i.test(question)
+          ? ['A fixed written rule', 'Judgement case by case', 'It depends on the customer']
+          : /who|own/i.test(question)
+            ? ['A person checks each result', 'Only exceptions are checked', 'Nobody checks it yet']
+            : ['Yes', 'No', 'Not sure yet'];
 
   if (input.includes('Task: update the assessment')) {
     const latest = decode<{ question: string; answer: string }[]>(tagged(input, 'answers'), [])[0]!;
@@ -475,9 +486,12 @@ function assist(input: string, system: string) {
       reply: `Thanks. With that, “${label}” is ${CLASS_NAME[updated.classification]}${updated.provisional ? ' (provisional)' : ''}.`,
       assessment: updated,
       next_question: updated.classification === 'unknown' || updated.provisional ? nextOf(clarifyQuestions, [latest.question]) : '',
+      next_options: optionsFor(updated.classification === 'unknown' || updated.provisional ? nextOf(clarifyQuestions, [latest.question]) : ''),
     };
   }
   if (input.includes('Task: write the brief.')) return writeFixtureBrief(system, label, interview);
+  // Reassess: the step as it is now, with the person's earlier answers.
+  if (input.includes('Task: reassess the selected step')) return assess(view, ref, turns());
 
   const kind = /automation brief/.test(system) ? 'automation' : /assist brief/.test(system) ? 'assist' : /support ideas/.test(system) ? 'support' : null;
   const candidates = !kind
@@ -488,7 +502,7 @@ function assist(input: string, system: string) {
         support: [`Where do mistakes or delays happen in “${label}”?`, 'What would help the person doing it most?'],
       }[kind];
   const question = nextOf(candidates);
-  return { done: !question, question };
+  return { done: !question, question, options: optionsFor(question) };
 }
 
 function writeFixtureBrief(system: string, label: string, interview: { question: string; answer: string }[]) {

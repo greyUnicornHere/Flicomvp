@@ -56,6 +56,10 @@ export type StepAssessment = {
   basis: string;
   revision: number;
   updatedAt: string;
+  /** Set once an answer in a Clarify interview updated this assessment (absent on older assessments). */
+  clarified?: boolean;
+  /** Fingerprint of the step alone (see `stepBasis`); absent on older assessments. */
+  stepBasis?: string;
 };
 
 /**
@@ -103,9 +107,37 @@ export function assessmentBasis(graph: WorkflowGraph, stepId: string): string | 
   return hash(JSON.stringify({ step: semantic(node), upstream }));
 }
 
-/** True when the step was deleted or changed in a way that matters since it was assessed. */
-export function needsReassessment(graph: WorkflowGraph, assessment: Pick<StepAssessment, 'stepId' | 'basis'>): boolean {
-  return assessmentBasis(graph, assessment.stepId) !== assessment.basis;
+/** Fingerprint of the step's own details only (not the steps that feed it). */
+export function stepBasis(graph: WorkflowGraph, stepId: string): string | null {
+  const node = graph.nodes.find((n) => n.id === stepId);
+  return node ? hash(JSON.stringify(semantic(node))) : null;
+}
+
+/** Fingerprints recorded for an assessment or a brief. */
+export function basesOf(graph: WorkflowGraph, stepId: string): { basis: string; stepBasis: string } | null {
+  const basis = assessmentBasis(graph, stepId);
+  const own = stepBasis(graph, stepId);
+  return basis === null || own === null ? null : { basis, stepBasis: own };
+}
+
+/**
+ * How an assessment (or a brief) relates to the workflow as it is now:
+ * - current: nothing that matters changed;
+ * - upstream: only a step that feeds it changed; still usable, worth a look;
+ * - changed: the step itself changed or was deleted (older records without a step fingerprint also land here
+ *   whenever anything changed). It must be reassessed before Clarify or a brief.
+ */
+export type Freshness = 'current' | 'upstream' | 'changed';
+export function freshness(graph: WorkflowGraph, record: { stepId: string; basis: string; stepBasis?: string }): Freshness {
+  const now = assessmentBasis(graph, record.stepId);
+  if (now === null) return 'changed';
+  if (now === record.basis) return 'current';
+  return record.stepBasis && stepBasis(graph, record.stepId) === record.stepBasis ? 'upstream' : 'changed';
+}
+
+/** True when the step was deleted or its own details changed since it was assessed: reassess it first. */
+export function needsReassessment(graph: WorkflowGraph, assessment: Pick<StepAssessment, 'stepId' | 'basis' | 'stepBasis'>): boolean {
+  return freshness(graph, assessment) === 'changed';
 }
 
 /** The step's single most useful next action: its first open question, else its first point to verify. */
@@ -154,11 +186,13 @@ export type AutomationBrief = {
   sections: { heading: string; items: string[] }[];
   /** Fingerprint of the step and what feeds it when written (see `assessmentBasis`). */
   basis: string;
+  /** Fingerprint of the step alone when written (absent on older briefs). */
+  stepBasis?: string;
   revision: number;
   createdAt: string;
 };
 
-/** A brief no longer matches its step: the step changed, or its classification did. */
-export function briefOutdated(brief: Pick<AutomationBrief, 'basis' | 'classification' | 'stepId'>, assessment: Pick<StepAssessment, 'classification'> | undefined, graph: WorkflowGraph): boolean {
-  return !assessment || assessment.classification !== brief.classification || assessmentBasis(graph, brief.stepId) !== brief.basis;
+/** A brief no longer matches its step: the step itself changed, or its classification did. A change to an earlier step alone doesn't outdate it. */
+export function briefOutdated(brief: Pick<AutomationBrief, 'basis' | 'stepBasis' | 'classification' | 'stepId'>, assessment: Pick<StepAssessment, 'classification'> | undefined, graph: WorkflowGraph): boolean {
+  return !assessment || assessment.classification !== brief.classification || freshness(graph, brief) === 'changed';
 }

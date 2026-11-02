@@ -169,7 +169,8 @@ ${DATA_RULES}`;
 const INTERVIEW_RULES = `Interview rules:
 - Ask ONE short question at a time (at most 25 words, a single question mark) about the selected step. Never combine questions or send a multi-part form.
 - Use the step details, the workflow, the current assessment and earlier answers in <interview>. Never ask again something already answered or skipped.
-- Ask only what changes the outcome. When you have enough, set done = true and leave the question empty.`;
+- Ask only what changes the outcome. When you have enough, set done = true and leave the question empty.
+- With each question, offer 2 to 4 short suggested answers (at most 8 words each) that people in this situation commonly give, so the person can pick one. They are only suggestions: the person can always type their own. Never put figures in them that the workflow or the person didn't give. Leave them empty when the answer is truly open-ended.`;
 
 export const CLARIFY_QUESTION_SYSTEM = `You help the person firm up the automation assessment of one workflow step in Flico.
 
@@ -187,6 +188,16 @@ export const CLARIFY_UPDATE_SYSTEM = `You update the automation assessment of on
 - Never change the workflow itself.
 
 ${INTERVIEW_RULES}
+
+${AUTOMATION_RULES}
+
+${DATA_RULES}`;
+
+export const REASSESS_SYSTEM = `You reassess the automation potential of one workflow step in Flico because the workflow changed since it was assessed. The <assessment> is the earlier one; the workflow data is the current workflow.
+- Assess the step as it is now, using its current details and the steps that feed it.
+- Keep evidence the person gave (source "user") and the answers in the interview only where they still apply to the step as it is now.
+- Change the classification only when the current workflow or the person's answers justify it.
+- Never change the workflow itself.
 
 ${AUTOMATION_RULES}
 
@@ -221,11 +232,12 @@ ${DATA_RULES}`;
 }
 
 /** The interview context as the model sees it (refs, not IDs), followed by the task. */
-export function assistPrompt(input: { view: unknown; assessment: unknown; interview: { question: string; answer: string | null }[]; stepRef: string; task: 'question' | 'update' | 'brief'; latest?: { question: string; answer: string } }): string {
+export function assistPrompt(input: { view: unknown; assessment: unknown; interview: { question: string; answer: string | null }[]; stepRef: string; task: 'question' | 'update' | 'brief' | 'reassess'; latest?: { question: string; answer: string } }): string {
   const task = {
     question: 'Task: ask the next question, or say you are done.',
     update: 'Task: update the assessment with the latest answer.',
     brief: 'Task: write the brief.',
+    reassess: 'Task: reassess the selected step against the workflow as it is now.',
   }[input.task];
   return [
     `<workflow_data>\n${embed(input.view)}\n</workflow_data>`,

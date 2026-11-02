@@ -57,7 +57,8 @@ const HISTORY_TURNS = 20;
 
 /** The conversation as the model sees it: the latest turns, with what happened to each proposal. */
 function historyTurns(messages: ChatMessage[]): HistoryTurn[] {
-  const turns = messages.slice(-HISTORY_TURNS).map((m): HistoryTurn => {
+  // Clarify and brief interviews happen in the Action plan, not in Ask Flico: they are not part of this conversation.
+  const turns = messages.filter((m) => !m.assist).slice(-HISTORY_TURNS).map((m): HistoryTurn => {
     if (m.role === 'user' || !m.proposal) return { role: m.role, content: m.content };
     const outcome = { pending: 'not yet applied', applied: 'applied by the person', cancelled: 'cancelled by the person', expired: 'not applied' }[m.proposal.status];
     return { role: m.role, content: `${m.content}\n\n[Proposed change: ${m.proposal.summary} (${outcome})]` };

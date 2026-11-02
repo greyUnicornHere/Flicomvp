@@ -77,11 +77,15 @@ describe('Clarify: one question at a time', () => {
     const { t, ai, alice, workflow, analysis } = await setup();
     const before = analysis.assessments!.find((a) => a.stepId === 'n-quote')!;
     expect(before.classification).toBe('unknown');
+    expect(before.clarified).toBeUndefined();
     const first = (await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'clarify', baseRevision: workflow.revision })).json();
     expect(first.messages).toHaveLength(1);
     const q = first.messages[0] as ChatMessage;
     expect(q).toMatchObject({ role: 'assistant', assist: { stepId: 'n-quote', mode: 'clarify', kind: 'question', status: 'pending' } });
     expect((q.content.match(/\?/g) ?? []).length).toBe(1);
+    // Each question comes with a few suggested answers to pick from.
+    expect(q.assist!.options!.length).toBeGreaterThanOrEqual(2);
+    expect(q.assist!.options!.length).toBeLessThanOrEqual(4);
     // Asking again shows the same open question without another AI call.
     const calls = ai.assistCalls;
     expect((await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'clarify', baseRevision: workflow.revision })).json().messages[0].id).toBe(q.id);
@@ -99,6 +103,8 @@ describe('Clarify: one question at a time', () => {
     const after = (body.analysis as Analysis).assessments!.find((a) => a.stepId === 'n-quote')!;
     expect(after.classification).not.toBe('unknown');
     expect(after.evidence.some((e) => e.source === 'user' && /price list/.test(e.text))).toBe(true);
+    // The Action plan shows the step as clarified.
+    expect(after.clarified).toBe(true);
     expect(await credits(t, alice.cookie)).toBe(9); // only the analysis used a credit
   });
 
@@ -112,6 +118,8 @@ describe('Clarify: one question at a time', () => {
       const match = (body.analysis as Analysis).assessments!.find((a) => a.stepId === 'n-match')!;
       expect(match.provisional).toBe(true);
       expect(match.classification).toBe('full');
+      // Skipping is not clarifying.
+      expect(match.clarified).toBeUndefined();
       q = body.messages.at(-1);
       if (q.assist?.kind === 'question') expect(asked.has(q.content)).toBe(false);
     }
@@ -164,13 +172,70 @@ describe('safety', () => {
     now = await current(t, alice.cookie, workflow.id);
     const stale = await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'brief', baseRevision: now.revision });
     expect(stale.statusCode).toBe(409);
-    expect(stale.json().error.message).toMatch(/changed since the analysis/);
+    expect(stale.json().error.message).toMatch(/changed since it was assessed. Reassess it first/);
 
     // A newer analysis makes this one view-only.
     await analyse(t, alice.cookie, now, 'guided');
     const old = await start(t, alice.cookie, analysis.id, { stepId: 'n-match', mode: 'clarify', baseRevision: now.revision });
     expect(old.statusCode).toBe(409);
     expect(old.json().error.message).toMatch(/Only the latest analysis/);
+  });
+
+  it('a change to an earlier step only is not blocking; a brief stays current; the changed step itself is blocked', async () => {
+    const { t, alice, workflow, analysis } = await setup();
+    expect(analysis.assessments!.every((a) => typeof a.stepBasis === 'string')).toBe(true);
+    // A brief for "Compare" (assisted), written before the change.
+    let q = (await start(t, alice.cookie, analysis.id, { stepId: 'n-compare', mode: 'brief', baseRevision: workflow.revision })).json().messages.at(-1) as ChatMessage;
+    for (let i = 0; i < 8 && q?.assist?.kind === 'question'; i++) q = (await answer(t, alice.cookie, analysis.id, { messageId: q.id, baseRevision: workflow.revision, skip: true })).json().messages.at(-1);
+    let [now] = await analyses(t, alice.cookie, workflow.id);
+    expect(now!.briefs.find((b) => b.stepId === 'n-compare')!.stepBasis).toEqual(expect.any(String));
+
+    // "Match" feeds "Compare": change Match's notes.
+    const changed = { ...GRAPH, nodes: GRAPH.nodes.map((n) => (n.id === 'n-match' ? { ...n, notes: `${n.notes} Weekly batch.` } : n)) };
+    await t.app.inject({ method: 'PUT', url: `/api/workflows/${workflow.id}/graph`, headers: { ...ORIGIN, cookie: alice.cookie }, payload: { graph: changed, baseRevision: workflow.revision } });
+    const wf = await current(t, alice.cookie, workflow.id);
+    const { briefOutdated, freshness } = await import('../../shared/assessment.js');
+    const compare = now!.assessments!.find((a) => a.stepId === 'n-compare')!;
+    expect(freshness(wf.graph, compare)).toBe('upstream');
+    expect(briefOutdated(now!.briefs.find((b) => b.stepId === 'n-compare')!, compare, wf.graph)).toBe(false);
+    // Upstream only: Clarify is allowed. The step itself changed: refused until reassessed.
+    expect((await start(t, alice.cookie, analysis.id, { stepId: 'n-compare', mode: 'clarify', baseRevision: wf.revision })).statusCode).toBe(200);
+    const refused = await start(t, alice.cookie, analysis.id, { stepId: 'n-match', mode: 'clarify', baseRevision: wf.revision });
+    expect(refused.statusCode).toBe(409);
+    [now] = await analyses(t, alice.cookie, workflow.id);
+    expect(freshness(wf.graph, now!.assessments!.find((a) => a.stepId === 'n-match')!)).toBe('changed');
+  });
+
+  it('Reassess re-checks one step against the current workflow: no credit, keeps answers, then unblocks it', async () => {
+    const { t, ai, alice, workflow, analysis } = await setup();
+    const reassess = (payload: Record<string, unknown>, cookie = alice.cookie) =>
+      t.app.inject({ method: 'POST', url: `/api/analyses/${analysis.id}/reassess`, headers: { ...ORIGIN, cookie }, payload });
+    // "Send quotation" gets its rules and access in the workflow itself.
+    const changed = { ...GRAPH, nodes: GRAPH.nodes.map((n) => (n.id === 'n-quote' ? { ...n, notes: 'Rule: the policy is list price from the ERP via API access. Sales checks each quote.' } : n)) };
+    await t.app.inject({ method: 'PUT', url: `/api/workflows/${workflow.id}/graph`, headers: { ...ORIGIN, cookie: alice.cookie }, payload: { graph: changed, baseRevision: workflow.revision } });
+    const wf = await current(t, alice.cookie, workflow.id);
+    expect((await reassess({ stepId: 'n-quote', baseRevision: wf.revision - 1 })).statusCode).toBe(409); // unsaved changes
+    const calls = ai.assistCalls;
+    const ok = await reassess({ stepId: 'n-quote', baseRevision: wf.revision });
+    expect(ok.statusCode).toBe(200);
+    expect(ai.assistCalls).toBe(calls + 1);
+    const after = (ok.json().analysis as Analysis).assessments!;
+    const quote = after.find((a) => a.stepId === 'n-quote')!;
+    expect(quote.classification).not.toBe('unknown');
+    expect(quote.revision).toBe(wf.revision);
+    // Other steps are untouched; the step can now be clarified or planned again; no credit used.
+    expect(after.filter((a) => a.stepId !== 'n-quote')).toEqual(analysis.assessments!.filter((a) => a.stepId !== 'n-quote'));
+    expect((await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'clarify', baseRevision: wf.revision })).statusCode).toBe(200);
+    expect(await credits(t, alice.cookie)).toBe(9);
+
+    // A deleted step can't be reassessed; strangers can't reassess.
+    const gone = { nodes: changed.nodes.filter((n) => n.id !== 'n-quote'), edges: [...changed.edges.filter((e) => e.sourceId !== 'n-quote' && e.targetId !== 'n-quote'), { id: 'e9', sourceId: 'n-compare', targetId: 'n-done', type: 'normal' as const }] };
+    await t.app.inject({ method: 'PUT', url: `/api/workflows/${workflow.id}/graph`, headers: { ...ORIGIN, cookie: alice.cookie }, payload: { graph: gone, baseRevision: wf.revision } });
+    const deleted = await reassess({ stepId: 'n-quote', baseRevision: wf.revision + 1 });
+    expect(deleted.statusCode).toBe(409);
+    expect(deleted.json().error.message).toMatch(/deleted/);
+    const bob = await signIn(t, 'bob@example.com');
+    expect((await reassess({ stepId: 'n-match', baseRevision: wf.revision + 1 }, bob.cookie)).statusCode).toBe(404);
   });
 
   it('keeps the analysis untouched when the AI fails, and keeps everything private', async () => {

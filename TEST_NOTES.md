@@ -471,3 +471,8 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 | A removed long-named step shows its full name in the list | Pass (fixture) | `tests/e2e/feedback.spec.ts` (updated) |
 | Final preview and long workflows | Pass (fixture) | `02-long-workflow-1536-test-fixture.png`, `03-final-preview-1536-test-fixture.png` |
 | Edge browser | Not tested | Only Chromium is available here |
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of the analysis diagram layout and Removed list | Pass | Product owner approved on 2026-11-02 |

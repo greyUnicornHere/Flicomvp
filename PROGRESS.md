@@ -106,7 +106,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Analyses made before this still open and say they have no automation assessment.
 - **No repeat Quick Analysis of an unchanged workflow** (moving blocks doesn't count as a change): the Analyze menu shows Quick Analysis as "Unchanged since last analysis" with a **View latest analysis** shortcut, and the server refuses it without using a credit. Guided Analysis stays available (new answers add information), and Quick is allowed again when the workflow changes or when the latest analysis has no automation assessment yet.
 
-## Change-aware analysis diagram (owner feedback; awaiting owner review, branch `analysis-layout`)
+## Analysis diagram: proposed workflow only, removed steps listed (owner feedback; approved by owner 2026-11-02; merged to `main`)
 
 - The Analysis diagram and the final preview show only the **proposed workflow**, neatly arranged (unchanged, updated and added steps highlighted). No red lines for old routes.
 - **Removed steps** are listed in a "Removed" box in the diagram's corner, each with where it was ("after “Receive order”"). Hovering one highlights where it was; clicking it selects the recommendation that removes it (in the Automation view: opens its assessment, and its class is shown).

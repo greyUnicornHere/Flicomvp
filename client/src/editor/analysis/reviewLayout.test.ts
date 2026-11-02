@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkflowGraph } from '../../../../shared/graph';
 import { withChanges } from '../flowElements';
-import { NODE_WIDTH } from '../layout';
-import { reviewLayout } from './reviewLayout';
+import { removedSteps, reviewLayout } from './reviewLayout';
 
 const node = (id: string, label: string, x = 0, y = 0) => ({ id, type: 'action' as const, label, position: { x, y } });
 const edge = (id: string, sourceId: string, targetId: string) => ({ id, sourceId, targetId, type: 'normal' as const });
@@ -17,43 +16,41 @@ const after: WorkflowGraph = {
   edges: [edge('n1', 's', 'l'), edge('n2', 'l', 'r'), edge('n3', 'r', 'a'), edge('e4', 'a', 'f')],
 };
 
-describe('reviewLayout (change-aware)', () => {
-  const laid = reviewLayout(withChanges(before, after));
+describe('review diagram: proposed workflow only, removed steps listed', () => {
+  const display = withChanges(before, after);
+  const laid = reviewLayout(display).graph;
   const at = (id: string) => laid.nodes.find((n) => n.id === id)!.position;
 
-  it('puts the proposed workflow on one tidy row, in order, ignoring old positions', () => {
+  it('draws only the proposed workflow on one tidy row, in order, ignoring old positions', () => {
+    expect(laid.nodes.map((n) => n.id).sort()).toEqual(['a', 'f', 'l', 'r', 's']);
     const row = ['s', 'l', 'r', 'a', 'f'].map(at);
     expect(new Set(row.map((p) => p.y)).size).toBe(1);
     expect(row.map((p) => p.x)).toEqual([...row.map((p) => p.x)].sort((x, y) => x - y));
   });
 
-  it('places a removed step in a lane below, between the steps it sat between', () => {
-    const removed = at('c');
-    expect(removed.y).toBeGreaterThan(at('r').y + 72);
-    expect(removed.x).toBeGreaterThan(at('r').x);
-    expect(removed.x).toBeLessThan(at('a').x);
+  it('draws no removed connections (no red lines)', () => {
+    expect(laid.edges.map((e) => e.id).sort()).toEqual(['e4', 'n1', 'n2', 'n3']);
   });
 
-  it('keeps every connection, including the removed ones', () => {
-    expect(laid.edges.map((e) => e.id).sort()).toEqual(['e1', 'e2', 'e3', 'e4', 'n1', 'n2', 'n3']);
+  it('lists removed steps with the steps they sat between', () => {
+    expect(removedSteps(display)).toEqual([{ id: 'c', label: 'Check', after: [{ id: 'r', label: 'Receive' }], before: [{ id: 'a', label: 'Approve' }] }]);
   });
 
-  it('never overlaps removed steps that wanted the same place, and keeps their order', () => {
+  it('follows chains of removed steps and keeps their order', () => {
     const chain: WorkflowGraph = {
       nodes: [...before.nodes.slice(0, 2), node('c1', 'Check A', 500), node('c2', 'Check B', 700), ...before.nodes.slice(3)],
       edges: [edge('e1', 's', 'r'), edge('x1', 'r', 'c1'), edge('x2', 'c1', 'c2'), edge('x3', 'c2', 'a'), edge('e4', 'a', 'f')],
     };
     const shortened: WorkflowGraph = { nodes: [...before.nodes.slice(0, 2), ...before.nodes.slice(3)], edges: [edge('e1', 's', 'r'), edge('n3', 'r', 'a'), edge('e4', 'a', 'f')] };
-    const out = reviewLayout(withChanges(chain, shortened));
-    const a = out.nodes.find((n) => n.id === 'c1')!.position;
-    const b = out.nodes.find((n) => n.id === 'c2')!.position;
-    expect(a.y).toBe(b.y);
-    expect(b.x - a.x).toBeGreaterThanOrEqual(NODE_WIDTH);
+    const list = removedSteps(withChanges(chain, shortened));
+    expect(list.map((r) => [r.label, r.after.map((n) => n.label), r.before.map((n) => n.label)])).toEqual([
+      ['Check A', ['Receive'], ['Approve']],
+      ['Check B', ['Receive'], ['Approve']],
+    ]);
   });
 
-  it('changes nothing about a review without removed steps except tidying it', () => {
-    const out = reviewLayout(withChanges(before, before));
-    expect(out.nodes).toHaveLength(before.nodes.length);
-    expect(new Set(out.nodes.map((n) => n.position.y)).size).toBe(1);
+  it('has nothing to list when nothing is removed', () => {
+    expect(removedSteps(withChanges(before, before))).toEqual([]);
+    expect(new Set(reviewLayout(withChanges(before, before)).graph.nodes.map((n) => n.position.y)).size).toBe(1);
   });
 });

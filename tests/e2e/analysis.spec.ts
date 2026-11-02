@@ -74,17 +74,33 @@ test('R01/R03/R04/R05/R12: Quick analysis, one-diagram review, synchronized list
   const diagram = page.locator('[aria-label="Workflow with proposed changes"]');
   await expect(diagram.locator('.fl-node[data-diff="added"]')).toHaveCount(1);
   await expect(diagram.locator('.fl-node[data-diff="modified"]')).toHaveCount(1);
-  await expect(diagram.locator('.fl-node[data-diff="removed"]')).toHaveCount(1);
-  // Connections are drawn once the steps have been measured; the old path is marked as removed.
-  await expect(diagram.locator('.fl-diff-badge[data-diff="removed"]').first()).toBeVisible({ timeout: 15_000 });
+  // Connections are drawn once the steps have been measured; the added route is marked.
+  await expect(diagram.locator('.fl-diff-badge[data-diff="added"]').first()).toBeVisible({ timeout: 15_000 });
+  // Removed steps aren't drawn (no red lines): they're listed with where they were.
+  await expect(diagram.locator('.fl-node[data-diff="removed"]')).toHaveCount(0);
+  await expect(diagram.locator('.fl-diff-badge[data-diff="removed"]')).toHaveCount(0);
+  const removedList = page.getByTestId('removed-steps');
+  await expect(removedList).toContainText('Removed (1)');
+  await expect(removedList).toContainText('Check order');
+  await expect(removedList).toContainText('after “Receive order”');
   await page.screenshot({ path: `${SHOTS}/02-results-1536-test-fixture.png` });
 
   // List → diagram.
   await recCard(page, 'Combine').getByRole('button', { name: /^Combine/ }).click();
-  await expect(diagram.locator('.react-flow__node[data-id="n-check"] .fl-node')).toHaveAttribute('data-focus', 'on');
+  await expect(removedList.getByRole('button', { name: /Check order/ })).toHaveClass(/shadow/);
+  await expect(diagram.locator('.react-flow__node[data-id="n-receive"] .fl-node')).toHaveAttribute('data-focus', 'on');
   // Its connected steps stay visible; unrelated steps step back.
   await expect(diagram.locator('.react-flow__node[data-id="n-approve"] .fl-node')).toHaveAttribute('data-focus', 'on');
   await expect(diagram.locator('.react-flow__node[data-id="n-ship"] .fl-node')).toHaveAttribute('data-focus', 'dim');
+  // Hovering a removed step highlights the steps it sat between.
+  await recCard(page, 'Combine').getByRole('button', { name: /^Combine/ }).click();
+  await removedList.getByRole('button', { name: /Check order/ }).hover();
+  await expect(diagram.locator('.react-flow__node[data-id="n-receive"] .fl-node')).toHaveAttribute('data-focus', 'on');
+  await expect(diagram.locator('.react-flow__node[data-id="n-ship"] .fl-node')).toHaveAttribute('data-focus', 'dim');
+  await page.mouse.move(5, 5);
+  // Clicking it selects the recommendation that removes it.
+  await removedList.getByRole('button', { name: /Check order/ }).click();
+  await expect(recCard(page, 'Combine').getByRole('button', { name: /^Combine/ })).toHaveAttribute('aria-pressed', 'true');
   // Diagram → list.
   await diagram.locator('.react-flow__node[data-id="n-approve"]').click();
   await expect(recCard(page, 'criteria').getByRole('button', { name: /^Write down/ })).toHaveAttribute('aria-pressed', 'true');

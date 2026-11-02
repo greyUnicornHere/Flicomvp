@@ -76,8 +76,10 @@ test('Automation tab: counts, steps grouped by class, explanation in place, link
   await expect(open).toContainText('What stays human');
   await expect(open).toContainText('You said');
   await expect(open).toContainText('Business value');
-  await expect(diagramStep(page, 'compare')).toHaveAttribute('data-focus', 'on');
-  await expect(diagramStep(page, 'inspect')).toHaveAttribute('data-focus', 'dim');
+  // This step is removed by a recommendation, so it isn't drawn: its entry in the Removed list is highlighted.
+  const removedEntry = page.getByTestId('removed-steps').getByRole('button', { name: /Compare supplier quotations/ });
+  await expect(removedEntry).toHaveClass(/shadow/);
+  await expect(removedEntry).toContainText('Human-assisted');
   await open.getByText('Reasoning by area').click();
   await expect(open).toContainText('Rules and judgment');
   await page.screenshot({ path: `${SHOTS}/01-automation-tab-1536-test-fixture.png` });
@@ -86,6 +88,11 @@ test('Automation tab: counts, steps grouped by class, explanation in place, link
   await page.locator('[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="inspect"]').click();
   await expect(row(page, 'Check delivery').getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
   await expect(row(page, 'Check delivery')).toContainText('physical');
+  await expect(diagramStep(page, 'inspect')).toHaveAttribute('data-focus', 'on');
+  await expect(diagramStep(page, 'quote')).toHaveAttribute('data-focus', 'dim');
+  // A removed step's entry opens its assessment too.
+  await removedEntry.click();
+  await expect(row(page, 'Compare supplier quotations').getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
 
   // Back to recommendations: the diagram follows recommendation selection again.
   await page.getByRole('tab', { name: /Recommendations/ }).click();
@@ -147,11 +154,11 @@ test('labels on the analysis diagram: only in the Automation view; a label opens
   // Recommendations view: change highlighting only.
   await expect(labels).toHaveCount(0);
   await page.getByRole('tab', { name: /Automation/ }).click();
-  await expect(labels).toHaveCount(4); // Start, Finish and the wait have none
-  await expect(label(page, 'compare')).toHaveText('Human-assisted');
-  await expect(label(page, 'compare')).toHaveAttribute('aria-label', /Human-assisted automation/);
+  await expect(labels).toHaveCount(3); // Start, Finish and the wait have none; the removed step is listed instead
+  await expect(page.getByTestId('removed-steps').getByTestId('removed-automation')).toHaveText('Human-assisted');
   await expect(label(page, 'match')).toHaveAttribute('data-provisional', 'true');
   await expect(label(page, 'inspect')).toHaveText('Human-led');
+  await expect(label(page, 'inspect')).toHaveAttribute('aria-label', /Keep human-led/);
   await expect(label(page, 'quote')).toHaveText('Needs info');
   await expect(page.locator('[aria-label="Workflow with proposed changes"] .react-flow__node[data-id="wait"] .fl-auto-badge')).toHaveCount(0);
 

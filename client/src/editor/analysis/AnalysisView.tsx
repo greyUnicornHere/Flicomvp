@@ -405,7 +405,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
 
         <div className="mt-4 flex items-center justify-between text-[12px] text-fl-text-secondary">
           <p>
-            {!noImprovements && 'Dashed red shows what would be removed. '}
+            {!noImprovements && 'Removed steps are listed in the corner of the diagram. '}
             <strong className="font-semibold text-fl-brand">Proposals only; your original workflow is preserved.</strong>
           </p>
           <button type="button" className="fl-link text-[13px]" onClick={onBackToEditor}>

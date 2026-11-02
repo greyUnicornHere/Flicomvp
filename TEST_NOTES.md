@@ -465,6 +465,9 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 
 | Check | Result | Evidence |
 |---|---|---|
-| Proposed workflow on one tidy row in order, ignoring old positions; a removed step in a lane below, between the steps it sat between; all connections kept; chains of removed steps never overlap and keep their order | Pass | `client/src/editor/analysis/reviewLayout.test.ts` |
-| Analysis diagram and final preview use it; selection, focus, labels, fitting and the long-workflow test still pass | Pass (fixture) | all analysis and automation E2E; `docs/evidence/review-layout/01-change-aware-layout-1536-test-fixture.png`, `02-long-workflow-1536-test-fixture.png`, `03-final-preview-1536-test-fixture.png` |
+| Only the proposed workflow is drawn, on one tidy row in order; no removed steps or removed connections (no red lines); removed steps listed with the steps they sat between, following chains and keeping order | Pass | `client/src/editor/analysis/reviewLayout.test.ts` (5) |
+| Removed list: "Removed (1) · Check order · after “Receive order”"; hovering highlights where it was; clicking selects the recommendation that removes it; selecting that recommendation highlights the entry | Pass (fixture) | E2E R01/R04/R05 (updated); `docs/evidence/review-layout/01-proposed-workflow-removed-list-1536-test-fixture.png` |
+| Automation view: a removed step's class shows in the list; its assessment highlights the entry; the entry opens its assessment; labels only on drawn steps | Pass (fixture) | `tests/e2e/automation.spec.ts` (updated); `04-removed-list-automation-1536-test-fixture.png` |
+| A removed long-named step shows its full name in the list | Pass (fixture) | `tests/e2e/feedback.spec.ts` (updated) |
+| Final preview and long workflows | Pass (fixture) | `02-long-workflow-1536-test-fixture.png`, `03-final-preview-1536-test-fixture.png` |
 | Edge browser | Not tested | Only Chromium is available here |

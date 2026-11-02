@@ -108,8 +108,8 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Change-aware analysis diagram (owner feedback; awaiting owner review, branch `analysis-layout`)
 
-- The Analysis diagram and the final preview now lay out the **proposed workflow** neatly on its own rows (unchanged, updated and added steps), instead of arranging old and new routes together.
-- Each **removed step** sits in a lane underneath, between the steps it used to sit between, with its old connections drawn as removed (dashed red). No crossing old/new routes.
+- The Analysis diagram and the final preview show only the **proposed workflow**, neatly arranged (unchanged, updated and added steps highlighted). No red lines for old routes.
+- **Removed steps** are listed in a "Removed" box in the diagram's corner, each with where it was ("after “Receive order”"). Hovering one highlights where it was; clicking it selects the recommendation that removes it (in the Automation view: opens its assessment, and its class is shown).
 - View only: your own layout in the editor is never changed.
 
 ## Known issues / limitations

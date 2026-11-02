@@ -44,10 +44,50 @@ const topOf = (mid: number, h: number) => Math.round(mid - h / 2 + NODE_HEIGHT /
 /** Order of paths leaving one step, top to bottom: Yes above No, exceptions at the bottom. */
 const TYPE_ORDER: Record<WorkflowEdge['type'], number> = { yes: 0, normal: 1, parallel: 1, no: 2, exception: 3, loop: 4 };
 
+/**
+ * Connections that go back to an earlier step (for example "Retry limit reached? → No → Search"),
+ * found by walking the workflow from Start. They close a cycle, so layout treats them like Repeat
+ * loops: left out when ordering steps left to right, and drawn as a return path under the steps.
+ * Repeat (loop) connections themselves are not included: they are always return paths.
+ */
+export function backEdges(g: WorkflowGraph): Set<string> {
+  const ids = g.nodes.map((n) => n.id);
+  const index = new Map(ids.map((id, i) => [id, i]));
+  const back = new Set<string>();
+  const out = new Map<string, WorkflowEdge[]>(ids.map((id) => [id, []]));
+  for (const e of g.edges) {
+    if (e.type === 'loop' || !index.has(e.sourceId) || !index.has(e.targetId)) continue;
+    if (e.sourceId === e.targetId) back.add(e.id);
+    else out.get(e.sourceId)!.push(e);
+  }
+  for (const list of out.values()) list.sort(byType);
+  const state = new Map<string, 'open' | 'done'>();
+  for (const root of [...ids].sort((a, b) => startFirst(g, a, b, index))) {
+    if (state.has(root)) continue;
+    state.set(root, 'open');
+    const stack: { id: string; next: number }[] = [{ id: root, next: 0 }];
+    while (stack.length) {
+      const top = stack.at(-1)!;
+      const edge = out.get(top.id)![top.next++];
+      if (!edge) {
+        state.set(top.id, 'done');
+        stack.pop();
+      } else if (state.get(edge.targetId) === 'open') {
+        back.add(edge.id); // points to a step still on the current path: it goes back
+      } else if (!state.has(edge.targetId)) {
+        state.set(edge.targetId, 'open');
+        stack.push({ id: edge.targetId, next: 0 });
+      }
+    }
+  }
+  return back;
+}
+
 export function autoLayout(g: WorkflowGraph): WorkflowGraph {
   const ids = g.nodes.map((n) => n.id);
   const index = new Map(ids.map((id, i) => [id, i]));
-  const forward = g.edges.filter((e) => e.type !== 'loop' && index.has(e.sourceId) && index.has(e.targetId) && e.sourceId !== e.targetId);
+  const back = backEdges(g);
+  const forward = g.edges.filter((e) => e.type !== 'loop' && !back.has(e.id) && index.has(e.sourceId) && index.has(e.targetId) && e.sourceId !== e.targetId);
 
   // Columns: longest path from the start (topological order; anything left over keeps column 0).
   const indegree = new Map(ids.map((id) => [id, 0]));
@@ -64,7 +104,7 @@ export function autoLayout(g: WorkflowGraph): WorkflowGraph {
       if (indegree.get(e.targetId) === 0) queue.push(e.targetId);
     }
   }
-  for (const id of ids) if (!order.includes(id)) order.push(id); // defensive: cycles without loop type
+  for (const id of ids) if (!order.includes(id)) order.push(id); // defensive: nothing should be left over
 
   // Rows: each step wants to sit level with its parents; siblings fan out symmetrically.
   const heights = new Map(g.nodes.map((n) => [n.id, nodeHeight(n.label)]));
@@ -133,7 +173,8 @@ export function placeNewSteps(before: WorkflowGraph, after: WorkflowGraph): Work
   const added = after.nodes.filter((n) => !existing.has(n.id));
   if (added.length === 0) return after;
 
-  const forward = after.edges.filter((e) => e.type !== 'loop');
+  const back = backEdges(after);
+  const forward = after.edges.filter((e) => e.type !== 'loop' && !back.has(e.id));
   const addedIds = new Set(added.map((n) => n.id));
 
   // Existing steps that follow the new ones: they may need to slide right, so they don't block placement.

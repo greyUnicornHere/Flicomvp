@@ -362,3 +362,8 @@ The owner asked for a way to clarify each assessment and then, based on its clas
 - Same safety as before: owner only; latest analysis only; the saved revision; a step that changed since the analysis (or while Flico was answering) is refused and nothing is stored; AI failure stores nothing.
 - No analysis credit; each question, update and brief counts toward the daily Ask Flico limit and rate limit.
 - Ask Flico history sent to the model merges consecutive turns from the same side and starts with the person (interviews produce several assistant messages in a row).
+
+## Paths back to earlier steps (owner feedback, 2026-11-02)
+- Bug: Auto-arrange (also used for AI drafts and the Analysis diagram) only understood cycles made of Repeat (loop) connections. A decision's Yes/No path, or a normal connection, back to an earlier step left the ordering stuck, so every step after the cycle stayed in the first column.
+- Fix: `backEdges` (shared/layout.ts) walks the workflow from Start (depth-first, Yes before normal before No) and marks every connection that points to a step still on the current path, plus connections from a step to itself. Auto-arrange and the placement of new steps leave these out when ordering columns; the diagram draws them like Repeat loops (out to the right, along a lane under the steps in between, back into the earlier step) and keeps their own label and type. The workflow itself is unchanged.
+- Owner choices: the way back runs **under** the steps; existing workflows are tidied only when the person clicks Auto-arrange (Flico never moves blocks by itself).

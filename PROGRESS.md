@@ -124,6 +124,11 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Then a class-specific brief: **Create automation brief** (automation candidates), **Create assist brief** (human-assisted) or **Support ideas** (human-led); "More information needed" steps must be clarified first. Flico asks up to 6 short questions, then writes a brief with fixed sections (for an automation brief: goal, trigger and inputs, steps, systems and access, exceptions, how to test it, owner, risks, possible approaches, assumptions to confirm). It is saved under the step: **View**, **Copy as text**, **Update brief**.
 - No analysis credit; questions and briefs count toward the daily Ask Flico limit. Advice only: Flico never builds, connects or tests anything. A step that changed since the analysis can't be clarified or planned until it's reassessed; a brief made before its step or classification changed says it's out of date.
 
+## Tidy layout for paths back to earlier steps (owner feedback; awaiting owner review, branch `layout-back-paths`)
+
+- A connection that goes back to an earlier step without being a Repeat loop (for example "Retry limit reached? → No → Search") used to leave Auto-arrange, and AI drafts, with most steps stacked in one column and crossing lines. Now such paths are recognised: steps are laid out left to right as usual, and the way back is drawn under the steps like a Repeat loop, keeping its label (for example "No").
+- Existing workflows keep their positions until you click **Auto-arrange** (owner choice); new AI drafts come out tidy.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.

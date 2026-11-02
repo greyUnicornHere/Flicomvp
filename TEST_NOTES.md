@@ -519,3 +519,17 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Intervie
 | Bug found and fixed: the Clarify reply was cut to its first sentence, losing what changed | Fixed, Pass | E2E Clarify (update message names the step) |
 | Edge browser | Not tested | Only Chromium is available here |
 | Live Claude interviews and briefs | Not tested here | To be checked by the owner with a live key |
+
+## Paths back to earlier steps — 2026-11-02 (branch `layout-back-paths`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **298 / 298 pass** (2 new layout tests) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **71 / 71 pass** (1 new in `tests/e2e/back-paths.spec.ts`) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| The owner's workflow (a "No" path from "Retry limit reached?" back to "Search Amazon") is detected as a path back; Auto-arrange puts the steps in columns 0–5 in order, Yes above No, no overlaps (it stacked them all in column 0 before) | Pass | `client/src/editor/layout.test.ts` "paths back to an earlier step" |
+| In the browser: the messy layout → Auto-arrange → left to right, the way back drawn below the steps it passes | Pass | E2E `back-paths.spec.ts`; `docs/evidence/back-paths/01-before-1536.png`, `02-after-auto-arrange-1536.png` |
+| Existing behaviour (Repeat loops, branches, parallel, insertion, analysis diagram) | Pass | all layout unit tests and E2E |

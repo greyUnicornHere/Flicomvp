@@ -141,6 +141,9 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
   - Once a brief is ready, **View brief** is the only button on the card. **Update brief** is inside the brief.
   - **Reassess**: when a step itself changed since the analysis, its card offers **Reassess**. Flico re-checks just that step against the current workflow and keeps your earlier answers where they still apply. It uses no credit and counts toward the daily Ask Flico limit. When only an earlier step changed, the step stays usable: the card shows a note with a Reassess link, and its brief stays current.
   - Clarify without the chat: two mockups are on the design canvas for the owner to choose from (A: inline in the card; B: one short form).
+  - **Clarify inside the card** (owner chose A): **Clarify** opens a question panel inside the step's card. Flico asks one question at a time and offers 2 to 4 suggested answers you can click. You can also type your own, **Skip for now**, or **Stop**. A progress bar shows "question N of up to 5".
+  - When Clarify finishes, the card shows what changed, with **Done** and **Create brief →**. The questions before a brief work the same way; when they're done, the brief is written and opens by itself.
+  - Ask Flico no longer shows these questions and answers. They stay saved with the analysis, and the answers appear under "Why" (as "You said").
 
 ## Known issues / limitations
 

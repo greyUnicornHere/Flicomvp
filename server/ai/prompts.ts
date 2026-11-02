@@ -169,7 +169,8 @@ ${DATA_RULES}`;
 const INTERVIEW_RULES = `Interview rules:
 - Ask ONE short question at a time (at most 25 words, a single question mark) about the selected step. Never combine questions or send a multi-part form.
 - Use the step details, the workflow, the current assessment and earlier answers in <interview>. Never ask again something already answered or skipped.
-- Ask only what changes the outcome. When you have enough, set done = true and leave the question empty.`;
+- Ask only what changes the outcome. When you have enough, set done = true and leave the question empty.
+- With each question, offer 2 to 4 short suggested answers (at most 8 words each) that people in this situation commonly give, so the person can pick one. They are only suggestions: the person can always type their own. Never put figures in them that the workflow or the person didn't give. Leave them empty when the answer is truly open-ended.`;
 
 export const CLARIFY_QUESTION_SYSTEM = `You help the person firm up the automation assessment of one workflow step in Flico.
 

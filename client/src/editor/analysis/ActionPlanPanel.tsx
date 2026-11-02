@@ -4,6 +4,7 @@ import type { Recommendation, RecommendationCategory, ReviewStatus } from '../..
 import { BRIEF_KIND, BRIEF_TITLE, CLASS_SHORT, DIMENSIONS, DIMENSION_LABEL, EVIDENCE_LABEL as SOURCE_LABEL, nextStep, type AutomationClass, type EvidenceSource } from '../../../../shared/assessment';
 import type { ActionPlan, AutomationItem, ProcessItem, Stage } from './actionPlan';
 import { BriefDialog } from './BriefDialog';
+import { InterviewPanel, type InterviewView } from './InterviewPanel';
 
 export type PlanFilter = 'all' | 'process' | 'automation';
 export type PlanSelection = { type: 'process' | 'automation'; id: string } | null;
@@ -48,6 +49,10 @@ type Props = {
   onBrief?: (stepId: string) => void;
   /** Reassess one step against the workflow as it is now; rejects with a readable message. */
   onReassess?: (stepId: string) => Promise<void>;
+  /** The Clarify or brief interview in progress, shown inside its step's card. */
+  interview?: InterviewView | null;
+  /** A brief that was just written: it opens by itself. */
+  briefToOpen?: { stepId: string; key: number } | null;
 };
 
 /**
@@ -59,6 +64,12 @@ export function ActionPlanPanel(props: Props) {
   const { plan, filter, selected, onSelect, name } = props;
   const [showRejected, setShowRejected] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+  // Open a brief that was just written (once per new key).
+  const [openedKey, setOpenedKey] = useState<number | null>(null);
+  if (props.briefToOpen && props.briefToOpen.key !== openedKey) {
+    setOpenedKey(props.briefToOpen.key);
+    setViewing(props.briefToOpen.stepId);
+  }
   const [reassessing, setReassessing] = useState<string | null>(null);
   const [reassessError, setReassessError] = useState<{ id: string; message: string } | null>(null);
   const reassess = async (stepId: string) => {
@@ -74,6 +85,13 @@ export function ActionPlanPanel(props: Props) {
     }
   };
   const listRef = useRef<HTMLDivElement>(null);
+
+  // A Clarify or brief interview that starts brings its card into view.
+  const interviewStep = props.interview?.stepId ?? null;
+  useEffect(() => {
+    if (!interviewStep) return;
+    listRef.current?.querySelector(`[data-plan-item="${CSS.escape(interviewStep)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [interviewStep]);
 
   useEffect(() => {
     if (!selected) return;
@@ -210,6 +228,7 @@ export function ActionPlanPanel(props: Props) {
                     onReassess={props.onReassess && (() => void reassess(item.id))}
                     reassessing={reassessing === item.id}
                     reassessError={reassessError?.id === item.id ? reassessError.message : null}
+                    interview={props.interview?.stepId === item.id ? props.interview : null}
                     onViewBrief={() => setViewing(item.id)}
                   />
                 ))}
@@ -438,6 +457,7 @@ function AutomationCard(props: {
   onReassess?: () => void;
   reassessing: boolean;
   reassessError: string | null;
+  interview: InterviewView | null;
 }) {
   const { item, name, blocked } = props;
   const a = item.assessment;
@@ -519,7 +539,7 @@ function AutomationCard(props: {
               {why ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />} Why
             </button>
             <span className="flex-1" />
-            {actions.map((action) => (
+            {!props.interview && actions.map((action) => (
               <button
                 key={action.key}
                 type="button"
@@ -533,7 +553,14 @@ function AutomationCard(props: {
               </button>
             ))}
           </div>
-          {blocked && actions.some((x) => x.gated) && <p className="mt-1 text-right text-[11.5px] text-fl-text-muted">{blocked}</p>}
+          {blocked && !props.interview && actions.some((x) => x.gated) && <p className="mt-1 text-right text-[11.5px] text-fl-text-muted">{blocked}</p>}
+          {props.interview && (
+            <InterviewPanel
+              view={props.interview}
+              stepName={name}
+              onCreateBrief={props.interview.mode === 'clarify' && BRIEF_KIND[a.classification] && !item.briefCurrent && !item.outdated ? props.onBrief : undefined}
+            />
+          )}
           {why && (
             <div id={whyId} className="mt-1.5 space-y-2.5 border-t border-fl-border pt-2 text-[12.5px] leading-[18px]">
               <div className="space-y-1">

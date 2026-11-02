@@ -575,3 +575,19 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 | Only an earlier step changed: no block, a note with a Reassess link, the brief stays current | Pass | API `assist.api.test.ts`; unit `actionPlan.test.ts`; E2E `assist.spec.ts`, `automation.spec.ts` |
 | Reassess refuses unsaved changes, deleted steps and other people's analyses; nothing is saved if the workflow changed meanwhile | Pass | API `assist.api.test.ts` |
 
+### Owner feedback round 2 (same branch): Clarify inside the card (mockup A)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **317 / 317 pass** (new: suggested answers, `server/ai/suggestions.test.ts`; questions carry 2 to 4 options) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **76 / 76 pass** (`assist.spec.ts` rewritten for the inline panel) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Clarify opens inside the card (no chat window): one question at a time, "question N of up to 5", suggested answers as choices, Other, Skip, Stop | Pass | E2E `assist.spec.ts`; `docs/evidence/action-plan/07-clarify-inline-1536-test-fixture.png` |
+| Answers update the assessment; the outcome lists what changed, with Done and Create brief; no outdated-brief remark without a brief | Pass | `08-clarify-outcome-1536-test-fixture.png` |
+| Brief questions inline; the written brief opens by itself and is saved | Pass | E2E `assist.spec.ts` |
+| Ask Flico shows none of the interview messages; still saved (refresh) | Pass | E2E `assist.spec.ts` |
+| Suggested answers: at most four, distinct, shortened, none with unsupported figures | Pass | unit `suggestions.test.ts` |
+

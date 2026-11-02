@@ -13,6 +13,7 @@ import { withChanges, type Focus } from '../flowElements';
 import { needsReassessment } from '../../../../shared/assessment';
 import { buildActionPlan } from './actionPlan';
 import { ActionPlanPanel, type PlanFilter, type PlanSelection } from './ActionPlanPanel';
+import type { InterviewView } from './InterviewPanel';
 import { ReviewDiagram } from './ReviewDiagram';
 
 const CATEGORY_LABEL: Record<RecommendationCategory, string> = { quick_win: 'Quick Win', strategic: 'Strategic Improvement', complex: 'Complex Change' };
@@ -26,6 +27,10 @@ type Props = {
   onBrief?: (stepId: string) => void;
   /** Reassess one step against the workflow as it is now (no credit). */
   onReassess?: (stepId: string) => Promise<void>;
+  /** The Clarify or brief interview in progress (shown inside its step's card). */
+  interview?: InterviewView | null;
+  /** A brief that was just written: it opens by itself. */
+  briefToOpen?: { stepId: string; key: number } | null;
   onAnalysisChange: (analysis: Analysis) => void;
   onApplied: (result: ApplyAnalysisResponse) => void;
   onBackToEditor: () => void;
@@ -36,7 +41,7 @@ type Props = {
  * plan that combines process changes and automation opportunities, each with its journey stages.
  * The executive summary is a compact card at the bottom.
  */
-export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief, onReassess }: Props) {
+export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief, onReassess, interview = null, briefToOpen = null }: Props) {
   const [slot, setSlot] = useState<'initial' | 'latest'>('latest');
   const analysis = analyses.find((a) => a.slot === slot) ?? analyses.at(-1)!;
   const [selected, setSelected] = useState<PlanSelection>(null);
@@ -257,6 +262,8 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               onClarify={onClarify}
               onBrief={onBrief}
               onReassess={onReassess}
+              interview={interview}
+              briefToOpen={briefToOpen}
             />
           </div>
         </div>

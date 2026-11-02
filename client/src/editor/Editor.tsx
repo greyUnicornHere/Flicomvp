@@ -584,9 +584,11 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     if (reply?.proposal?.status === 'pending') await startPreview(reply);
   };
 
-  // ---------- interviews about one step: Clarify and briefs (in Ask Flico) ----------
+  // ---------- interviews about one step: Clarify and briefs (inline in the Action plan's card) ----------
 
-  const [interview, setInterview] = useState<{ stepId: string; stepLabel: string; mode: AssistMode } | null>(null);
+  const [interview, setInterview] = useState<{ stepId: string; mode: AssistMode; finished: boolean } | null>(null);
+  // A brief that was just written opens by itself (a new key each time).
+  const [briefToOpen, setBriefToOpen] = useState<{ stepId: string; key: number } | null>(null);
   const [interviewBusy, setInterviewBusy] = useState(false);
   const [interviewError, setInterviewError] = useState<string | null>(null);
 
@@ -598,8 +600,12 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       setAnalyses((list) => list.map((a) => (a.id === result.analysis.id ? result.analysis : a)));
       await chat.reload();
       const last = result.messages.at(-1)?.assist;
-      // Finished (nothing left to ask, or the brief is written): the banner goes away.
-      if (last && (last.kind === 'done' || last.kind === 'brief')) setInterview(null);
+      // Clarify finished: the card shows what changed. A brief was written: it opens.
+      if (last?.kind === 'done') setInterview((i) => i && { ...i, finished: true });
+      if (last?.kind === 'brief') {
+        setInterview(null);
+        setBriefToOpen({ stepId: last.stepId, key: Date.now() });
+      }
     } catch (error) {
       setInterviewError((error as Error).message);
     } finally {
@@ -610,9 +616,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   const startInterview = (stepId: string, mode: AssistMode) => {
     const current = currentAnalysisOf(analyses);
     if (!current) return;
-    const stepLabel = findNode(graph, stepId)?.label ?? current.snapshot.nodes.find((n) => n.id === stepId)?.label ?? 'this step';
-    setInterview({ stepId, stepLabel, mode });
-    openChat(null);
+    setInterview({ stepId, mode, finished: false });
     void runInterview((baseRevision) => assistStart(current.id, { stepId, mode, baseRevision }));
   };
 
@@ -631,6 +635,23 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     if (!current) return;
     const updated = await reassessStep(current.id, stepId, await save.flushNow());
     setAnalyses((list) => list.map((a) => (a.id === updated.id ? updated : a)));
+  };
+  const currentId = currentAnalysisOf(analyses)?.id;
+  const interviewView = interview && {
+    stepId: interview.stepId,
+    mode: interview.mode,
+    finished: interview.finished,
+    messages: (chat.messages ?? []).filter((m) => m.assist?.analysisId === currentId && m.assist?.stepId === interview.stepId && m.assist?.mode === interview.mode),
+    question: openInterviewQuestion,
+    busy: interviewBusy,
+    error: interviewError,
+    onAnswer: (answer: string) => answerInterview({ answer }),
+    onSkip: () => answerInterview({ skip: true }),
+    onClose: () => {
+      setInterview(null);
+      setInterviewError(null);
+    },
+    onDismissError: () => setInterviewError(null),
   };
   // Why Clarify and briefs can't be used right now (null: they can).
   const interviewBlocked = !ai?.available ? 'AI is not set up' : interviewBusy ? 'Flico is working on a question' : null;
@@ -800,6 +821,8 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               interviewBlocked={interviewBlocked}
               onClarify={(stepId) => startInterview(stepId, 'clarify')}
               onReassess={reassessAssessment}
+              interview={interviewView}
+              briefToOpen={briefToOpen}
               onBrief={(stepId) => startInterview(stepId, 'brief')}
             />
           </div>
@@ -1009,22 +1032,6 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           onApply={() => void applyPreview()}
           onCancelProposal={(message) => void cancelSuggestion(message)}
           onClose={closeChat}
-          interview={
-            interview && {
-              stepLabel: interview.stepLabel,
-              mode: interview.mode,
-              question: openInterviewQuestion,
-              busy: interviewBusy,
-              error: interviewError,
-              onAnswer: (answer: string) => answerInterview({ answer }),
-              onSkip: () => answerInterview({ skip: true }),
-              onDismissError: () => setInterviewError(null),
-              onStop: () => {
-                setInterview(null);
-                setInterviewError(null);
-              },
-            }
-          }
         />
       )}
 

@@ -297,7 +297,7 @@ export const analysisRoutes =
         if (!latest || needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was writing, so no brief was saved. Reassess it first.'] as Fail;
         saveBrief(db, userId, { analysisId: analysis.id, stepId: assessment.stepId, kind, classification: assessment.classification, summary: written.summary, sections: written.sections, ...basesOf(latest.graph, assessment.stepId)!, revision: latest.revision }, ctx.now());
         recordUsage(db, userId, 'chat', ai.source, written.usage, ctx.now());
-        return appendExchange(db, userId, workflow.id, [{ role: 'assistant', content: `Your ${BRIEF_TITLE[kind].toLowerCase()} for “${meta.stepLabel}” is ready. Open it from the step's card in the Automation tab.`, source: ai.source, assist: { ...meta, kind: 'brief' } }], ctx.now());
+        return appendExchange(db, userId, workflow.id, [{ role: 'assistant', content: `Your ${BRIEF_TITLE[kind].toLowerCase()} for “${meta.stepLabel}” is ready. Open it from the step's card in the Action plan.`, source: ai.source, assist: { ...meta, kind: 'brief' } }], ctx.now());
       });
     };
 
@@ -337,7 +337,7 @@ export const analysisRoutes =
             [
               next.done
                 ? { role: 'assistant', content: `Nothing decision-critical is left to ask about “${meta.stepLabel}”.`, source: provider.source, assist: { ...meta, kind: 'done' } }
-                : { role: 'assistant', content: next.question, source: provider.source, assist: { ...meta, kind: 'question', status: 'pending' } },
+                : { role: 'assistant', content: next.question, source: provider.source, assist: { ...meta, kind: 'question', status: 'pending', options: next.options } },
             ],
             ctx.now(),
           );
@@ -376,6 +376,7 @@ export const analysisRoutes =
         let updated: StepAssessment | null = null;
         let replyText = '';
         let nextQuestion = '';
+        let nextOptions: string[] = [];
         let usage = { inputTokens: 0, outputTokens: 0 };
         const turnsAfter = [...earlier, { question: question.content, answer: skip ? null : answer }];
         if (mode === 'clarify' && !skip) {
@@ -383,6 +384,7 @@ export const analysisRoutes =
           usage = result.usage;
           replyText = result.reply;
           nextQuestion = runCount < cap ? result.nextQuestion : '';
+          nextOptions = nextQuestion ? result.nextOptions : [];
           updated = { ...result.updated, ...basesOf(workflow.graph, stepId)!, revision: workflow.revision, updatedAt: now(), clarified: true };
         } else {
           if (mode === 'clarify') {
@@ -402,6 +404,7 @@ export const analysisRoutes =
             );
             usage = next.usage;
             nextQuestion = next.done ? '' : next.question;
+            nextOptions = next.done ? [] : next.options;
           }
         }
 
@@ -416,7 +419,8 @@ export const analysisRoutes =
           if (updated) saveAssessments(db, userId, analysis.id, current.assessments.map((a) => (a.stepId === stepId ? updated! : a)));
           setAssistStatus(db, userId, question.id, skip ? 'skipped' : 'answered');
           recordUsage(db, userId, 'chat', provider.source, usage, ctx.now());
-          const changed = updated && updated.classification !== assessment.classification;
+          // Mention an outdated brief only when the step has one.
+          const changed = updated && updated.classification !== assessment.classification && current.briefs.some((b) => b.stepId === stepId);
           return appendExchange(
             db,
             userId,
@@ -427,7 +431,7 @@ export const analysisRoutes =
                 ? [{ role: 'assistant' as const, content: replyText + (changed ? ' The classification changed, so any earlier brief for this step is out of date.' : ''), source: provider.source, assist: { ...meta, kind: 'update' as const } }]
                 : []),
               ...(nextQuestion
-                ? [{ role: 'assistant' as const, content: nextQuestion, source: provider.source, assist: { ...meta, kind: 'question' as const, status: 'pending' as const } }]
+                ? [{ role: 'assistant' as const, content: nextQuestion, source: provider.source, assist: { ...meta, kind: 'question' as const, status: 'pending' as const, options: nextOptions } }]
                 : mode === 'clarify'
                   ? [{ role: 'assistant' as const, content: `That's all I need for “${meta.stepLabel}” for now.`, source: provider.source, assist: { ...meta, kind: 'done' as const } }]
                   : []),

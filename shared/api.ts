@@ -126,6 +126,8 @@ export type AssistInfo = {
   status?: 'pending' | 'answered' | 'skipped';
   /** For answers and skips: the question they reply to. */
   questionId?: string;
+  /** For questions: up to four short suggested answers the person can pick (may be empty). */
+  options?: string[];
   /** Workflow revision the message was made against. */
   revision: number;
 };

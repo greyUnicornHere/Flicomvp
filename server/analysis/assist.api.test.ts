@@ -83,6 +83,9 @@ describe('Clarify: one question at a time', () => {
     const q = first.messages[0] as ChatMessage;
     expect(q).toMatchObject({ role: 'assistant', assist: { stepId: 'n-quote', mode: 'clarify', kind: 'question', status: 'pending' } });
     expect((q.content.match(/\?/g) ?? []).length).toBe(1);
+    // Each question comes with a few suggested answers to pick from.
+    expect(q.assist!.options!.length).toBeGreaterThanOrEqual(2);
+    expect(q.assist!.options!.length).toBeLessThanOrEqual(4);
     // Asking again shows the same open question without another AI call.
     const calls = ai.assistCalls;
     expect((await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'clarify', baseRevision: workflow.revision })).json().messages[0].id).toBe(q.id);

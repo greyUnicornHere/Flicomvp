@@ -382,4 +382,8 @@ The owner asked for a way to clarify each assessment and then, based on its clas
   - Older records without a step fingerprint behave as before: any change needs reassessing.
 - Once a brief is current, the card shows only View brief (owner choice). Clarify is no longer offered next to it; Update brief is in the brief window.
 - Dialogs never grow taller than the window: the body scrolls, and the title and buttons stay visible (owner bug report: a long brief ran off screen).
+- Clarify and brief interviews run inside the step's Action plan card (owner chose mockup A, 2026-11-02), not in Ask Flico.
+  - Each question carries 2 to 4 suggested answers (`AssistInfo.options`). The model offers them; the server keeps at most four short, distinct ones and drops any that state figures the workflow or the person didn't give. The person can always type their own answer.
+  - These messages are still stored as chat messages for history and AI context. Ask Flico hides them, and Ask Flico's own conversation no longer sends them to the model.
+  - A written brief opens by itself. The note that an earlier brief is out of date appears only when the step has a brief.
 

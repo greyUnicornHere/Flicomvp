@@ -10,7 +10,7 @@ import type {
   Recommendation,
   ReviewStatus,
 } from '../../shared/api.js';
-import type { StepAssessment } from '../../shared/assessment.js';
+import type { AutomationBrief, BriefKind, StepAssessment } from '../../shared/assessment.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
 import type { Db } from '../db/database.js';
 import { newId } from '../auth/tokens.js';
@@ -154,6 +154,7 @@ const toAnalysis = (row: AnalysisRow): Analysis => {
     answers: JSON.parse(row.answers_json) as Analysis['answers'],
     recommendations: result.recommendations.map((r) => ({ ...r, status: review[r.id] ?? 'pending' })),
     assessments: row.assessments_json === null ? null : (JSON.parse(row.assessments_json) as StepAssessment[]),
+    briefs: [],
     createdAt: new Date(row.created_at).toISOString(),
     appliedAt: row.applied_at === null ? null : new Date(row.applied_at).toISOString(),
   };
@@ -163,12 +164,57 @@ export function listAnalyses(db: Db, ownerId: string, workflowId: string): Analy
   const rows = db
     .prepare("SELECT * FROM analyses WHERE workflow_id = ? AND owner_id = ? ORDER BY CASE slot WHEN 'initial' THEN 0 ELSE 1 END")
     .all(workflowId, ownerId) as AnalysisRow[];
-  return rows.map(toAnalysis);
+  return rows.map((row) => withBriefs(db, toAnalysis(row)));
 }
 
 export function getAnalysis(db: Db, ownerId: string, id: string): Analysis | null {
   const row = db.prepare('SELECT * FROM analyses WHERE id = ? AND owner_id = ?').get(id, ownerId) as AnalysisRow | undefined;
-  return row ? toAnalysis(row) : null;
+  return row ? withBriefs(db, toAnalysis(row)) : null;
+}
+
+type BriefRow = {
+  analysis_id: string;
+  step_id: string;
+  kind: BriefKind;
+  classification: AutomationBrief['classification'];
+  summary: string;
+  sections_json: string;
+  basis: string;
+  revision: number;
+  created_at: number;
+};
+
+function withBriefs(db: Db, analysis: Analysis): Analysis {
+  const rows = db.prepare('SELECT * FROM automation_briefs WHERE analysis_id = ? ORDER BY created_at').all(analysis.id) as BriefRow[];
+  return {
+    ...analysis,
+    briefs: rows.map((r) => ({
+      analysisId: r.analysis_id,
+      stepId: r.step_id,
+      kind: r.kind,
+      classification: r.classification,
+      summary: r.summary,
+      sections: JSON.parse(r.sections_json) as AutomationBrief['sections'],
+      basis: r.basis,
+      revision: r.revision,
+      createdAt: new Date(r.created_at).toISOString(),
+    })),
+  };
+}
+
+/** Replace an analysis's assessments (after Clarify). Other analyses and the snapshot are untouched. */
+export function saveAssessments(db: Db, ownerId: string, id: string, assessments: StepAssessment[]): void {
+  db.prepare('UPDATE analyses SET assessments_json = ? WHERE id = ? AND owner_id = ?').run(JSON.stringify(assessments), id, ownerId);
+}
+
+/** Save a step's brief, replacing an earlier one for the same step of the same analysis. */
+export function saveBrief(db: Db, ownerId: string, brief: Omit<AutomationBrief, 'createdAt'>, now: number): void {
+  db.prepare(
+    `INSERT INTO automation_briefs (analysis_id, owner_id, step_id, kind, classification, summary, sections_json, basis, revision, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (analysis_id, step_id) DO UPDATE SET kind = excluded.kind, classification = excluded.classification, summary = excluded.summary,
+       sections_json = excluded.sections_json, basis = excluded.basis, revision = excluded.revision, created_at = excluded.created_at`,
+  ).run(brief.analysisId, ownerId, brief.stepId, brief.kind, brief.classification, brief.summary, JSON.stringify(brief.sections), brief.basis, brief.revision, now);
 }
 
 /** The analysis Ask Flico and the editor treat as current: the latest, or the only one. */

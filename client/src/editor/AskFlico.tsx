@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, GripHorizontal, Maximize2, Minimize2, Minus, Send, Sparkles, Trash2, X } from 'lucide-react';
-import { AI_CHAT_MESSAGE_MAX, type ChatMessage, type ChatMode } from '../../../shared/api';
+import { AI_CHAT_MESSAGE_MAX, type AssistMode, type ChatMessage, type ChatMode } from '../../../shared/api';
 import type { ProposalOperation } from '../../../shared/aiOps';
 import type { ChatRequest } from './useChat';
 
@@ -31,6 +31,19 @@ type Props = {
   onApply: (message: ChatMessage) => void;
   onCancelProposal: (message: ChatMessage) => void;
   onClose: () => void;
+  /** An interview about one step (Clarify, or a brief): one question at a time. */
+  interview?: {
+    stepLabel: string;
+    mode: AssistMode;
+    /** The open question for this step, if any. */
+    question: ChatMessage | null;
+    busy: boolean;
+    error: string | null;
+    onAnswer: (answer: string) => void;
+    onSkip: () => void;
+    onDismissError: () => void;
+    onStop: () => void;
+  } | null;
 };
 
 /** Ask Flico: a movable floating chat window (compact by default), never a docked sidebar. */
@@ -102,10 +115,14 @@ export function AskFlico(props: Props) {
     setPosition(clamp(position.left + delta[0]!, position.top + delta[1]!));
   };
 
+  const interview = props.interview ?? null;
+  const answering = !!interview?.question;
   const send = (content: string, mode: ChatMode = 'chat') => {
     const text = content.trim();
-    if (!text || pending || !props.available) return;
-    props.onSend(text, mode);
+    if (!text || pending || interview?.busy || !props.available) return;
+    // While an interview question is open, the message answers it.
+    if (interview?.question) interview.onAnswer(text);
+    else props.onSend(text, mode);
     setDraft('');
   };
 
@@ -212,8 +229,27 @@ export function AskFlico(props: Props) {
                 onPreview={() => props.onPreview(m)}
                 onApply={() => props.onApply(m)}
                 onCancel={() => props.onCancelProposal(m)}
+                {...(interview?.question?.id === m.id && !interview.busy ? { onSkip: interview.onSkip } : {})}
               />
             ))}
+            {interview?.busy && (
+              <p className="flex items-center gap-2 text-[13px] text-fl-text-muted" role="status">
+                <span className="fl-dots text-fl-brand" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                Flico is thinking…
+              </p>
+            )}
+            {interview?.error && (
+              <div role="alert" className="rounded-[10px] border border-[var(--fl-exception-stroke)] bg-[var(--fl-exception-fill)] px-3 py-2 text-[13px] text-[var(--fl-exception-ink)]">
+                <p>{interview.error}</p>
+                <button type="button" className="fl-link mt-1.5 text-[13px]" onClick={interview.onDismissError}>
+                  Dismiss
+                </button>
+              </div>
+            )}
             {pending && (
               <>
                 <div className="fl-chat-bubble self-end bg-fl-brand-pale text-fl-text">{pending.content}</div>
@@ -243,7 +279,17 @@ export function AskFlico(props: Props) {
           </div>
 
           <div className="flex-none border-t border-fl-border px-3 pb-3 pt-2">
-            {context && (
+            {interview && (
+              <p className="mb-2 flex items-center gap-1.5 text-[12px] text-fl-text-secondary" data-testid="interview-banner">
+                <span className="min-w-0 flex-1 truncate">
+                  {interview.mode === 'clarify' ? 'Clarifying' : 'Planning'} <strong className="font-semibold text-fl-text">“{interview.stepLabel}”</strong>
+                </span>
+                <button type="button" className="fl-link flex-none text-[12px]" onClick={interview.onStop}>
+                  Stop
+                </button>
+              </p>
+            )}
+            {context && !interview && (
               <p className="mb-2 flex items-center gap-1.5 text-[12px] text-fl-text-secondary">
                 <span className="truncate">
                   About: <strong className="font-semibold text-fl-text">{context.stepLabel || 'Untitled step'}</strong>
@@ -253,7 +299,7 @@ export function AskFlico(props: Props) {
                 </button>
               </p>
             )}
-            {!pending && props.available && (
+            {!pending && !interview && props.available && (
               <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Suggested questions">
                 {prompts.map((p) => (
                   <button key={p.label} type="button" className="rounded-full border border-fl-border bg-fl-surface-subtle px-2.5 py-1 text-[12px] font-medium text-fl-text-secondary hover:border-fl-brand hover:text-fl-brand" onClick={() => send(p.label, p.mode)}>
@@ -274,7 +320,7 @@ export function AskFlico(props: Props) {
                 className="fl-input !min-h-11 max-h-28 flex-1 resize-none !py-2.5 !text-[13.5px] leading-5"
                 rows={1}
                 aria-label="Message Ask Flico"
-                placeholder={props.available ? 'Ask a question or request a change…' : 'AI is not set up'}
+                placeholder={!props.available ? 'AI is not set up' : answering ? 'Answer the question…' : 'Ask a question or request a change…'}
                 value={draft}
                 maxLength={AI_CHAT_MESSAGE_MAX}
                 disabled={!props.available}
@@ -286,7 +332,7 @@ export function AskFlico(props: Props) {
                   }
                 }}
               />
-              <button type="submit" className="fl-btn fl-btn-primary grid !h-11 !w-11 !min-h-11 place-items-center !p-0" aria-label="Send" disabled={!draft.trim() || !!pending || !props.available}>
+              <button type="submit" className="fl-btn fl-btn-primary grid !h-11 !w-11 !min-h-11 place-items-center !p-0" aria-label={answering ? 'Send answer' : 'Send'} disabled={!draft.trim() || !!pending || !!interview?.busy || !props.available}>
                 <Send size={16} aria-hidden="true" />
               </button>
             </form>
@@ -308,20 +354,49 @@ function countChanges(ops: ProposalOperation[]) {
   return parts.length ? `Steps: ${parts.join(', ')}` : 'Connection changes only';
 }
 
-function Message({ message, previewing, busy, onPreview, onApply, onCancel }: { message: ChatMessage; previewing: boolean; busy: boolean; onPreview: () => void; onApply: () => void; onCancel: () => void }) {
+function Message({
+  message,
+  previewing,
+  busy,
+  onPreview,
+  onApply,
+  onCancel,
+  onSkip,
+}: {
+  message: ChatMessage;
+  previewing: boolean;
+  busy: boolean;
+  onPreview: () => void;
+  onApply: () => void;
+  onCancel: () => void;
+  onSkip?: () => void;
+}) {
+  const assist = message.assist;
   if (message.role === 'user') {
     return (
       <div className="flex flex-col items-end gap-1">
         {message.context && <span className="text-[11px] text-fl-text-muted">About “{message.context.stepLabel}”</span>}
-        <div className="fl-chat-bubble bg-fl-brand-pale text-fl-text">{message.content}</div>
+        <div className={`fl-chat-bubble text-fl-text ${assist?.kind === 'skip' ? 'border border-dashed border-fl-border-strong bg-white italic' : 'bg-fl-brand-pale'}`}>{message.content}</div>
       </div>
     );
   }
   const proposal = message.proposal;
   return (
-    <div className="flex flex-col items-start gap-1.5">
+    <div className="flex flex-col items-start gap-1.5" data-assist={assist?.kind} data-assist-status={assist?.status}>
+      {assist?.kind === 'question' && (
+        <span className="text-[11px] font-semibold text-fl-text-secondary">
+          {assist.mode === 'clarify' ? 'Clarifying' : 'Planning'} “{assist.stepLabel}”{assist.status === 'skipped' ? ' · skipped for now' : ''}
+        </span>
+      )}
+      {assist?.kind === 'update' && <span className="text-[11px] font-semibold text-fl-brand">Assessment updated</span>}
+      {assist?.kind === 'brief' && <span className="text-[11px] font-semibold text-fl-brand">Brief ready</span>}
       {/* Model text is rendered as plain text only (never HTML). */}
       <div className="fl-chat-bubble border border-fl-border bg-fl-surface-subtle text-fl-text">{message.content}</div>
+      {onSkip && (
+        <button type="button" className="fl-btn !min-h-8 !px-3 !text-[12px]" onClick={onSkip}>
+          Skip for now
+        </button>
+      )}
       {message.source === 'fixture' && (
         <span className="fl-badge" data-status="draft" title="Generated by Flico's built-in test fixture, not a live AI model">
           Test fixture, not a live AI response

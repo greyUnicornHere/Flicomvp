@@ -1,5 +1,5 @@
 // Persistence for Ask Flico conversations and daily AI usage counts. Every query is scoped by owner.
-import type { AiSource, AiUsageKind, ChatMessage, Proposal, ProposalStatus } from '../../shared/api.js';
+import type { AiSource, AiUsageKind, AssistInfo, ChatMessage, Proposal, ProposalStatus } from '../../shared/api.js';
 import type { ProposalOperation } from '../../shared/aiOps.js';
 import type { Db } from '../db/database.js';
 import { newId } from '../auth/tokens.js';
@@ -17,6 +17,7 @@ type ChatRow = {
   proposal_json: string | null;
   proposal_status: ProposalStatus | null;
   base_revision: number | null;
+  assist_json: string | null;
   created_at: number;
 };
 
@@ -24,6 +25,7 @@ const toMessage = (row: ChatRow): ChatMessage => {
   const message: ChatMessage = { id: row.id, role: row.role, content: row.content, createdAt: new Date(row.created_at).toISOString() };
   if (row.source) message.source = row.source;
   if (row.context_json) message.context = JSON.parse(row.context_json) as ChatMessage['context'];
+  if (row.assist_json) message.assist = JSON.parse(row.assist_json) as AssistInfo;
   if (row.proposal_json && row.proposal_status && row.base_revision !== null) {
     const stored = JSON.parse(row.proposal_json) as { summary: string; operations: ProposalOperation[] };
     message.proposal = { ...stored, status: row.proposal_status, baseRevision: row.base_revision };
@@ -51,6 +53,7 @@ type NewMessage = {
   source?: AiSource;
   context?: ChatMessage['context'];
   proposal?: Omit<Proposal, 'status'>;
+  assist?: AssistInfo;
 };
 
 /** Store a question and its answer together, so the conversation always alternates. */
@@ -58,8 +61,8 @@ export function appendExchange(db: Db, ownerId: string, workflowId: string, mess
   const { seq } = db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM workflow_chat_messages WHERE workflow_id = ?').get(workflowId) as { seq: number };
   const insert = db.prepare(
     `INSERT INTO workflow_chat_messages
-       (id, workflow_id, owner_id, seq, role, content, source, context_json, proposal_json, proposal_status, base_revision, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, workflow_id, owner_id, seq, role, content, source, context_json, proposal_json, proposal_status, base_revision, assist_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const ids = messages.map((m, i) => {
     const id = newId();
@@ -76,6 +79,7 @@ export function appendExchange(db: Db, ownerId: string, workflowId: string, mess
       proposal,
       m.proposal ? 'pending' : null,
       m.proposal ? m.proposal.baseRevision : null,
+      m.assist ? JSON.stringify(m.assist) : null,
       now,
     );
     return id;
@@ -110,4 +114,12 @@ export function recordUsage(db: Db, userId: string, kind: AiUsageKind, source: A
   db.prepare(
     'INSERT INTO ai_usage (id, user_id, kind, day, source, input_tokens, output_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(newId(), userId, kind, usageDay(now), source, usage.inputTokens, usage.outputTokens, now);
+}
+
+/** Mark an interview question answered or skipped. */
+export function setAssistStatus(db: Db, ownerId: string, id: string, status: NonNullable<AssistInfo['status']>): void {
+  const row = db.prepare('SELECT assist_json FROM workflow_chat_messages WHERE id = ? AND owner_id = ?').get(id, ownerId) as { assist_json: string | null } | undefined;
+  if (!row?.assist_json) return;
+  const assist = { ...(JSON.parse(row.assist_json) as AssistInfo), status };
+  db.prepare('UPDATE workflow_chat_messages SET assist_json = ? WHERE id = ? AND owner_id = ?').run(JSON.stringify(assist), id, ownerId);
 }

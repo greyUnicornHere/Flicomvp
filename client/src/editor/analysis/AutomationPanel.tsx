@@ -1,7 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronRight, CircleHelp, Handshake, RefreshCw, User, Zap, type LucideIcon } from 'lucide-react';
+import { Modal } from '../../components/Modal';
+import { ArrowRight, ChevronDown, ChevronRight, CircleHelp, ClipboardList, Copy, Handshake, MessageCircleQuestion, RefreshCw, User, Zap, type LucideIcon } from 'lucide-react';
 import {
   AUTOMATION_CLASSES,
+  BRIEF_KIND,
+  BRIEF_TITLE,
+  briefOutdated,
   CLASS_LABEL,
   CLASS_SHORT,
   DIMENSIONS,
@@ -10,6 +14,7 @@ import {
   needsReassessment,
   nextStep,
   topOpportunities,
+  type AutomationBrief,
   type AutomationClass,
   type EvidenceSource,
   type StepAssessment,
@@ -26,6 +31,9 @@ const COUNT_LABEL: Record<AutomationClass, [string, string]> = {
   unknown: ['needs more information', 'need more information'],
 };
 
+const actionButton =
+  'inline-flex min-h-8 items-center gap-1 rounded-[8px] border border-fl-border-strong bg-white px-2.5 text-[12px] font-semibold text-fl-brand hover:border-fl-brand hover:bg-fl-brand-pale disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white';
+
 const TAG_STYLE: Record<EvidenceSource, string> = {
   user: 'bg-fl-brand-pale text-[var(--fl-action-ink)]',
   workflow: 'bg-[var(--fl-finish-fill)] text-[var(--fl-finish-ink)]',
@@ -41,6 +49,12 @@ type Props = {
   currentGraph: WorkflowGraph;
   selectedId: string | null;
   onSelect: (stepId: string | null) => void;
+  /** Briefs written for steps of this analysis. */
+  briefs?: AutomationBrief[];
+  /** Why Clarify and briefs can't be used right now (null: they can). */
+  actionsBlocked?: string | null;
+  onClarify?: (stepId: string) => void;
+  onBrief?: (stepId: string) => void;
 };
 
 /**
@@ -49,7 +63,8 @@ type Props = {
  * next step), with the evidence and reasoning folded under "Why". Selecting a step highlights it in
  * the diagram. Recommendations only: nothing is automated, connected or tested.
  */
-export function AutomationPanel({ assessments, snapshot, currentGraph, selectedId, onSelect }: Props) {
+export function AutomationPanel({ assessments, snapshot, currentGraph, selectedId, onSelect, briefs = [], actionsBlocked = null, onClarify, onBrief }: Props) {
+  const [viewing, setViewing] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!selectedId) return;
@@ -136,18 +151,70 @@ export function AutomationPanel({ assessments, snapshot, currentGraph, selectedI
               </h3>
               <ul className="space-y-1.5">
                 {items.map((a) => (
-                  <Card key={a.stepId} a={a} name={name(a.stepId)} outdated={outdated(a)} selected={selectedId === a.stepId} onSelect={() => select(a.stepId)} />
+                  <Card
+                    key={a.stepId}
+                    a={a}
+                    name={name(a.stepId)}
+                    outdated={outdated(a)}
+                    selected={selectedId === a.stepId}
+                    onSelect={() => select(a.stepId)}
+                    brief={briefs.find((b) => b.stepId === a.stepId)}
+                    blocked={outdated(a) ? 'Changed since the analysis: run a new analysis first' : actionsBlocked}
+                    onClarify={onClarify && (() => onClarify(a.stepId))}
+                    onBrief={onBrief && (() => onBrief(a.stepId))}
+                    onViewBrief={() => setViewing(a.stepId)}
+                  />
                 ))}
               </ul>
             </section>
           );
         })}
+      {viewing && briefs.some((b) => b.stepId === viewing) && (
+        <BriefDialog
+          brief={briefs.find((b) => b.stepId === viewing)!}
+          stepName={name(viewing)}
+          outdated={briefOutdated(briefs.find((b) => b.stepId === viewing)!, assessments.find((a) => a.stepId === viewing), currentGraph)}
+          blocked={outdated(assessments.find((a) => a.stepId === viewing)!) ? 'Changed since the analysis: run a new analysis first' : actionsBlocked}
+          onUpdate={
+            onBrief && BRIEF_KIND[assessments.find((a) => a.stepId === viewing)!.classification]
+              ? () => {
+                  setViewing(null);
+                  onBrief(viewing);
+                }
+              : undefined
+          }
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
   );
 }
 
 /** One step: the verdict and three short lines; evidence and reasoning folded under "Why". */
-function Card({ a, name, outdated, selected, onSelect }: { a: StepAssessment; name: string; outdated: boolean; selected: boolean; onSelect: () => void }) {
+function Card({
+  a,
+  name,
+  outdated,
+  selected,
+  onSelect,
+  brief,
+  blocked,
+  onClarify,
+  onBrief,
+  onViewBrief,
+}: {
+  a: StepAssessment;
+  name: string;
+  outdated: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  brief?: AutomationBrief;
+  blocked: string | null;
+  onClarify?: () => void;
+  onBrief?: () => void;
+  onViewBrief: () => void;
+}) {
+  const kind = BRIEF_KIND[a.classification];
   const [why, setWhy] = useState(false);
   const whyId = useId();
   const heading = 'text-[11px] font-bold uppercase leading-4 tracking-[0.04em] text-fl-text-secondary';
@@ -178,9 +245,30 @@ function Card({ a, name, outdated, selected, onSelect }: { a: StepAssessment; na
         {a.automatable && line('Automate', a.automatable, Zap)}
         {a.human && line('Keep human', a.human, User)}
         {next && line('Next step', next, ArrowRight)}
-        <button type="button" className="inline-flex items-center gap-0.5 pt-0.5 text-[12px] font-semibold text-fl-brand hover:underline" aria-expanded={why} aria-controls={whyId} onClick={() => setWhy(!why)}>
-          {why ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />} Why
-        </button>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-1">
+          <button type="button" className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-fl-brand hover:underline" aria-expanded={why} aria-controls={whyId} onClick={() => setWhy(!why)}>
+            {why ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />} Why
+          </button>
+          <span className="flex-1" />
+          {onClarify && (
+            <button type="button" className={actionButton} disabled={!!blocked} title={blocked ?? undefined} aria-label={`Clarify “${name}”`} onClick={onClarify}>
+              <MessageCircleQuestion size={13} aria-hidden="true" /> Clarify
+            </button>
+          )}
+          {brief ? (
+            <button type="button" className={actionButton} aria-label={`View ${BRIEF_TITLE[brief.kind].toLowerCase()} for “${name}”`} onClick={onViewBrief}>
+              <ClipboardList size={13} aria-hidden="true" /> {BRIEF_TITLE[brief.kind]}
+            </button>
+          ) : (
+            kind &&
+            onBrief && (
+              <button type="button" className={actionButton} disabled={!!blocked} title={blocked ?? undefined} aria-label={`Create ${BRIEF_TITLE[kind].toLowerCase()} for “${name}”`} onClick={onBrief}>
+                <ClipboardList size={13} aria-hidden="true" /> {kind === 'support' ? 'Support ideas' : `Create ${BRIEF_TITLE[kind].toLowerCase()}`}
+              </button>
+            )
+          )}
+        </div>
+        {blocked && (onClarify || onBrief) && <p className="text-[11.5px] text-fl-text-muted">{blocked}</p>}
         {why && (
           <div id={whyId} className="space-y-2.5 border-t border-fl-border pt-2">
             <div>
@@ -223,5 +311,62 @@ function Card({ a, name, outdated, selected, onSelect }: { a: StepAssessment; na
         )}
       </div>
     </li>
+  );
+}
+
+/** A step's brief: short sections to hand to IT, a vendor or a manager. A plan to discuss, never built or tested. */
+function BriefDialog({ brief, stepName, outdated, blocked, onUpdate, onClose }: { brief: AutomationBrief; stepName: string; outdated: boolean; blocked: string | null; onUpdate?: () => void; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const asText = [`${BRIEF_TITLE[brief.kind]}: ${stepName}`, '', brief.summary, ...brief.sections.flatMap((s) => ['', s.heading, ...s.items.map((i) => `- ${i}`)])].join('\n');
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(asText);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <Modal
+      title={`${BRIEF_TITLE[brief.kind]} · ${stepName}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="fl-btn gap-1.5" onClick={() => void copy()}>
+            <Copy size={15} aria-hidden="true" /> {copied ? 'Copied' : 'Copy as text'}
+          </button>
+          {onUpdate && (
+            <button type="button" className="fl-btn" disabled={!!blocked} title={blocked ?? undefined} onClick={onUpdate}>
+              Update brief
+            </button>
+          )}
+          <button type="button" className="fl-btn fl-btn-primary" onClick={onClose}>
+            Close
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-[13.5px] leading-5" data-testid="brief">
+        {outdated && (
+          <p role="status" className="rounded-[8px] border border-[var(--fl-approval-stroke)] bg-[var(--fl-approval-fill)] px-2.5 py-1.5 text-[12.5px] text-[var(--fl-approval-ink)]">
+            The step or its classification changed since this brief was written. Update the brief to match.
+          </p>
+        )}
+        <p className="text-fl-text">{brief.summary}</p>
+        {brief.sections.map((section) => (
+          <section key={section.heading}>
+            <h3 className="text-[11px] font-bold uppercase leading-4 tracking-[0.04em] text-fl-text-secondary">{section.heading}</h3>
+            <ul className="mt-0.5 list-disc pl-5 text-fl-text">
+              {section.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        ))}
+        <p className="border-t border-fl-border pt-2 text-[12px] text-fl-text-muted">
+          A plan to discuss, based on your answers. Flico doesn't build, connect or test automations; confirm the assumptions before relying on it.
+        </p>
+      </div>
+    </Modal>
   );
 }

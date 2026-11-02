@@ -498,3 +498,24 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). Assessment
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the concise automation assessment | Pass | Product owner approved on 2026-11-02 |
+
+## Clarify and briefs — 2026-11-02 (branch `clarify-and-briefs`)
+
+Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Interviews and briefs in tests and screenshots come from the labelled test fixture, not a live model.**
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **302 / 302 pass** (6 new in `server/analysis/assist.api.test.ts`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **72 / 72 pass** (2 new in `tests/e2e/assist.spec.ts`) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Clarify: one question at a time; asking again shows the same open question without an AI call; an answer updates the assessment with "You said" evidence; next question or done; no credit | Pass (fixture) | API "asks one question…"; E2E Clarify; `docs/evidence/clarify-briefs/01-clarify-question-1536-test-fixture.png` |
+| Skip keeps the uncertainty (Provisional) and is never asked again; at most 5 questions per run | Pass (fixture) | API "Skip for now keeps the uncertainty…" |
+| Brief: interview, then a brief with exactly the sections for its kind (assist / automation), 1–4 items each; skipped questions become assumptions; saved, readable after a refresh; no credit | Pass (fixture) | API "interviews, then writes the brief…", "a full candidate gets an automation brief…"; E2E brief; `02-brief-interview-1536-test-fixture.png`, `03-assist-brief-1536-test-fixture.png` |
+| Needs-info steps must be clarified before a brief | Pass | API (409 "Use Clarify"); E2E (no brief button) |
+| Changed steps refused (moving blocks is fine); older analyses refused; AI failure stores nothing; other people get 404 | Pass | API "refuses changed steps…", "keeps the analysis untouched…"; E2E (Clarify disabled on a changed step) |
+| Bug found and fixed: the Clarify reply was cut to its first sentence, losing what changed | Fixed, Pass | E2E Clarify (update message names the step) |
+| Edge browser | Not tested | Only Chromium is available here |
+| Live Claude interviews and briefs | Not tested here | To be checked by the owner with a live key |

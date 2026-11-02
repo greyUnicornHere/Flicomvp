@@ -118,6 +118,12 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Top opportunities** at the top of the Automation tab: up to three automation candidates or human-assisted steps (candidates first, confirmed before provisional, steps with described business value first), each with what to automate and the next step. The four count boxes became one line.
 - **Compact card per step:** the verdict, then Automate, Keep human and **Next step** (its first open question or point to verify); evidence, other points to verify, the six areas and business value are folded under **Why**. Clicking a card highlights the step.
 
+## Clarify and briefs (owner request; awaiting owner review, branch `clarify-and-briefs`)
+
+- Every assessment card has **Clarify**: Flico asks one question at a time in Ask Flico about what decides the classification (starting with the card's next step), with **Skip for now** and **Stop**. Answers update the assessment (class, Provisional, evidence "You said"); at most 5 questions per run.
+- Then a class-specific brief: **Create automation brief** (automation candidates), **Create assist brief** (human-assisted) or **Support ideas** (human-led); "More information needed" steps must be clarified first. Flico asks up to 6 short questions, then writes a brief with fixed sections (for an automation brief: goal, trigger and inputs, steps, systems and access, exceptions, how to test it, owner, risks, possible approaches, assumptions to confirm). It is saved under the step: **View**, **Copy as text**, **Update brief**.
+- No analysis credit; questions and briefs count toward the daily Ask Flico limit. Advice only: Flico never builds, connects or tests anything. A step that changed since the analysis can't be clarified or planned until it's reassessed; a brief made before its step or classification changed says it's out of date.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -142,7 +148,9 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - The details card's dragged position resets on reload or when you leave the editor (by design). Dragged to the far left it can cover the step toolbar; drag it back or close it.
 - Automation assessments are recommendations only: Flico doesn't run automations, connect to systems or test integrations. In tests and screenshots they come from the labelled test fixture; quality with live Claude Haiku 5.5 still needs a live check.
 - An assessment that needs reassessment is updated by running a new analysis (one credit). Refining an assessment through questions isn't built (owner choice: not now).
+- Clarify and briefs work on the latest analysis only; Clear History in Ask Flico removes the interview messages (updated assessments and saved briefs stay). Briefs can be copied as text; file export comes with Milestone 5.
+- Brief quality with live Claude still needs checking with real workflows (tests use the labelled fixture).
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/` and `docs/evidence/concise-assessment/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/` and `docs/evidence/clarify-briefs/`.

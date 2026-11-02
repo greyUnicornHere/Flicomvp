@@ -3,7 +3,7 @@
 // correction attempt. Nothing here writes to the database.
 import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type QuickAddType, type Recommendation } from '../../shared/api.js';
 import { unsupportedFigures } from '../../shared/analysis.js';
-import { isAssessable, type StepAssessment } from '../../shared/assessment.js';
+import { BRIEF_SECTIONS, isAssessable, type AutomationBrief, type BriefKind, type StepAssessment } from '../../shared/assessment.js';
 import { applyOperations, structuralProblems, type ProposalOperation } from '../../shared/aiOps.js';
 import type { EdgeType, StepType, WorkflowEdge, WorkflowGraph, WorkflowNode } from '../../shared/graph.js';
 import { autoLayout } from '../../shared/layout.js';
@@ -13,6 +13,11 @@ import type { AiMessage, AiProvider, AiRequest } from './provider.js';
 import {
   ANALYSIS_SYSTEM,
   CHAT_SYSTEM,
+  CLARIFY_QUESTION_SYSTEM,
+  CLARIFY_UPDATE_SYSTEM,
+  assistPrompt,
+  briefQuestionSystem,
+  briefWriteSystem,
   DRAFT_SYSTEM,
   QUESTIONS_SYSTEM,
   QUICK_ADD_SYSTEM,
@@ -28,6 +33,12 @@ import {
 } from './prompts.js';
 import {
   LIMITS,
+  assistQuestionJsonSchema,
+  assistQuestionOutput,
+  briefJsonSchema,
+  briefOutput,
+  clarifyUpdateJsonSchema,
+  clarifyUpdateOutput,
   analysisJsonSchema,
   analysisOutput,
   type AssessmentOutput,
@@ -585,4 +596,146 @@ export async function analyzeWorkflow(
     dropped: invalidKeys.size,
     usage,
   };
+}
+
+// ---------- interviews about one step: Clarify and briefs ----------
+
+export type InterviewTurn = { question: string; answer: string | null };
+
+/** What the model sees about the step: the workflow (refs), its assessment and the interview so far. */
+function interviewContext(graph: WorkflowGraph, assessment: StepAssessment, turns: InterviewTurn[]) {
+  const { view, refs } = workflowView(graph);
+  const ref = (id: string) => refs.stepRefs.get(id) ?? id;
+  const shown = {
+    step: ref(assessment.stepId),
+    classification: assessment.classification,
+    provisional: assessment.provisional,
+    reasoning: assessment.reasoning,
+    automatable: assessment.automatable,
+    human: assessment.human,
+    questions: assessment.questions,
+    prerequisites: assessment.prerequisites,
+    evidence: assessment.evidence,
+  };
+  // Figures may be repeated only when they appear in the workflow or the person's answers.
+  const source = JSON.stringify(view) + JSON.stringify(turns);
+  return { view, refs, shown, stepRef: ref(assessment.stepId), source };
+}
+
+const normalise = (q: string) => q.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+
+/** One focused question that wasn't asked before. */
+function questionProblems(question: string, turns: InterviewTurn[]): string[] {
+  const problems: string[] = [];
+  if ((question.match(/\?/g) ?? []).length > 1) problems.push('Ask exactly one question: one question mark, no lists or multi-part questions.');
+  if (turns.some((t) => normalise(t.question) === normalise(question))) problems.push('That question was already asked (answered or skipped). Ask about something else, or finish.');
+  return problems;
+}
+
+/** The next interview question, or done. Nothing is stored here. */
+export async function assistQuestion(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; mode: 'clarify' | 'brief'; kind?: BriefKind },
+  timeoutMs: number,
+): Promise<{ done: boolean; question: string; usage: Usage }> {
+  const context = interviewContext(input.graph, input.assessment, input.turns);
+  const request: AiRequest = {
+    task: 'assist',
+    system: input.mode === 'clarify' ? CLARIFY_QUESTION_SYSTEM : briefQuestionSystem(input.kind!),
+    messages: [{ role: 'user', content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'question' }) }],
+    schema: assistQuestionJsonSchema,
+    maxTokens: 2000,
+    effort: 'low',
+    timeoutMs,
+  };
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, assistQuestionOutput);
+    if (!parsed.ok) return parsed;
+    const question = brief(parsed.value.question, 30, false);
+    if (parsed.value.done || !question) return { ok: true, value: { done: true, question: '' } };
+    const problems = questionProblems(question, input.turns);
+    return problems.length ? { ok: false, problems } : { ok: true, value: { done: false, question } };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't prepare a clear question this time. Please try again.");
+  return { ...result.value, usage };
+}
+
+/** Clarify: update the step's assessment from the latest answer, and the next question (or none). */
+export async function clarifyUpdate(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; latest: { question: string; answer: string } },
+  timeoutMs: number,
+): Promise<{ reply: string; updated: AssessmentDraft; nextQuestion: string; usage: Usage }> {
+  const context = interviewContext(input.graph, input.assessment, [...input.turns, { question: input.latest.question, answer: input.latest.answer }]);
+  const request: AiRequest = {
+    task: 'assist',
+    system: CLARIFY_UPDATE_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'update', latest: input.latest }),
+      },
+    ],
+    schema: clarifyUpdateJsonSchema,
+    maxTokens: 6000,
+    effort: 'medium',
+    timeoutMs,
+  };
+  const asked = [...input.turns, { question: input.latest.question, answer: input.latest.answer }];
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, clarifyUpdateOutput);
+    if (!parsed.ok) return parsed;
+    if (parsed.value.assessment.step !== context.stepRef) return { ok: false, problems: [`Update only the selected step ${context.stepRef}.`] };
+    const checked = checkAssessments([parsed.value.assessment], input.graph, context.refs, context.source);
+    const nextQuestion = brief(parsed.value.next_question, 30, false);
+    const problems = [...checked.problems, ...(nextQuestion ? questionProblems(nextQuestion, asked) : [])];
+    if (problems.length || !checked.valid[0]) return { ok: false, problems: problems.length ? problems : ['The assessment is incomplete.'] };
+    const found = unsupportedFigures(parsed.value.reply, context.source);
+    if (found.length) return { ok: false, problems: [`The reply states figures the workflow doesn't support (${found.join(', ')}).`] };
+    // The reply may be two sentences (what changed, and why): capped, never cut to the first sentence.
+    return { ok: true, value: { reply: brief(parsed.value.reply, 50, false), updated: checked.valid[0], nextQuestion } };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't update the assessment from that answer. Nothing was changed; please try again.");
+  return { ...result.value, usage };
+}
+
+/** Write a step's brief from the workflow, its assessment and the interview. Nothing is stored here. */
+export async function writeBrief(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[]; kind: BriefKind },
+  timeoutMs: number,
+): Promise<{ summary: string; sections: AutomationBrief['sections']; usage: Usage }> {
+  const context = interviewContext(input.graph, input.assessment, input.turns);
+  const headings = BRIEF_SECTIONS[input.kind];
+  const request: AiRequest = {
+    task: 'assist',
+    system: briefWriteSystem(input.kind),
+    messages: [{ role: 'user', content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'brief' }) }],
+    schema: briefJsonSchema,
+    maxTokens: 6000,
+    effort: 'medium',
+    timeoutMs,
+  };
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, briefOutput);
+    if (!parsed.ok) return parsed;
+    const problems: string[] = [];
+    const got = parsed.value.sections.map((s) => s.heading.trim());
+    if (got.join('|') !== headings.join('|')) problems.push(`Use exactly these section headings, in this order: ${headings.map((h) => `"${h}"`).join(', ')}.`);
+    const empty = parsed.value.sections.filter((s) => s.items.filter((i) => i.trim()).length === 0).map((s) => s.heading);
+    if (empty.length) problems.push(`Every section needs at least one item (empty: ${empty.join(', ')}).`);
+    const found = unsupportedFigures([parsed.value.summary, ...parsed.value.sections.flatMap((s) => s.items)].join(' '), context.source);
+    if (found.length) problems.push(`The brief states figures the workflow and answers don't support (${found.join(', ')}).`);
+    if (problems.length) return { ok: false, problems };
+    return {
+      ok: true,
+      value: {
+        summary: brief(parsed.value.summary, 35),
+        // Concise by design: at most 4 short items per section.
+        sections: parsed.value.sections.map((s) => ({ heading: s.heading.trim(), items: s.items.map((i) => i.trim()).filter(Boolean).slice(0, 4).map((i) => brief(i, 25, false)) })),
+      },
+    };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't write a usable brief this time. Your answers are kept; please try again.");
+  return { ...result.value, usage };
 }

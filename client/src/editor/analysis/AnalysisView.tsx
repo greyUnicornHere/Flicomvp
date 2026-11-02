@@ -22,13 +22,17 @@ const LEVEL_LABEL = { low: 'Low', medium: 'Medium', high: 'High' } as const;
 type Props = {
   analyses: Analysis[];
   currentGraph: WorkflowGraph;
+  /** Why Clarify and briefs can't be used right now (null: they can). */
+  interviewBlocked?: string | null;
+  onClarify?: (stepId: string) => void;
+  onBrief?: (stepId: string) => void;
   onAnalysisChange: (analysis: Analysis) => void;
   onApplied: (result: ApplyAnalysisResponse) => void;
   onBackToEditor: () => void;
 };
 
 /** The analysis results: executive summary, one change-highlighted diagram and the synchronized recommendation list. */
-export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor }: Props) {
+export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief }: Props) {
   const [slot, setSlot] = useState<'initial' | 'latest'>('latest');
   const analysis = analyses.find((a) => a.slot === slot) ?? analyses.at(-1)!;
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -328,7 +332,18 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                 </div>
               )}
               {sidePanel === 'automation' && (
-                <AutomationPanel assessments={assessments} snapshot={snapshot} currentGraph={currentGraph} selectedId={assessId} onSelect={setAssessId} />
+                <AutomationPanel
+                  assessments={assessments}
+                  briefs={analysis.briefs}
+                  snapshot={snapshot}
+                  currentGraph={currentGraph}
+                  selectedId={assessId}
+                  onSelect={setAssessId}
+                  // Only the current analysis (the latest, or the only one) can be clarified or planned.
+                  actionsBlocked={analysis.slot === 'initial' && analyses.some((a) => a.slot === 'latest') ? 'Only the latest analysis can be clarified or planned' : interviewBlocked}
+                  onClarify={onClarify}
+                  onBrief={onBrief}
+                />
               )}
               {sidePanel === 'recs' && (
               <>

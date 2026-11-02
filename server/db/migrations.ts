@@ -169,6 +169,28 @@ export const migrations: Migration[] = [
       ALTER TABLE analyses ADD COLUMN assessments_json TEXT;
     `,
   },
+  {
+    id: 6,
+    name: 'clarify_and_briefs',
+    sql: `
+      -- Interviews about one step's automation assessment in Ask Flico (Clarify, or a brief): JSON metadata.
+      ALTER TABLE workflow_chat_messages ADD COLUMN assist_json TEXT;
+      -- One brief per step per analysis (automation brief, assist brief or support ideas).
+      CREATE TABLE automation_briefs (
+        analysis_id TEXT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        step_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('automation', 'assist', 'support')),
+        classification TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        sections_json TEXT NOT NULL,
+        basis TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (analysis_id, step_id)
+      );
+    `,
+  },
 ];
 
 /** Apply all pending migrations, each in its own transaction. Returns the names applied. */

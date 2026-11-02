@@ -5,7 +5,7 @@ import { CanvasControls } from '../CanvasControls';
 import { EditorUiContext, type EditorUi } from '../EditorContext';
 import { FlowEdge, type FlowEdgeType } from '../FlowEdge';
 import { flowEdges, flowNodes, type Display, type Focus } from '../flowElements';
-import { autoLayout } from '../layout';
+import { reviewLayout } from './reviewLayout';
 import { motionDuration } from '../motion';
 import { StepNode, type StepFlowNode } from '../StepNode';
 
@@ -37,8 +37,9 @@ export function ReviewDiagram(props: Props) {
 function Diagram({ display: shown, focus, onSelectElement, revealIds, label, assessments, onOpenAssessment }: Props) {
   const rf = useReactFlow<StepFlowNode, FlowEdgeType>();
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
-  // The review always shows a tidy, auto-arranged diagram (view only: the saved layout is untouched).
-  const display = useMemo(() => ({ ...shown, graph: autoLayout(shown.graph) }), [shown]);
+  // The review always shows a tidy, change-aware arrangement: the proposed workflow neatly laid out,
+  // removed steps in a lane below (view only: the saved layout is untouched).
+  const display = useMemo(() => ({ ...shown, graph: reviewLayout(shown) }), [shown]);
   const nodes = useMemo(() => flowNodes(display, { dims, focus }), [display, dims, focus]);
   const edges = useMemo(() => flowEdges(display, { dims, focus }), [display, dims, focus]);
 

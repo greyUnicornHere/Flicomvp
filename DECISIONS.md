@@ -327,3 +327,8 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - Fix: the progress window now sits over the content area of whichever tab is open (below the header), so a running, failed or cancelled analysis is always visible and can be cancelled.
 - With live Claude a run can legitimately take a while: each model request has its own time limit (`AI_ANALYSIS_TIMEOUT_SECONDS`, default 180 s) and one transient retry, plus Flico's single correction attempt for invalid output, so a very slow run can take several minutes before it fails without a charge.
 - Analysis tab side panel: the Recommendations / Automation tabs never wrap; the category filter moved to its own row under them.
+
+## Change-aware review layout (owner feedback, 2026-11-02)
+- Owner: the Analysis diagram looked messy and asked for auto-arrange. It was already auto-arranged; the mess came from arranging the old and new routes together (removed steps, added steps, old and new connections), which auto-arrange treats as parallel branches. Owner choice: **change-aware layout** (one diagram with added/updated/removed is kept, as approved in Milestone 4; no separate button).
+- `reviewLayout` (client/src/editor/analysis/reviewLayout.ts): auto-arrange only the proposed workflow (every step and connection that isn't removed). Each removed step goes into a lane below the whole diagram, at the horizontal midpoint between the remaining steps it sat between (following chains of removed steps; loops ignored), never overlapping another removed step and keeping their original order. All connections are kept; removed ones are drawn as before (dashed red).
+- Used by the Analysis tab's diagram and by the final preview. View only.

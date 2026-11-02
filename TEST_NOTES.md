@@ -454,3 +454,17 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 | Check | Result | Notes |
 |---|---|---|
 | Owner review of the automation assessment, Automation tab, labels, repeat-analysis rule and progress fix | Pass | Product owner approved on 2026-11-02 |
+
+## Change-aware review layout — 2026-11-02 (branch `analysis-layout`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **292 / 292 pass** (5 new in `reviewLayout.test.ts`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **70 / 70 pass** |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Proposed workflow on one tidy row in order, ignoring old positions; a removed step in a lane below, between the steps it sat between; all connections kept; chains of removed steps never overlap and keep their order | Pass | `client/src/editor/analysis/reviewLayout.test.ts` |
+| Analysis diagram and final preview use it; selection, focus, labels, fitting and the long-workflow test still pass | Pass (fixture) | all analysis and automation E2E; `docs/evidence/review-layout/01-change-aware-layout-1536-test-fixture.png`, `02-long-workflow-1536-test-fixture.png`, `03-final-preview-1536-test-fixture.png` |
+| Edge browser | Not tested | Only Chromium is available here |

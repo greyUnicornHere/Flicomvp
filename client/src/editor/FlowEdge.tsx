@@ -42,7 +42,7 @@ export function FlowEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, da
   const source = { x: sourceX, y: sourceY };
   const target = { x: targetX, y: targetY };
   const route =
-    edge.type === 'loop' && data.loopBottom !== undefined
+    data.loopBottom !== undefined
       ? laneRoute(source, target, { out: source.x + 30, back: target.x - 30, lane: data.loopBottom })
       : data.detour
         ? laneRoute(source, target, data.detour)

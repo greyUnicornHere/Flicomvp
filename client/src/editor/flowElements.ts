@@ -6,7 +6,7 @@ import type { WorkflowGraph } from '../../../shared/graph';
 import type { Issue } from '../../../shared/validation';
 import { CHANGE_BADGE, type Change } from './changes';
 import type { FlowEdgeType } from './FlowEdge';
-import { NODE_WIDTH, nodeHeight } from './layout';
+import { backEdges, NODE_WIDTH, nodeHeight } from './layout';
 import { findNode } from './ops';
 import { curveCrosses, detour, type Box } from './routing';
 import type { StepFlowNode } from './StepNode';
@@ -72,10 +72,12 @@ export function flowEdges(display: Display, options: { dims: Sizes; dragging?: P
       return [n.id, { left: p.x, top: p.y, right: p.x + size.width, bottom: p.y + size.height }];
     }),
   );
+  const back = backEdges(shown);
   return shown.edges.map((e): FlowEdgeType => {
     const change = display.edgeChange.get(e.id);
     const focus = options.focus?.(e.id);
-    const isLoop = e.type === 'loop';
+    // Repeat loops and other connections back to an earlier step return under the steps.
+    const isLoop = e.type === 'loop' || back.has(e.id);
     const s = boxes.get(e.sourceId);
     const t = boxes.get(e.targetId);
     let loopBottom: number | undefined;

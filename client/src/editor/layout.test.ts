@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoLayout, NODE_HEIGHT, NODE_WIDTH, nodeHeight, placeNewSteps } from './layout';
+import { autoLayout, backEdges, NODE_HEIGHT, NODE_WIDTH, nodeHeight, placeNewSteps } from './layout';
 import { graph, sequential } from './test/fixtures';
 import type { WorkflowGraph } from '../../../shared/graph';
 
@@ -127,5 +127,28 @@ describe('long step names (owner feedback 2026-10-31)', () => {
     );
     const after = { ...before, nodes: [...before.nodes, { id: 'n', type: 'action' as const, label: LONG, position: { x: 0, y: 0 } }], edges: [...before.edges, { id: 'en', sourceId: 'd', targetId: 'n', type: 'no' as const, label: 'No' }] };
     boxOverlap(placeNewSteps(before, after));
+  });
+});
+
+describe('paths back to an earlier step (owner feedback 2026-11-02)', () => {
+  // Start → Search → Suitable? (Yes → Found, No → Refine → Retry limit? (Yes → Not found, No → back to Search))
+  const retry = () =>
+    graph({
+      nodes: [['s', 'start', 'Start product search'], ['a', 'action', 'Search Amazon for products'], ['d', 'decision', 'Suitable product found?'], ['f1', 'finish', 'Product list identified'], ['r', 'action', 'Refine search terms'], ['d2', 'decision', 'Retry limit reached?'], ['f2', 'finish', 'No suitable product found']],
+      edges: [['s', 'a'], ['a', 'd'], ['d', 'f1', 'yes', 'Yes'], ['d', 'r', 'no', 'No'], ['r', 'd2'], ['d2', 'f2', 'yes', 'Yes'], ['d2', 'a', 'no', 'No']],
+    });
+
+  it('finds the connection that goes back, however it is typed', () => {
+    expect([...backEdges(retry())]).toEqual(['e7']);
+    expect(backEdges(sequential()).size).toBe(0);
+  });
+
+  it('lays a workflow with a "No" path back to an earlier step out left to right, never stacked in one column', () => {
+    const g = autoLayout(retry());
+    const column = (id: string) => Math.round(pos(g, id).x / (pos(g, 'a').x - pos(g, 's').x));
+    expect(['s', 'a', 'd', 'r', 'd2', 'f2'].map(column)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(column('f1')).toBe(column('r')); // Yes and No of the same decision share a column
+    expect(pos(g, 'f1').y).toBeLessThan(pos(g, 'r').y); // Yes above, No below
+    noOverlaps(g);
   });
 });

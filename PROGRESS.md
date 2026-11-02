@@ -118,6 +118,11 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - **Top opportunities** at the top of the Automation tab: up to three automation candidates or human-assisted steps (candidates first, confirmed before provisional, steps with described business value first), each with what to automate and the next step. The four count boxes became one line.
 - **Compact card per step:** the verdict, then Automate, Keep human and **Next step** (its first open question or point to verify); evidence, other points to verify, the six areas and business value are folded under **Why**. Clicking a card highlights the step.
 
+## Tidy layout for paths back to earlier steps (owner feedback; awaiting owner review, branch `layout-back-paths`)
+
+- A connection that goes back to an earlier step without being a Repeat loop (for example "Retry limit reached? → No → Search") used to leave Auto-arrange, and AI drafts, with most steps stacked in one column and crossing lines. Now such paths are recognised: steps are laid out left to right as usual, and the way back is drawn under the steps like a Repeat loop, keeping its label (for example "No").
+- Existing workflows keep their positions until you click **Auto-arrange** (owner choice); new AI drafts come out tidy.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.

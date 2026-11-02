@@ -1,6 +1,6 @@
 // Types shared by the API server and the web client.
 import type { ProposalOperation } from './aiOps.js';
-import type { StepAssessment } from './assessment.js';
+import type { AutomationBrief, StepAssessment } from './assessment.js';
 import type { StepType, WorkflowGraph } from './graph.js';
 
 export type User = { id: string; email: string };
@@ -110,6 +110,24 @@ export type ChatMessage = {
   /** The step the question was about, if any. */
   context?: { stepId: string; stepLabel: string };
   proposal?: Proposal;
+  /** Part of an interview about one step's automation assessment (Clarify, or a brief). */
+  assist?: AssistInfo;
+};
+
+export type AssistMode = 'clarify' | 'brief';
+export type AssistInfo = {
+  analysisId: string;
+  stepId: string;
+  stepLabel: string;
+  mode: AssistMode;
+  /** question: Flico asks; answer / skip: the person's reply; update: what changed; done: interview over; brief: the brief was written. */
+  kind: 'question' | 'answer' | 'skip' | 'update' | 'done' | 'brief';
+  /** For questions: still open, answered, or skipped. */
+  status?: 'pending' | 'answered' | 'skipped';
+  /** For answers and skips: the question they reply to. */
+  questionId?: string;
+  /** Workflow revision the message was made against. */
+  revision: number;
 };
 
 export type ChatMode = 'chat' | 'fix';
@@ -167,6 +185,8 @@ export type Analysis = {
   recommendations: Recommendation[];
   /** Automation assessments of work steps. null: made before assessments existed. */
   assessments: StepAssessment[] | null;
+  /** Briefs written for steps of this analysis (at most one per step). */
+  briefs: AutomationBrief[];
   createdAt: string;
   appliedAt: string | null;
 };
@@ -197,6 +217,10 @@ export type AnalysisResponse = { analysis: Analysis };
 export type CreditsResponse = { balance: number; initial: number };
 export type ApplyAnalysisResponse = { analysis: Analysis; graph: WorkflowGraph; revision: number; updatedAt: string };
 export const ANALYSIS_ANSWER_MAX = 500;
+
+export type AssistStartRequest = { stepId: string; mode: AssistMode; baseRevision: number };
+export type AssistAnswerRequest = { messageId: string; baseRevision: number } & ({ answer: string } | { skip: true });
+export type AssistResponse = { messages: ChatMessage[]; analysis: Analysis };
 
 export type DevOutboxMessage = {
   id: string;

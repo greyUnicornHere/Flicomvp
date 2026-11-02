@@ -342,3 +342,23 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - **Top opportunities** (`topOpportunities`, shared): up to 3 automation candidates or human-assisted steps that don't need reassessment; candidates before human-assisted, confirmed before provisional, steps with described business value first, then workflow order. Human-led and needs-more-information steps are never listed. When there are none, the panel says so and points to what to find out.
 - **Compact card:** step name with Provisional / Needs reassessment chips; the verdict sentence; Automate / Keep human / Next step lines; "Why" (folded): evidence, other points to verify, reasoning by area, business value. Clicking the card (or a top opportunity) selects the step and highlights it in the diagram (or in the Removed list).
 - The four count boxes became one line ("1 automation candidate · 1 human-assisted · …").
+
+## Clarify and briefs (owner request, 2026-11-02)
+
+The owner asked for a way to clarify each assessment and then, based on its classification, guidance on how to automate the task through a chat interview. Suggested and chosen: a focused **Clarify** interview plus a **class-specific written brief** (rather than an open-ended chat), both in the **Ask Flico** window, built now (before Milestone 5).
+
+### Clarify
+- Card button **Clarify** (every class). Flico asks one question at a time (≤ 25 words, one question mark; the server rejects multi-question output and repeats, with the usual single correction retry), starting with the card's open questions and points to verify. **Skip for now** on the open question; **Stop** in the banner. At most 5 questions per run (`CLARIFY_MAX_QUESTIONS`).
+- An answer updates that step's assessment only (validated and trimmed like analysis output; the person's statement becomes "You said" evidence; the class changes only when justified) and comes with a one- or two-sentence reply. Skipping never adds certainty: the step stays Provisional (or More information needed) and the question stays open on the card.
+- Supersedes the withdrawn 4.1 "Refine assessment".
+
+### Briefs
+- By class (`BRIEF_KIND`): full → **Automation brief**; assisted → **Assist brief**; human → **Support ideas**; unknown → none until clarified (the server refuses with "Use Clarify first").
+- A short interview (≤ 6 questions, `BRIEF_MAX_QUESTIONS`, Skip allowed) about what the brief needs and the workflow doesn't say, then Flico writes the brief: a one-sentence summary and exactly the fixed sections for its kind (`BRIEF_SECTIONS`), 1–4 short items each. Unconfirmed points go under "Assumptions to confirm"; possible approaches are general kinds (a feature of a tool the person named, an integration platform, a script or RPA bot, AI document extraction) and never claim a product can do something; no invented figures (`unsupportedFigures`).
+- One brief per step per analysis (`automation_briefs`, migration 6), bound to the step fingerprint and the classification. If either changes, the brief shows "out of date" and can be updated. Viewer: Modal with the sections, **Copy as text**, **Update brief**, and "A plan to discuss… Flico doesn't build, connect or test automations".
+
+### Shared rules
+- Interviews run in Ask Flico with a banner ("Clarifying “X”" / "Planning “X”" and Stop); the composer answers the open question. Messages carry `assist` metadata (`workflow_chat_messages.assist_json`) so they survive refresh. Everything earlier asked about the step (both interviews) is sent back, so nothing is asked twice.
+- Same safety as before: owner only; latest analysis only; the saved revision; a step that changed since the analysis (or while Flico was answering) is refused and nothing is stored; AI failure stores nothing.
+- No analysis credit; each question, update and brief counts toward the daily Ask Flico limit and rate limit.
+- Ask Flico history sent to the model merges consecutive turns from the same side and starts with the person (interviews produce several assistant messages in a row).

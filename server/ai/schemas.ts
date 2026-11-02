@@ -139,7 +139,7 @@ export const CATEGORIES = ['quick_win', 'strategic', 'complex'] as const;
 export const EVIDENCE = ['supported', 'assumption', 'verify'] as const;
 
 /** One automation assessment of a work step (Milestone 4.1). */
-const assessmentJsonSchema = object({
+export const assessmentJsonSchema = object({
   step: str('The step ref (e.g. "s3"). Only work steps: never Start, Finish or waits.'),
   classification: { type: 'string', enum: [...AUTOMATION_CLASSES], description: 'full = full automation candidate; assisted = human-assisted automation; human = keep human-led; unknown = more information needed.' },
   provisional: { type: 'boolean', description: 'True when the evidence supports a tentative class but prerequisites are still unverified.' },
@@ -191,7 +191,7 @@ export const analysisJsonSchema = object({
   automation: { type: 'array', description: 'One automation assessment per meaningful work step.', items: assessmentJsonSchema },
 });
 
-const assessmentOutput = z.object({
+export const assessmentOutput = z.object({
   step: shortText(40),
   classification: z.enum(AUTOMATION_CLASSES),
   provisional: z.boolean(),
@@ -249,6 +249,31 @@ export const questionsJsonSchema = object({
   },
 });
 export const questionsOutput = z.object({ questions: z.array(z.object({ question: shortText(300), hint: shortText(200) })).max(6) });
+
+// ---------- interviews about one step (Clarify, briefs) ----------
+
+export const assistQuestionJsonSchema = object({
+  done: { type: 'boolean', description: 'True when nothing that changes the outcome is left to ask.' },
+  question: str('ONE short question (max 25 words, one question mark), or "" when done.'),
+});
+export const assistQuestionOutput = z.object({ done: z.boolean(), question: shortText(400) });
+
+export const clarifyUpdateJsonSchema = object({
+  reply: str('One or two short sentences: what the answer changed (or did not) and why.'),
+  assessment: assessmentJsonSchema,
+  next_question: str('The next single question if a decision-critical unknown remains, otherwise "".'),
+});
+export const clarifyUpdateOutput = z.object({ reply: shortText(800), assessment: assessmentOutput, next_question: shortText(400) });
+
+export const briefJsonSchema = object({
+  summary: str('One sentence summing up the brief.'),
+  sections: {
+    type: 'array',
+    description: 'Exactly the headings you were given, in that order.',
+    items: object({ heading: str('The section heading, exactly as given.'), items: { type: 'array', items: { type: 'string' }, description: '1 to 4 short phrases (max 20 words each).' } }),
+  },
+});
+export const briefOutput = z.object({ summary: shortText(600), sections: z.array(z.object({ heading: shortText(120), items: z.array(shortText(600)).max(10) })).max(16) });
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; problems: string[] };
 

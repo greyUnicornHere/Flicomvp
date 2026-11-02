@@ -2,7 +2,7 @@
 // database. Everything it returns is untrusted and is parsed and validated by the caller.
 import type { AiSource } from '../../shared/api.js';
 
-export type AiTask = 'draft' | 'quick_add' | 'chat' | 'analysis' | 'questions';
+export type AiTask = 'draft' | 'quick_add' | 'chat' | 'analysis' | 'questions' | 'assist';
 
 export type AiMessage = { role: 'user' | 'assistant'; content: string };
 

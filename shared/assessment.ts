@@ -127,3 +127,38 @@ export function topOpportunities<T extends Pick<StepAssessment, 'classification'
     .slice(0, limit)
     .map(({ a }) => a);
 }
+
+// ---------- clarifying an assessment and planning an automation (Ask Flico interviews) ----------
+
+/** The brief a step can get, by its classification: none until "More information needed" is resolved. */
+export type BriefKind = 'automation' | 'assist' | 'support';
+export const BRIEF_KIND: Record<AutomationClass, BriefKind | null> = { full: 'automation', assisted: 'assist', human: 'support', unknown: null };
+export const BRIEF_TITLE: Record<BriefKind, string> = { automation: 'Automation brief', assist: 'Assist brief', support: 'Support ideas' };
+/** Every brief of a kind has exactly these sections, in this order. */
+export const BRIEF_SECTIONS: Record<BriefKind, readonly string[]> = {
+  automation: ['Goal', 'Trigger and inputs', 'Steps to automate', 'Systems and access needed', 'Exceptions and escalation', 'How to test it', 'Owner', 'Risks', 'Possible approaches', 'Assumptions to confirm'],
+  assist: ['Goal', 'What gets automated', 'Where a person checks or decides', 'Handover', 'Systems and access needed', 'How to test it', 'Risks', 'Assumptions to confirm'],
+  support: ['Goal', 'Ideas', 'Assumptions to confirm'],
+};
+/** At most this many questions in one Clarify run and in one brief interview. */
+export const CLARIFY_MAX_QUESTIONS = 5;
+export const BRIEF_MAX_QUESTIONS = 6;
+
+export type AutomationBrief = {
+  analysisId: string;
+  stepId: string;
+  kind: BriefKind;
+  /** The classification the brief was made for; a later change makes the brief out of date. */
+  classification: AutomationClass;
+  summary: string;
+  sections: { heading: string; items: string[] }[];
+  /** Fingerprint of the step and what feeds it when written (see `assessmentBasis`). */
+  basis: string;
+  revision: number;
+  createdAt: string;
+};
+
+/** A brief no longer matches its step: the step changed, or its classification did. */
+export function briefOutdated(brief: Pick<AutomationBrief, 'basis' | 'classification' | 'stepId'>, assessment: Pick<StepAssessment, 'classification'> | undefined, graph: WorkflowGraph): boolean {
+  return !assessment || assessment.classification !== brief.classification || assessmentBasis(graph, brief.stepId) !== brief.basis;
+}

@@ -7,6 +7,9 @@ import type {
   AnalysisRun,
   AnalysisRunResponse,
   ApplyAnalysisResponse,
+  AssistAnswerRequest,
+  AssistResponse,
+  AssistStartRequest,
   CreditsResponse,
   ReviewStatus,
   StartAnalysisRequest,
@@ -42,3 +45,9 @@ export async function saveReview(analysisId: string, statuses: Record<string, Re
 }
 
 export const applyAnalysis = (analysisId: string) => api<ApplyAnalysisResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/apply`, { method: 'POST' });
+
+export const assistStart = (analysisId: string, request: AssistStartRequest) =>
+  api<AssistResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/assist`, { method: 'POST', body: request });
+
+export const assistAnswer = (analysisId: string, request: AssistAnswerRequest) =>
+  api<AssistResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/assist/answer`, { method: 'POST', body: request });

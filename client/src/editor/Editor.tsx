@@ -10,7 +10,7 @@ import {
 import '@xyflow/react/dist/base.css';
 import { useLocation, useNavigate } from 'react-router';
 import { quickRepeatBlocked } from '../../../shared/analysis';
-import type { AiSource, Analysis, AnalysisMode, ApplyAnalysisResponse, Assumption, ChatMessage, ChatMode, StartAnalysisRequest, WorkflowDetail } from '../../../shared/api';
+import type { AiSource, Analysis, AnalysisMode, ApplyAnalysisResponse, AssistMode, AssistResponse, Assumption, ChatMessage, ChatMode, StartAnalysisRequest, WorkflowDetail } from '../../../shared/api';
 import { applyOperations, diffGraphs, type GraphChanges } from '../../../shared/aiOps';
 import type { WorkflowGraph } from '../../../shared/graph';
 import { preAnalysisCheck, validateWorkflow, type Issue } from '../../../shared/validation';
@@ -22,7 +22,7 @@ import { applyProposal, cancelProposal, createAiDraft, fetchAiStatus, quickAddSt
 import { AskFlico } from './AskFlico';
 import { AssumptionsPanel, DraftNotice, PreviewBar } from './AiPanels';
 import { useChat, type ChatRequest } from './useChat';
-import { cancelRun, fetchAnalyses, fetchCredits, fetchQuestions, fetchRun, startAnalysis } from '../lib/analysis';
+import { assistAnswer, assistStart, cancelRun, fetchAnalyses, fetchCredits, fetchQuestions, fetchRun, startAnalysis } from '../lib/analysis';
 import { AnalysisView } from './analysis/AnalysisView';
 import { AnalysisProgress, GuidedQuestions, type ProgressState } from './analysis/AnalysisDialogs';
 import { CanvasControls } from './CanvasControls';
@@ -584,6 +584,50 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     if (reply?.proposal?.status === 'pending') await startPreview(reply);
   };
 
+  // ---------- interviews about one step: Clarify and briefs (in Ask Flico) ----------
+
+  const [interview, setInterview] = useState<{ stepId: string; stepLabel: string; mode: AssistMode } | null>(null);
+  const [interviewBusy, setInterviewBusy] = useState(false);
+  const [interviewError, setInterviewError] = useState<string | null>(null);
+
+  const runInterview = async (action: (baseRevision: number) => Promise<AssistResponse>) => {
+    setInterviewBusy(true);
+    setInterviewError(null);
+    try {
+      const result = await action(await save.flushNow());
+      setAnalyses((list) => list.map((a) => (a.id === result.analysis.id ? result.analysis : a)));
+      await chat.reload();
+      const last = result.messages.at(-1)?.assist;
+      // Finished (nothing left to ask, or the brief is written): the banner goes away.
+      if (last && (last.kind === 'done' || last.kind === 'brief')) setInterview(null);
+    } catch (error) {
+      setInterviewError((error as Error).message);
+    } finally {
+      setInterviewBusy(false);
+    }
+  };
+
+  const startInterview = (stepId: string, mode: AssistMode) => {
+    const current = currentAnalysisOf(analyses);
+    if (!current) return;
+    const stepLabel = findNode(graph, stepId)?.label ?? current.snapshot.nodes.find((n) => n.id === stepId)?.label ?? 'this step';
+    setInterview({ stepId, stepLabel, mode });
+    openChat(null);
+    void runInterview((baseRevision) => assistStart(current.id, { stepId, mode, baseRevision }));
+  };
+
+  const openInterviewQuestion = interview
+    ? ([...(chat.messages ?? [])].reverse().find((m) => m.assist?.kind === 'question' && m.assist.status === 'pending' && m.assist.stepId === interview.stepId && m.assist.mode === interview.mode) ?? null)
+    : null;
+  const answerInterview = (reply: { answer: string } | { skip: true }) => {
+    const current = currentAnalysisOf(analyses);
+    const question = openInterviewQuestion;
+    if (!current || !question) return;
+    void runInterview((baseRevision) => assistAnswer(current.id, { messageId: question.id, baseRevision, ...reply }));
+  };
+  // Why Clarify and briefs can't be used right now (null: they can).
+  const interviewBlocked = !ai?.available ? 'AI is not set up' : interviewBusy ? 'Flico is working on a question' : null;
+
   const openChat = (context: { stepId: string; stepLabel: string } | null = null) => {
     setChatContext(context);
     setChatOpen(true);
@@ -746,6 +790,9 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               onAnalysisChange={(a) => setAnalyses((list) => list.map((x) => (x.id === a.id ? a : x)))}
               onApplied={onAnalysisApplied}
               onBackToEditor={() => setView('editor')}
+              interviewBlocked={interviewBlocked}
+              onClarify={(stepId) => startInterview(stepId, 'clarify')}
+              onBrief={(stepId) => startInterview(stepId, 'brief')}
             />
           </div>
         )}
@@ -954,6 +1001,22 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           onApply={() => void applyPreview()}
           onCancelProposal={(message) => void cancelSuggestion(message)}
           onClose={closeChat}
+          interview={
+            interview && {
+              stepLabel: interview.stepLabel,
+              mode: interview.mode,
+              question: openInterviewQuestion,
+              busy: interviewBusy,
+              error: interviewError,
+              onAnswer: (answer: string) => answerInterview({ answer }),
+              onSkip: () => answerInterview({ skip: true }),
+              onDismissError: () => setInterviewError(null),
+              onStop: () => {
+                setInterview(null);
+                setInterviewError(null);
+              },
+            }
+          }
         />
       )}
 

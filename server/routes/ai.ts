@@ -57,11 +57,21 @@ const HISTORY_TURNS = 20;
 
 /** The conversation as the model sees it: the latest turns, with what happened to each proposal. */
 function historyTurns(messages: ChatMessage[]): HistoryTurn[] {
-  return messages.slice(-HISTORY_TURNS).map((m) => {
+  const turns = messages.slice(-HISTORY_TURNS).map((m): HistoryTurn => {
     if (m.role === 'user' || !m.proposal) return { role: m.role, content: m.content };
     const outcome = { pending: 'not yet applied', applied: 'applied by the person', cancelled: 'cancelled by the person', expired: 'not applied' }[m.proposal.status];
     return { role: m.role, content: `${m.content}\n\n[Proposed change: ${m.proposal.summary} (${outcome})]` };
   });
+  // Interviews add several messages in a row from the same side; the model needs strict alternation
+  // starting with the person, so consecutive turns are merged and a leading assistant turn is dropped.
+  const merged: HistoryTurn[] = [];
+  for (const t of turns) {
+    const last = merged.at(-1);
+    if (last && last.role === t.role) last.content = `${last.content}\n\n${t.content}`;
+    else merged.push({ ...t });
+  }
+  while (merged[0]?.role === 'assistant') merged.shift();
+  return merged;
 }
 
 /** The latest analysis as Ask Flico sees it: summary and recommendation titles with their review state. */

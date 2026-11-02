@@ -10,7 +10,8 @@ import {
   type CreditsResponse,
   type ReviewStatus,
 } from '../../shared/api.js';
-import { assessmentBasis } from '../../shared/assessment.js';
+import { assessmentBasis, BRIEF_KIND, BRIEF_MAX_QUESTIONS, BRIEF_TITLE, CLARIFY_MAX_QUESTIONS, needsReassessment, type StepAssessment } from '../../shared/assessment.js';
+import type { AssistInfo, AssistMode, AssistResponse, ChatMessage } from '../../shared/api.js';
 import { diffGraphs } from '../../shared/aiOps.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
 import { NO_CHANGES_MESSAGE, planApply, quickRepeatBlocked } from '../../shared/analysis.js';
@@ -19,8 +20,8 @@ import { preAnalysisCheck } from '../../shared/validation.js';
 import { transaction } from '../db/database.js';
 import { requireAuth, sendError, type AppContext } from '../http.js';
 import { AI_ERROR_MESSAGES, AiError, type AiProvider } from '../ai/provider.js';
-import { AiOutputError, analyzeWorkflow, suggestQuestions } from '../ai/service.js';
-import { recordUsage, usedToday } from '../ai/store.js';
+import { AiOutputError, analyzeWorkflow, assistQuestion, clarifyUpdate, suggestQuestions, writeBrief, type InterviewTurn } from '../ai/service.js';
+import { appendExchange, getMessage, listMessages, recordUsage, setAssistStatus, usedToday } from '../ai/store.js';
 import { validateGraph } from '../workflows/graph.js';
 import { getWorkflow, saveGraph } from '../workflows/service.js';
 import {
@@ -34,6 +35,8 @@ import {
   getAnalysis,
   getRun,
   listAnalyses,
+  saveAssessments,
+  saveBrief,
   markApplied,
   runningRun,
   saveAnalysis,
@@ -235,6 +238,216 @@ export const analysisRoutes =
       if (!getWorkflow(db, userId, request.params.id)) return sendError(reply, 404, 'not_found', NOT_FOUND);
       const body: AnalysesResponse = { analyses: listAnalyses(db, userId, request.params.id) };
       return body;
+    });
+
+    // ---------- interviews about one step: Clarify and briefs (Ask Flico, one question at a time, no credit) ----------
+
+    const assistStartBody = z.strictObject({ stepId: z.string().min(1).max(64), mode: z.enum(['clarify', 'brief']), baseRevision: z.number().int().positive() });
+    const assistAnswerBody = z.union([
+      z.strictObject({ messageId: z.string().min(1).max(64), baseRevision: z.number().int().positive(), answer: z.string().trim().min(1, 'Please type an answer, or skip for now.').max(ANALYSIS_ANSWER_MAX) }),
+      z.strictObject({ messageId: z.string().min(1).max(64), baseRevision: z.number().int().positive(), skip: z.literal(true) }),
+    ]);
+    type Fail = [number, 'not_found' | 'conflict' | 'bad_request' | 'limit_reached', string];
+    const LIMIT_MESSAGE = "You've reached today's Ask Flico limit. The limit resets at midnight UTC.";
+
+    /** Shared checks: owned current analysis with assessments, saved revision, a step that hasn't changed. */
+    const assistContext = (userId: string, analysisId: string, stepId: string, baseRevision: number) => {
+      const analysis = getAnalysis(db, userId, analysisId);
+      if (!analysis) return [404, 'not_found', 'Analysis not found.'] as Fail;
+      const workflow = getWorkflow(db, userId, analysis.workflowId);
+      if (!workflow) return [404, 'not_found', NOT_FOUND] as Fail;
+      if (currentAnalysis(db, userId, workflow.id)?.id !== analysis.id) return [409, 'conflict', 'Only the latest analysis can be clarified or planned.'] as Fail;
+      if (!analysis.assessments) return [409, 'conflict', 'This analysis was made before automation assessments were added. Run a new analysis to get them.'] as Fail;
+      const assessment = analysis.assessments.find((a) => a.stepId === stepId);
+      if (!assessment) return [404, 'not_found', 'This step has no automation assessment.'] as Fail;
+      if (workflow.revision !== baseRevision) return [409, 'conflict', "Your latest changes haven't finished saving. Please try again in a moment."] as Fail;
+      if (needsReassessment(workflow.graph, assessment)) return [409, 'conflict', 'This step (or what feeds it) changed since the analysis. Run a new analysis to reassess it first.'] as Fail;
+      return { analysis, workflow, assessment };
+    };
+
+    const stepMessages = (userId: string, workflowId: string, analysisId: string, stepId: string) =>
+      listMessages(db, userId, workflowId).filter((m) => m.assist?.analysisId === analysisId && m.assist.stepId === stepId);
+    /** Every question about the step so far (both interviews), with its answer, or null when skipped. */
+    const turnsOf = (messages: ChatMessage[]): InterviewTurn[] =>
+      messages
+        .filter((m) => m.assist?.kind === 'question' && m.assist.status !== 'pending')
+        .map((q) => {
+          const reply = messages.find((m) => m.assist?.questionId === q.id);
+          return { question: q.content, answer: reply?.assist?.kind === 'answer' ? reply.content : null };
+        });
+    /** Questions asked in the current run of this interview (since it last finished). */
+    const askedThisRun = (messages: ChatMessage[], mode: AssistMode) => {
+      const own = messages.filter((m) => m.assist?.mode === mode);
+      const lastEnd = own.map((m) => m.assist!.kind).lastIndexOf('done');
+      const lastBrief = own.map((m) => m.assist!.kind).lastIndexOf('brief');
+      return own.slice(Math.max(lastEnd, lastBrief) + 1).filter((m) => m.assist!.kind === 'question').length;
+    };
+    const label = (graph: WorkflowGraph, stepId: string) => graph.nodes.find((n) => n.id === stepId)?.label ?? 'this step';
+    const chatAvailable = (userId: string) => usedToday(db, userId, 'chat', ctx.now()) < config.AI_DAILY_CHAT;
+    const timeout = () => Math.min(90, config.AI_TIMEOUT_SECONDS) * 1000;
+
+    /** Write and save the step's brief, and the message that announces it. */
+    const finishBrief = async (userId: string, ai: AiProvider, found: Exclude<ReturnType<typeof assistContext>, Fail>, meta: Omit<AssistInfo, 'kind'>) => {
+      const { analysis, workflow, assessment } = found;
+      const kind = BRIEF_KIND[assessment.classification]!;
+      const written = await writeBrief(ai, { graph: workflow.graph, assessment, turns: turnsOf(stepMessages(userId, workflow.id, analysis.id, assessment.stepId)), kind }, timeout());
+      return transaction(db, () => {
+        const latest = getWorkflow(db, userId, workflow.id);
+        if (!latest || needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was writing, so no brief was saved. Run a new analysis to reassess it.'] as Fail;
+        saveBrief(db, userId, { analysisId: analysis.id, stepId: assessment.stepId, kind, classification: assessment.classification, summary: written.summary, sections: written.sections, basis: assessmentBasis(latest.graph, assessment.stepId)!, revision: latest.revision }, ctx.now());
+        recordUsage(db, userId, 'chat', ai.source, written.usage, ctx.now());
+        return appendExchange(db, userId, workflow.id, [{ role: 'assistant', content: `Your ${BRIEF_TITLE[kind].toLowerCase()} for “${meta.stepLabel}” is ready. Open it from the step's card in the Automation tab.`, source: ai.source, assist: { ...meta, kind: 'brief' } }], ctx.now());
+      });
+    };
+
+    app.post<IdParams>('/analyses/:id/assist', rateLimit, async (request, reply) => {
+      const parsed = assistStartBody.safeParse(request.body);
+      if (!parsed.success) return sendError(reply, 400, 'bad_request', 'Invalid request.');
+      const userId = request.user!.id;
+      const { stepId, mode } = parsed.data;
+      const found = assistContext(userId, request.params.id, stepId, parsed.data.baseRevision);
+      if (Array.isArray(found)) return sendError(reply, ...found);
+      const { analysis, workflow, assessment } = found;
+      if (mode === 'brief' && !BRIEF_KIND[assessment.classification]) {
+        return sendError(reply, 409, 'conflict', 'This step needs more information first. Use Clarify, then create its brief.');
+      }
+      const messages = stepMessages(userId, workflow.id, analysis.id, stepId);
+      // An open question is simply shown again: one question at a time.
+      const open = messages.find((m) => m.assist?.kind === 'question' && m.assist.status === 'pending');
+      if (open) return { messages: [open], analysis } satisfies AssistResponse;
+      if (!provider) return notConfigured(reply);
+      if (!chatAvailable(userId)) return sendError(reply, 429, 'limit_reached', LIMIT_MESSAGE);
+      const meta = { analysisId: analysis.id, stepId, stepLabel: label(workflow.graph, stepId), mode, revision: workflow.revision };
+      try {
+        const next = await assistQuestion(provider, { graph: workflow.graph, assessment, turns: turnsOf(messages), mode, kind: BRIEF_KIND[assessment.classification] ?? undefined }, timeout());
+        if (next.done && mode === 'brief') {
+          // Nothing left to ask: write the brief straight away.
+          recordUsage(db, userId, 'chat', provider.source, next.usage, ctx.now());
+          const written = await finishBrief(userId, provider, found, meta);
+          if (typeof written[0] === 'number') return sendError(reply, ...(written as unknown as Fail));
+          return { messages: written as ChatMessage[], analysis: getAnalysis(db, userId, analysis.id)! } satisfies AssistResponse;
+        }
+        const added = transaction(db, () => {
+          recordUsage(db, userId, 'chat', provider.source, next.usage, ctx.now());
+          return appendExchange(
+            db,
+            userId,
+            workflow.id,
+            [
+              next.done
+                ? { role: 'assistant', content: `Nothing decision-critical is left to ask about “${meta.stepLabel}”.`, source: provider.source, assist: { ...meta, kind: 'done' } }
+                : { role: 'assistant', content: next.question, source: provider.source, assist: { ...meta, kind: 'question', status: 'pending' } },
+            ],
+            ctx.now(),
+          );
+        });
+        return { messages: added, analysis } satisfies AssistResponse;
+      } catch (error) {
+        return fail(request, reply, error);
+      }
+    });
+
+    app.post<IdParams>('/analyses/:id/assist/answer', rateLimit, async (request, reply) => {
+      const parsed = assistAnswerBody.safeParse(request.body);
+      if (!parsed.success) return sendError(reply, 400, 'bad_request', parsed.error.issues[0]?.message ?? 'Invalid answer.');
+      const userId = request.user!.id;
+      const owned = getAnalysis(db, userId, request.params.id);
+      if (!owned) return sendError(reply, 404, 'not_found', 'Analysis not found.');
+      const question = getMessage(db, userId, owned.workflowId, parsed.data.messageId);
+      if (!question?.assist || question.assist.kind !== 'question' || question.assist.analysisId !== owned.id) return sendError(reply, 404, 'not_found', 'That question no longer exists.');
+      if (question.assist.status !== 'pending') return sendError(reply, 409, 'conflict', 'That question was already answered or skipped.');
+      const { stepId, mode } = question.assist;
+      const found = assistContext(userId, owned.id, stepId, parsed.data.baseRevision);
+      if (Array.isArray(found)) return sendError(reply, ...found);
+      const { analysis, workflow, assessment } = found;
+      if (!provider) return notConfigured(reply);
+      if (!chatAvailable(userId)) return sendError(reply, 429, 'limit_reached', LIMIT_MESSAGE);
+      const skip = 'skip' in parsed.data;
+      const answer = 'answer' in parsed.data ? parsed.data.answer : '';
+      const messages = stepMessages(userId, workflow.id, analysis.id, stepId);
+      const earlier = turnsOf(messages);
+      const meta = { analysisId: analysis.id, stepId, stepLabel: label(workflow.graph, stepId), mode, revision: workflow.revision };
+      const runCount = askedThisRun(messages, mode);
+      const cap = mode === 'clarify' ? CLARIFY_MAX_QUESTIONS : BRIEF_MAX_QUESTIONS;
+      const now = () => new Date(ctx.now()).toISOString();
+      try {
+        // The model is asked first; nothing is stored unless the whole step succeeds.
+        let updated: StepAssessment | null = null;
+        let replyText = '';
+        let nextQuestion = '';
+        let usage = { inputTokens: 0, outputTokens: 0 };
+        const turnsAfter = [...earlier, { question: question.content, answer: skip ? null : answer }];
+        if (mode === 'clarify' && !skip) {
+          const result = await clarifyUpdate(provider, { graph: workflow.graph, assessment, turns: earlier, latest: { question: question.content, answer } }, timeout());
+          usage = result.usage;
+          replyText = result.reply;
+          nextQuestion = runCount < cap ? result.nextQuestion : '';
+          updated = { ...result.updated, basis: assessmentBasis(workflow.graph, stepId)!, revision: workflow.revision, updatedAt: now() };
+        } else {
+          if (mode === 'clarify') {
+            // Skipping never adds certainty: the step stays provisional (or needs information) and the gap is recorded.
+            updated = {
+              ...assessment,
+              provisional: assessment.classification === 'unknown' ? assessment.provisional : true,
+              questions: assessment.questions.includes(question.content) ? assessment.questions : [question.content, ...assessment.questions].slice(0, 2),
+              updatedAt: now(),
+            };
+          }
+          if (runCount < cap) {
+            const next = await assistQuestion(
+              provider,
+              { graph: workflow.graph, assessment: updated ?? assessment, turns: turnsAfter, mode, kind: BRIEF_KIND[assessment.classification] ?? undefined },
+              timeout(),
+            );
+            usage = next.usage;
+            nextQuestion = next.done ? '' : next.question;
+          }
+        }
+
+        const outcome = transaction(db, () => {
+          // The workflow may have changed while Flico was thinking: never apply a stale update.
+          const latest = getWorkflow(db, userId, workflow.id);
+          const current = getAnalysis(db, userId, analysis.id);
+          if (!latest || !current?.assessments || getMessage(db, userId, workflow.id, question.id)?.assist?.status !== 'pending') {
+            return [409, 'conflict', 'That question was already answered or skipped.'] as Fail;
+          }
+          if (needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was answering, so nothing was updated. Run a new analysis to reassess it.'] as Fail;
+          if (updated) saveAssessments(db, userId, analysis.id, current.assessments.map((a) => (a.stepId === stepId ? updated! : a)));
+          setAssistStatus(db, userId, question.id, skip ? 'skipped' : 'answered');
+          recordUsage(db, userId, 'chat', provider.source, usage, ctx.now());
+          const changed = updated && updated.classification !== assessment.classification;
+          return appendExchange(
+            db,
+            userId,
+            workflow.id,
+            [
+              skip ? { role: 'user', content: 'Skipped for now', assist: { ...meta, kind: 'skip', questionId: question.id } } : { role: 'user', content: answer, assist: { ...meta, kind: 'answer', questionId: question.id } },
+              ...(mode === 'clarify' && !skip
+                ? [{ role: 'assistant' as const, content: replyText + (changed ? ' The classification changed, so any earlier brief for this step is out of date.' : ''), source: provider.source, assist: { ...meta, kind: 'update' as const } }]
+                : []),
+              ...(nextQuestion
+                ? [{ role: 'assistant' as const, content: nextQuestion, source: provider.source, assist: { ...meta, kind: 'question' as const, status: 'pending' as const } }]
+                : mode === 'clarify'
+                  ? [{ role: 'assistant' as const, content: `That's all I need for “${meta.stepLabel}” for now.`, source: provider.source, assist: { ...meta, kind: 'done' as const } }]
+                  : []),
+            ],
+            ctx.now(),
+          );
+        });
+        if (Array.isArray(outcome) && typeof outcome[0] === 'number') return sendError(reply, ...(outcome as unknown as Fail));
+        let added = outcome as ChatMessage[];
+        // The brief interview is over: write the brief.
+        if (mode === 'brief' && !nextQuestion) {
+          const refreshed = assistContext(userId, analysis.id, stepId, workflow.revision);
+          if (Array.isArray(refreshed)) return sendError(reply, ...refreshed);
+          const written = await finishBrief(userId, provider, refreshed, meta);
+          if (Array.isArray(written) && typeof written[0] === 'number') return sendError(reply, ...(written as unknown as Fail));
+          added = [...added, ...(written as ChatMessage[])];
+        }
+        return { messages: [getMessage(db, userId, workflow.id, question.id)!, ...added], analysis: getAnalysis(db, userId, analysis.id)! } satisfies AssistResponse;
+      } catch (error) {
+        return fail(request, reply, error);
+      }
     });
 
     app.patch<IdParams>('/analyses/:id/review', async (request, reply) => {

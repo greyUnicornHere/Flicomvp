@@ -51,6 +51,8 @@ export class FixtureProvider implements AiProvider {
         return respond(JSON.stringify(questions(input)));
       case 'analysis':
         return respond(JSON.stringify(analysis(input, attempt)));
+      case 'assist':
+        return respond(JSON.stringify(assist(input, request.system)));
     }
   }
 }
@@ -450,4 +452,58 @@ const ASSESSABLE = new Set(['action', 'approval', 'decision', 'exception']);
 
 function automation(view: View, answers: Turn[]) {
   return view.steps.filter((s) => ASSESSABLE.has(s.type)).map((s) => assess(view, s.ref, answers));
+}
+
+// ---------- interviews about one step: Clarify and briefs ----------
+
+const CLASS_NAME: Record<string, string> = { full: 'Full automation candidate', assisted: 'Human-assisted automation', human: 'Keep human-led', unknown: 'More information needed' };
+
+function assist(input: string, system: string) {
+  const view = decode<View>(tagged(input, 'workflow_data'), { steps: [], connections: [] });
+  const interview = decode<{ question: string; answer: string }[]>(tagged(input, 'interview'), []);
+  const ref = /The selected step is (s\d+)\./.exec(input)?.[1] ?? '';
+  const label = view.steps.find((s) => s.ref === ref)?.label ?? 'this step';
+  const turns = (extra: { question: string; answer: string }[] = []): Turn[] => [...interview, ...extra].map((t) => ({ step: ref, question: t.question, answer: t.answer === '(skipped)' ? '(skipped for now)' : t.answer }));
+  const asked = (extra: string[] = []) => [...interview.map((t) => t.question), ...extra];
+  const clarifyQuestions = [`Where does the information for “${label}” come from?`, `Which rule or criteria decide the result of “${label}”?`, `Who checks the result of “${label}”?`];
+  const nextOf = (candidates: string[], extra: string[] = []) => candidates.find((q) => !asked(extra).includes(q)) ?? '';
+
+  if (input.includes('Task: update the assessment')) {
+    const latest = decode<{ question: string; answer: string }[]>(tagged(input, 'answers'), [])[0]!;
+    const updated = assess(view, ref, turns([latest]));
+    return {
+      reply: `Thanks. With that, “${label}” is ${CLASS_NAME[updated.classification]}${updated.provisional ? ' (provisional)' : ''}.`,
+      assessment: updated,
+      next_question: updated.classification === 'unknown' || updated.provisional ? nextOf(clarifyQuestions, [latest.question]) : '',
+    };
+  }
+  if (input.includes('Task: write the brief.')) return writeFixtureBrief(system, label, interview);
+
+  const kind = /automation brief/.test(system) ? 'automation' : /assist brief/.test(system) ? 'assist' : /support ideas/.test(system) ? 'support' : null;
+  const candidates = !kind
+    ? clarifyQuestions
+    : {
+        automation: [`What starts “${label}”, and how often does it happen?`, 'Which systems hold the inputs, and who can grant access?', "What should happen when something doesn't match?", 'Who would own this automation once it runs?'],
+        assist: [`What exactly does the person check or decide in “${label}”?`, 'What should be prepared for them before they start?', 'Which systems are involved?'],
+        support: [`Where do mistakes or delays happen in “${label}”?`, 'What would help the person doing it most?'],
+      }[kind];
+  const question = nextOf(candidates);
+  return { done: !question, question };
+}
+
+function writeFixtureBrief(system: string, label: string, interview: { question: string; answer: string }[]) {
+  const headings = [...system.matchAll(/"([^"]+)"/g)].map((m) => m[1]!).filter((h) => h[0] === h[0]!.toUpperCase());
+  const order = headings.slice(0, headings.indexOf('Assumptions to confirm') + 1);
+  const answered = interview.filter((t) => t.answer !== '(skipped)');
+  const skipped = interview.filter((t) => t.answer === '(skipped)');
+  let next = 0;
+  const said = () => (answered[next] ? `You said: ${quoteOf(answered[next++]!.answer)}` : 'Not discussed yet.');
+  const items = (heading: string): string[] => {
+    if (heading === 'Goal') return [`Make “${label}” quicker and more consistent.`];
+    if (heading === 'Possible approaches') return ['An integration platform linking the systems you named, if they offer access.', 'A script or RPA bot for the repetitive part, if no integration exists.'];
+    if (heading === 'Assumptions to confirm') return [...skipped.map((t) => `Unanswered: ${t.question}`), 'Nothing has been built or tested yet: confirm access and rules in a test.'];
+    if (heading === 'Ideas') return ['A short checklist for the step.', 'A template for the information it needs.'];
+    return [said()];
+  };
+  return { summary: `How “${label}” could be handled, based on your answers. Test fixture, not a live AI response.`, sections: order.map((heading) => ({ heading, items: items(heading) })) };
 }

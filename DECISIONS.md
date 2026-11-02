@@ -321,3 +321,9 @@ The owner found the card too tall, plain and form-like, showing too many fields 
 - Exceptions: **Guided Analysis** is always allowed (the person's answers add information the workflow doesn't contain), and Quick is allowed when the current analysis has **no automation assessment** (made before it existed), so older analyses can get one.
 - The rule (`quickRepeatBlocked` in `shared/analysis.ts`) is used by both the Analyze menu (Quick disabled, hint "Unchanged since last analysis", plus "View latest analysis") and the server (409 with an explanation, checked before credits and before any model call, so nothing is charged).
 - Menu layout: item labels no longer wrap; a long hint wraps beside them instead.
+
+### Analysis progress on either tab (owner-reported bug, 2026-11-02)
+- Bug: the progress window (stages, Cancel, and the failed/cancelled messages) was drawn inside the Editor tab's area. An analysis started from the Analysis tab, or one still running when the person switched to it, showed no progress at all, so the Analyze menu's "An analysis is running" looked stuck.
+- Fix: the progress window now sits over the content area of whichever tab is open (below the header), so a running, failed or cancelled analysis is always visible and can be cancelled.
+- With live Claude a run can legitimately take a while: each model request has its own time limit (`AI_ANALYSIS_TIMEOUT_SECONDS`, default 180 s) and one transient retry, plus Flico's single correction attempt for invalid output, so a very slow run can take several minutes before it fails without a charge.
+- Analysis tab side panel: the Recommendations / Automation tabs never wrap; the category filter moved to its own row under them.

@@ -365,3 +365,28 @@ test('the review diagram is fitted when the Analysis tab is opened later (it was
   expect(right - left).toBeGreaterThan(area.width * 0.6);
   await page.screenshot({ path: 'docs/evidence/step-card/08-analysis-reopened-1536-test-fixture.png' });
 });
+
+test('an analysis started from the Analysis tab shows its progress there, and can be cancelled', async ({ page }) => {
+  const id = await openWorkflow(page);
+  await quickAnalysis(page);
+  await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
+  // Make the next run slow (the fixture waits ~4 s), then start it from the Analysis tab.
+  const current = await stored(page, id);
+  const slow = { ...current.graph, nodes: current.graph.nodes.map((n) => (n.type === 'finish' ? { ...n, notes: '[fixture:slow]' } : n)) };
+  expect((await page.request.put(`/api/workflows/${id}/graph`, { data: { graph: slow, baseRevision: current.revision } })).status()).toBe(200);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Analysis' }).click();
+  await quickAnalysis(page);
+  const overlay = page.getByRole('dialog', { name: 'Analysing your workflow' });
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toBeInViewport();
+  await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
+  await page.screenshot({ path: 'docs/evidence/automation/07-progress-on-analysis-tab-1536-test-fixture.png' });
+  await overlay.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog', { name: 'Analysis cancelled' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  // Nothing is left "running": the menu offers analysis again.
+  await page.getByRole('button', { name: 'Analyze' }).click();
+  await expect(page.getByRole('menuitem', { name: /Guided Analysis/ })).toBeEnabled();
+  await expect(page.getByRole('menuitem', { name: /Quick Analysis/ })).not.toContainText('An analysis is running');
+});

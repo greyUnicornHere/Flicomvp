@@ -296,7 +296,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                       role="tab"
                       id="recs-heading"
                       aria-selected={sidePanel === 'recs'}
-                      className={`-mb-px min-h-11 border-b-2 px-2.5 text-[15px] ${sidePanel === 'recs' ? 'border-fl-brand font-bold text-fl-text' : 'border-transparent font-medium text-fl-text-secondary hover:text-fl-text'}`}
+                      className={`-mb-px min-h-11 whitespace-nowrap border-b-2 px-2.5 text-[15px] ${sidePanel === 'recs' ? 'border-fl-brand font-bold text-fl-text' : 'border-transparent font-medium text-fl-text-secondary hover:text-fl-text'}`}
                       onClick={() => setPanel('recs')}
                     >
                       Recommendations <span className="font-normal text-fl-text-muted">({inPlay.length})</span>
@@ -307,14 +307,16 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                     role="tab"
                     id="automation-heading"
                     aria-selected={sidePanel === 'automation'}
-                    className={`-mb-px min-h-11 border-b-2 px-2.5 text-[15px] ${sidePanel === 'automation' ? 'border-fl-brand font-bold text-fl-text' : 'border-transparent font-medium text-fl-text-secondary hover:text-fl-text'}`}
+                    className={`-mb-px min-h-11 whitespace-nowrap border-b-2 px-2.5 text-[15px] ${sidePanel === 'automation' ? 'border-fl-brand font-bold text-fl-text' : 'border-transparent font-medium text-fl-text-secondary hover:text-fl-text'}`}
                     onClick={() => setPanel('automation')}
                   >
                     Automation {assessments && <span className="font-normal text-fl-text-muted">({assessments.length})</span>}
                   </button>
                 </div>
-                {sidePanel === 'recs' && (
-                  <label className="pb-2">
+              </div>
+              {sidePanel === 'recs' && (
+                <div className="flex justify-end border-b border-fl-border px-4 py-2">
+                  <label>
                     <span className="fl-sr-only">Filter recommendations</span>
                     <select className="fl-input !min-h-9 !w-auto !py-1 !text-[12px]" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
                       <option value="all">All categories</option>
@@ -323,8 +325,8 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                       <option value="complex">Complex Changes</option>
                     </select>
                   </label>
-                )}
-              </div>
+                </div>
+              )}
               {sidePanel === 'automation' && (
                 <AutomationPanel assessments={assessments} snapshot={snapshot} currentGraph={currentGraph} selectedId={assessId} onSelect={setAssessId} />
               )}

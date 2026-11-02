@@ -430,7 +430,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 |---|---|---|
 | Lint, typecheck, build | `npm run check` | Pass |
 | Unit + API | `npm test` | **287 / 287 pass** (19 new: 6 API, 6 classification fixtures, 5 fingerprint, 2 repeat rule) |
-| Browser E2E (all milestones) | `npm run test:e2e` | **69 / 69 pass** (5 new in `tests/e2e/automation.spec.ts`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **70 / 70 pass** (5 new in `tests/e2e/automation.spec.ts`, 1 new in `analysis.spec.ts`) |
 
 | Check | Result | Evidence |
 |---|---|---|
@@ -445,5 +445,7 @@ Environment: Linux container, Node 22.22, Chromium (Playwright 1.63). **Assessme
 | 1280 px: readable, no horizontal scroll | Pass (fixture) | E2E "1280px…"; `03-automation-tab-1280-test-fixture.png` |
 | Labels on the analysis diagram: only in the Automation view (none with Recommendations, none in the editor); short class text with the full class as accessible name; provisional and needs-reassessment states; a label opens its assessment without selecting a recommendation | Pass (fixture) | E2E "labels on the analysis diagram…" and the reassessment test; `04-labels-on-diagram-1536-test-fixture.png`, `05-labels-zoomed-in-1536-test-fixture.png` |
 | No repeat Quick Analysis of an unchanged workflow: moved blocks still count as unchanged; refused by the server before any model call or charge; Guided allowed; allowed again after a real change or when the latest analysis has no assessment; menu shows the reason and View latest analysis | Pass | `shared/analysis.test.ts` (2 new); API "refuses a repeat Quick Analysis…"; E2E R10 (updated); `06-quick-blocked-unchanged-1536-test-fixture.png` |
+| Owner-reported: "An analysis is running" with no progress visible. An analysis started from the Analysis tab now shows its progress there and can be cancelled; nothing is left running | Fixed, Pass (fixture) | E2E "an analysis started from the Analysis tab shows its progress there…" (fails without the fix: no progress window); `07-progress-on-analysis-tab-1536-test-fixture.png` |
+| Side-panel tabs never wrap; filter on its own row | Pass | Visual check of the 1536 results screen; all analysis E2E |
 | Edge browser | Not tested | Only Chromium is available here |
 | Live Claude assessment | Not tested | No API key in this environment; to be checked by the owner on their PC |

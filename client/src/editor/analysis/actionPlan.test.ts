@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Recommendation } from '../../../../shared/api';
-import { assessmentBasis, type AutomationBrief, type StepAssessment } from '../../../../shared/assessment';
+import { assessmentBasis, basesOf, type AutomationBrief, type StepAssessment } from '../../../../shared/assessment';
 import type { WorkflowGraph } from '../../../../shared/graph';
 import { automationStages, buildActionPlan, processStages } from './actionPlan';
 
@@ -124,6 +124,18 @@ describe('buildActionPlan', () => {
     expect([a.outdated, a.briefCurrent, a.done, a.top]).toEqual([true, false, false, false]);
     // The brief for "b" was written for another classification, so it is out of date.
     expect(plan.automation.find((i) => i.id === 'b')!.briefCurrent).toBe(false);
+  });
+
+  it('a change to an earlier step only keeps the step usable and its brief current', () => {
+    const withBases = (x: StepAssessment) => ({ ...x, ...basesOf(graph, x.stepId)! });
+    const list = [withBases(assess('a', 'full')), withBases(assess('b', 'assisted'))];
+    const written = { ...brief('b', 'assist', 'assisted'), ...basesOf(graph, 'b')! };
+    // "a" feeds "b": change a's notes.
+    const changed: WorkflowGraph = { ...graph, nodes: graph.nodes.map((n) => (n.id === 'a' ? { ...n, notes: 'Weekly batch.' } : n)) };
+    const plan = buildActionPlan({ recommendations: [], assessments: list, briefs: [written], appliedAt: null }, changed);
+    const [a, b] = [plan.automation.find((i) => i.id === 'a')!, plan.automation.find((i) => i.id === 'b')!];
+    expect([a.freshness, a.outdated]).toEqual(['changed', true]);
+    expect([b.freshness, b.outdated, b.briefCurrent, b.done]).toEqual(['upstream', false, true, true]);
   });
 
   it('copes with analyses made before automation assessments', () => {

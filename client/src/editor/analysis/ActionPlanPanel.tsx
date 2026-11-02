@@ -46,6 +46,8 @@ type Props = {
   actionsBlocked: string | null;
   onClarify?: (stepId: string) => void;
   onBrief?: (stepId: string) => void;
+  /** Reassess one step against the workflow as it is now; rejects with a readable message. */
+  onReassess?: (stepId: string) => Promise<void>;
 };
 
 /**
@@ -57,6 +59,20 @@ export function ActionPlanPanel(props: Props) {
   const { plan, filter, selected, onSelect, name } = props;
   const [showRejected, setShowRejected] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [reassessing, setReassessing] = useState<string | null>(null);
+  const [reassessError, setReassessError] = useState<{ id: string; message: string } | null>(null);
+  const reassess = async (stepId: string) => {
+    if (!props.onReassess) return;
+    setReassessing(stepId);
+    setReassessError(null);
+    try {
+      await props.onReassess(stepId);
+    } catch (error) {
+      setReassessError({ id: stepId, message: (error as Error).message });
+    } finally {
+      setReassessing(null);
+    }
+  };
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -188,9 +204,12 @@ export function ActionPlanPanel(props: Props) {
                     name={name(item.id)}
                     selected={selected?.type === 'automation' && selected.id === item.id}
                     onSelect={() => toggle('automation', item.id)}
-                    blocked={item.outdated ? 'Changed since the analysis: run a new analysis first' : props.actionsBlocked}
+                    blocked={reassessing ? 'Flico is reassessing a step' : props.actionsBlocked}
                     onClarify={props.onClarify && (() => props.onClarify!(item.id))}
                     onBrief={props.onBrief && (() => props.onBrief!(item.id))}
+                    onReassess={props.onReassess && (() => void reassess(item.id))}
+                    reassessing={reassessing === item.id}
+                    reassessError={reassessError?.id === item.id ? reassessError.message : null}
                     onViewBrief={() => setViewing(item.id)}
                   />
                 ))}
@@ -206,7 +225,7 @@ export function ActionPlanPanel(props: Props) {
           brief={viewingItem.brief}
           stepName={name(viewingItem.id)}
           outdated={!viewingItem.briefCurrent}
-          blocked={viewingItem.outdated ? 'Changed since the analysis: run a new analysis first' : props.actionsBlocked}
+          blocked={viewingItem.outdated ? 'This step changed since it was assessed: reassess it first' : props.actionsBlocked}
           onUpdate={
             props.onBrief && BRIEF_KIND[viewingItem.assessment.classification]
               ? () => {
@@ -368,8 +387,17 @@ function ProcessCard(props: {
 type Action = { key: string; label: string; aria: string; icon: LucideIcon; primary: boolean; onClick: () => void; gated: boolean };
 
 /** The actions an automation step offers, the most useful next one first and filled. */
-function automationActions(item: AutomationItem, name: string, handlers: { onClarify?: () => void; onBrief?: () => void; onViewBrief: () => void }): Action[] {
+function automationActions(item: AutomationItem, name: string, handlers: { onClarify?: () => void; onBrief?: () => void; onViewBrief: () => void; onReassess?: () => void; reassessing?: boolean }): Action[] {
   const { assessment: a, brief, briefCurrent } = item;
+  // The step itself changed: reassessing it comes first; the brief can still be read.
+  if (item.outdated) {
+    return [
+      ...(brief ? [{ key: 'view', label: `View ${brief.kind === 'support' ? 'ideas' : 'brief'}`, aria: `View ${BRIEF_TITLE[brief.kind].toLowerCase()} for “${name}”`, icon: ClipboardList, primary: false, onClick: handlers.onViewBrief, gated: false }] : []),
+      ...(handlers.onReassess
+        ? [{ key: 'reassess', label: handlers.reassessing ? 'Reassessing…' : 'Reassess', aria: `Reassess “${name}”`, icon: RefreshCw, primary: true, onClick: handlers.onReassess, gated: true }]
+        : []),
+    ];
+  }
   const kind = BRIEF_KIND[a.classification];
   const clarify = (primary: boolean): Action[] =>
     handlers.onClarify ? [{ key: 'clarify', label: 'Clarify', aria: `Clarify “${name}”`, icon: MessageCircleQuestion, primary, onClick: handlers.onClarify, gated: true }] : [];
@@ -391,8 +419,9 @@ function automationActions(item: AutomationItem, name: string, handlers: { onCla
       : [];
 
   if (!kind) return clarify(true);
-  if (a.classification === 'human') return [...clarify(false), ...(briefCurrent ? view(false) : brief ? [...view(false), ...create(false)] : create(false))];
-  if (briefCurrent) return [...clarify(false), ...view(true)];
+  // Once the brief is ready it is the only action; "Update brief" lives in the brief itself.
+  if (briefCurrent) return view(a.classification !== 'human');
+  if (a.classification === 'human') return [...clarify(false), ...(brief ? [...view(false), ...create(false)] : create(false))];
   if (brief) return [...view(false), ...create(true)];
   return a.clarified ? [...clarify(false), ...create(true)] : [...create(false), ...clarify(true)];
 }
@@ -406,6 +435,9 @@ function AutomationCard(props: {
   onClarify?: () => void;
   onBrief?: () => void;
   onViewBrief: () => void;
+  onReassess?: () => void;
+  reassessing: boolean;
+  reassessError: string | null;
 }) {
   const { item, name, blocked } = props;
   const a = item.assessment;
@@ -458,7 +490,27 @@ function AutomationCard(props: {
             </div>
           )}
           <p className="mt-0.5 text-[12.5px] leading-[18px] text-fl-text-secondary">{lead}</p>
-          {next && !item.done && <p className="mt-0.5 text-[12px] leading-[17px] text-fl-text">Next: {next}</p>}
+          {next && !item.done && !item.outdated && <p className="mt-0.5 text-[12px] leading-[17px] text-fl-text">Next: {next}</p>}
+          {item.outdated && (
+            <p className="mt-1 text-[12px] leading-[17px] text-[var(--fl-approval-ink)]" data-testid="freshness-note">
+              This step changed since it was assessed. Reassess it to continue; no credit is used.
+            </p>
+          )}
+          {item.freshness === 'upstream' && (
+            <p className="mt-1 text-[12px] leading-[17px] text-fl-text-secondary" data-testid="freshness-note">
+              An earlier step changed since this was assessed.{' '}
+              {props.onReassess && (
+                <button type="button" className="fl-link text-[12px]" disabled={!!blocked || props.reassessing} aria-label={`Reassess “${name}”`} onClick={props.onReassess}>
+                  {props.reassessing ? 'Reassessing…' : 'Reassess'}
+                </button>
+              )}
+            </p>
+          )}
+          {props.reassessError && (
+            <p role="alert" className="mt-1 rounded-[8px] bg-[var(--fl-exception-fill)] px-2 py-1.5 text-[12px] text-[var(--fl-exception-ink)]">
+              {props.reassessError}
+            </p>
+          )}
           <div className="mt-2">
             <StageTrack stages={item.stages} />
           </div>

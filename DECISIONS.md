@@ -375,4 +375,11 @@ The owner asked for a way to clarify each assessment and then, based on its clas
 - Progress counts the items in the plan. Rejected changes don't count, and once changes are applied the ones that weren't accepted stop counting too.
 - An assessment records `clarified: true` once an answer in Clarify updates it; skipping doesn't set it, and older assessments simply lack it. No migration is needed: assessments are stored as JSON.
 - "Accept all" no longer opens the final preview. Accepting and applying are separate actions, so the plan's progress reads correctly.
+- Reassessment (owner choice, 2026-11-02): assessments and briefs record two fingerprints, one for the step and what feeds it (`basis`) and one for the step alone (`stepBasis`; briefs store it in `automation_briefs.step_basis`, migration 7).
+  - If the step itself changed or was deleted, the assessment needs reassessing: Clarify and briefs are refused until **Reassess** (`POST /api/analyses/:id/reassess`) re-checks that one step against the current workflow.
+  - Reassess uses no credit, counts toward the daily Ask Flico limit, and keeps the person's earlier Clarify answers as context. It is saved only if the workflow didn't change meanwhile.
+  - If only an earlier step changed, nothing is blocked; the card shows a note. A brief is out of date only if its step itself, or its classification, changed.
+  - Older records without a step fingerprint behave as before: any change needs reassessing.
+- Once a brief is current, the card shows only View brief (owner choice). Clarify is no longer offered next to it; Update brief is in the brief window.
+- Dialogs never grow taller than the window: the body scrolls, and the title and buttons stay visible (owner bug report: a long brief ran off screen).
 

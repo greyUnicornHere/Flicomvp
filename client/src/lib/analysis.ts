@@ -51,3 +51,8 @@ export const assistStart = (analysisId: string, request: AssistStartRequest) =>
 
 export const assistAnswer = (analysisId: string, request: AssistAnswerRequest) =>
   api<AssistResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/assist/answer`, { method: 'POST', body: request });
+
+/** Reassess one step of the latest analysis against the workflow as it is now (no credit). */
+export async function reassessStep(analysisId: string, stepId: string, baseRevision: number): Promise<Analysis> {
+  return (await api<AnalysisResponse>(`/api/analyses/${encodeURIComponent(analysisId)}/reassess`, { method: 'POST', body: { stepId, baseRevision } })).analysis;
+}

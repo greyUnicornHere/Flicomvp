@@ -10,7 +10,7 @@ import {
   type CreditsResponse,
   type ReviewStatus,
 } from '../../shared/api.js';
-import { assessmentBasis, BRIEF_KIND, BRIEF_MAX_QUESTIONS, BRIEF_TITLE, CLARIFY_MAX_QUESTIONS, needsReassessment, type StepAssessment } from '../../shared/assessment.js';
+import { basesOf, isAssessable, BRIEF_KIND, BRIEF_MAX_QUESTIONS, BRIEF_TITLE, CLARIFY_MAX_QUESTIONS, needsReassessment, type StepAssessment } from '../../shared/assessment.js';
 import type { AssistInfo, AssistMode, AssistResponse, ChatMessage } from '../../shared/api.js';
 import { diffGraphs } from '../../shared/aiOps.js';
 import type { WorkflowGraph } from '../../shared/graph.js';
@@ -20,7 +20,7 @@ import { preAnalysisCheck } from '../../shared/validation.js';
 import { transaction } from '../db/database.js';
 import { requireAuth, sendError, type AppContext } from '../http.js';
 import { AI_ERROR_MESSAGES, AiError, type AiProvider } from '../ai/provider.js';
-import { AiOutputError, analyzeWorkflow, assistQuestion, clarifyUpdate, suggestQuestions, writeBrief, type InterviewTurn } from '../ai/service.js';
+import { AiOutputError, analyzeWorkflow, assistQuestion, clarifyUpdate, reassessStep, suggestQuestions, writeBrief, type InterviewTurn } from '../ai/service.js';
 import { appendExchange, getMessage, listMessages, recordUsage, setAssistStatus, usedToday } from '../ai/store.js';
 import { validateGraph } from '../workflows/graph.js';
 import { getWorkflow, saveGraph } from '../workflows/service.js';
@@ -186,7 +186,7 @@ export const analysisRoutes =
           const { usage: _usage, dropped: _dropped, assessments: drafts, ...stored } = result;
           // Each assessment is bound to its step, this analysis and the analysed revision.
           const assessedAt = new Date(ctx.now()).toISOString();
-          const assessments = drafts.map((a) => ({ ...a, basis: assessmentBasis(job.graph, a.stepId)!, revision: job.revision, updatedAt: assessedAt }));
+          const assessments = drafts.map((a) => ({ ...a, ...basesOf(job.graph, a.stepId)!, revision: job.revision, updatedAt: assessedAt }));
           const analysisId = saveAnalysis(
             db,
             userId,
@@ -249,6 +249,7 @@ export const analysisRoutes =
     ]);
     type Fail = [number, 'not_found' | 'conflict' | 'bad_request' | 'limit_reached', string];
     const LIMIT_MESSAGE = "You've reached today's Ask Flico limit. The limit resets at midnight UTC.";
+    const STEP_CHANGED = 'This step changed since it was assessed. Reassess it first.';
 
     /** Shared checks: owned current analysis with assessments, saved revision, a step that hasn't changed. */
     const assistContext = (userId: string, analysisId: string, stepId: string, baseRevision: number) => {
@@ -261,7 +262,7 @@ export const analysisRoutes =
       const assessment = analysis.assessments.find((a) => a.stepId === stepId);
       if (!assessment) return [404, 'not_found', 'This step has no automation assessment.'] as Fail;
       if (workflow.revision !== baseRevision) return [409, 'conflict', "Your latest changes haven't finished saving. Please try again in a moment."] as Fail;
-      if (needsReassessment(workflow.graph, assessment)) return [409, 'conflict', 'This step (or what feeds it) changed since the analysis. Run a new analysis to reassess it first.'] as Fail;
+      if (needsReassessment(workflow.graph, assessment)) return [409, 'conflict', STEP_CHANGED] as Fail;
       return { analysis, workflow, assessment };
     };
 
@@ -293,8 +294,8 @@ export const analysisRoutes =
       const written = await writeBrief(ai, { graph: workflow.graph, assessment, turns: turnsOf(stepMessages(userId, workflow.id, analysis.id, assessment.stepId)), kind }, timeout());
       return transaction(db, () => {
         const latest = getWorkflow(db, userId, workflow.id);
-        if (!latest || needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was writing, so no brief was saved. Run a new analysis to reassess it.'] as Fail;
-        saveBrief(db, userId, { analysisId: analysis.id, stepId: assessment.stepId, kind, classification: assessment.classification, summary: written.summary, sections: written.sections, basis: assessmentBasis(latest.graph, assessment.stepId)!, revision: latest.revision }, ctx.now());
+        if (!latest || needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was writing, so no brief was saved. Reassess it first.'] as Fail;
+        saveBrief(db, userId, { analysisId: analysis.id, stepId: assessment.stepId, kind, classification: assessment.classification, summary: written.summary, sections: written.sections, ...basesOf(latest.graph, assessment.stepId)!, revision: latest.revision }, ctx.now());
         recordUsage(db, userId, 'chat', ai.source, written.usage, ctx.now());
         return appendExchange(db, userId, workflow.id, [{ role: 'assistant', content: `Your ${BRIEF_TITLE[kind].toLowerCase()} for “${meta.stepLabel}” is ready. Open it from the step's card in the Automation tab.`, source: ai.source, assist: { ...meta, kind: 'brief' } }], ctx.now());
       });
@@ -382,7 +383,7 @@ export const analysisRoutes =
           usage = result.usage;
           replyText = result.reply;
           nextQuestion = runCount < cap ? result.nextQuestion : '';
-          updated = { ...result.updated, basis: assessmentBasis(workflow.graph, stepId)!, revision: workflow.revision, updatedAt: now(), clarified: true };
+          updated = { ...result.updated, ...basesOf(workflow.graph, stepId)!, revision: workflow.revision, updatedAt: now(), clarified: true };
         } else {
           if (mode === 'clarify') {
             // Skipping never adds certainty: the step stays provisional (or needs information) and the gap is recorded.
@@ -411,7 +412,7 @@ export const analysisRoutes =
           if (!latest || !current?.assessments || getMessage(db, userId, workflow.id, question.id)?.assist?.status !== 'pending') {
             return [409, 'conflict', 'That question was already answered or skipped.'] as Fail;
           }
-          if (needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was answering, so nothing was updated. Run a new analysis to reassess it.'] as Fail;
+          if (needsReassessment(latest.graph, assessment)) return [409, 'conflict', 'This step changed while Flico was answering, so nothing was updated. Reassess it first.'] as Fail;
           if (updated) saveAssessments(db, userId, analysis.id, current.assessments.map((a) => (a.stepId === stepId ? updated! : a)));
           setAssistStatus(db, userId, question.id, skip ? 'skipped' : 'answered');
           recordUsage(db, userId, 'chat', provider.source, usage, ctx.now());
@@ -445,6 +446,47 @@ export const analysisRoutes =
           added = [...added, ...(written as ChatMessage[])];
         }
         return { messages: [getMessage(db, userId, workflow.id, question.id)!, ...added], analysis: getAnalysis(db, userId, analysis.id)! } satisfies AssistResponse;
+      } catch (error) {
+        return fail(request, reply, error);
+      }
+    });
+
+    // Reassess one step against the workflow as it is now (no credit; counts toward the daily Ask Flico limit).
+    const reassessBody = z.strictObject({ stepId: z.string().min(1).max(64), baseRevision: z.number().int().positive() });
+    app.post<IdParams>('/analyses/:id/reassess', rateLimit, async (request, reply) => {
+      const parsed = reassessBody.safeParse(request.body);
+      if (!parsed.success) return sendError(reply, 400, 'bad_request', 'Invalid request.');
+      const userId = request.user!.id;
+      const { stepId, baseRevision } = parsed.data;
+      const analysis = getAnalysis(db, userId, request.params.id);
+      if (!analysis) return sendError(reply, 404, 'not_found', 'Analysis not found.');
+      const workflow = getWorkflow(db, userId, analysis.workflowId);
+      if (!workflow) return sendError(reply, 404, 'not_found', NOT_FOUND);
+      if (currentAnalysis(db, userId, workflow.id)?.id !== analysis.id) return sendError(reply, 409, 'conflict', 'Only the latest analysis can be reassessed.');
+      const assessment = analysis.assessments?.find((a) => a.stepId === stepId);
+      if (!assessment) return sendError(reply, 404, 'not_found', 'This step has no automation assessment.');
+      if (workflow.revision !== baseRevision) return sendError(reply, 409, 'conflict', "Your latest changes haven't finished saving. Please try again in a moment.");
+      const node = workflow.graph.nodes.find((n) => n.id === stepId);
+      if (!node) return sendError(reply, 409, 'conflict', 'This step was deleted from the workflow, so it can no longer be assessed.');
+      if (!isAssessable(node)) return sendError(reply, 409, 'conflict', 'This step is no longer a work step (Start, Finish or a wait), so it is not assessed.');
+      if (!provider) return notConfigured(reply);
+      if (!chatAvailable(userId)) return sendError(reply, 429, 'limit_reached', LIMIT_MESSAGE);
+      try {
+        const turns = turnsOf(stepMessages(userId, workflow.id, analysis.id, stepId));
+        const result = await reassessStep(provider, { graph: workflow.graph, assessment, turns }, timeout());
+        const outcome = transaction(db, () => {
+          // The workflow may have changed while Flico was thinking: never save a reassessment of an older version.
+          const latest = getWorkflow(db, userId, workflow.id);
+          const current = getAnalysis(db, userId, analysis.id);
+          if (!latest || latest.revision !== workflow.revision || !current?.assessments) return [409, 'conflict', 'The workflow changed while Flico was reassessing, so nothing was updated. Please try again.'] as Fail;
+          const updated: StepAssessment = { ...result.updated, ...basesOf(latest.graph, stepId)!, revision: latest.revision, updatedAt: new Date(ctx.now()).toISOString(), ...(assessment.clarified ? { clarified: true } : {}) };
+          saveAssessments(db, userId, analysis.id, current.assessments.map((a) => (a.stepId === stepId ? updated : a)));
+          recordUsage(db, userId, 'chat', provider.source, result.usage, ctx.now());
+          return null;
+        });
+        if (outcome) return sendError(reply, ...outcome);
+        const body: AnalysisResponse = { analysis: getAnalysis(db, userId, analysis.id)! };
+        return body;
       } catch (error) {
         return fail(request, reply, error);
       }

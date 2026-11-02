@@ -192,6 +192,16 @@ ${AUTOMATION_RULES}
 
 ${DATA_RULES}`;
 
+export const REASSESS_SYSTEM = `You reassess the automation potential of one workflow step in Flico because the workflow changed since it was assessed. The <assessment> is the earlier one; the workflow data is the current workflow.
+- Assess the step as it is now, using its current details and the steps that feed it.
+- Keep evidence the person gave (source "user") and the answers in the interview only where they still apply to the step as it is now.
+- Change the classification only when the current workflow or the person's answers justify it.
+- Never change the workflow itself.
+
+${AUTOMATION_RULES}
+
+${DATA_RULES}`;
+
 const BRIEF_FOCUS: Record<BriefKind, string> = {
   automation: 'what starts the step and how often, where the inputs live, which systems are involved and who can grant access, what happens with exceptions, how results would be checked, and who would own the automation',
   assist: 'what the person checks or decides, what should be prepared for them, how the handover works, which systems are involved, and how results would be checked',
@@ -221,11 +231,12 @@ ${DATA_RULES}`;
 }
 
 /** The interview context as the model sees it (refs, not IDs), followed by the task. */
-export function assistPrompt(input: { view: unknown; assessment: unknown; interview: { question: string; answer: string | null }[]; stepRef: string; task: 'question' | 'update' | 'brief'; latest?: { question: string; answer: string } }): string {
+export function assistPrompt(input: { view: unknown; assessment: unknown; interview: { question: string; answer: string | null }[]; stepRef: string; task: 'question' | 'update' | 'brief' | 'reassess'; latest?: { question: string; answer: string } }): string {
   const task = {
     question: 'Task: ask the next question, or say you are done.',
     update: 'Task: update the assessment with the latest answer.',
     brief: 'Task: write the brief.',
+    reassess: 'Task: reassess the selected step against the workflow as it is now.',
   }[input.task];
   return [
     `<workflow_data>\n${embed(input.view)}\n</workflow_data>`,

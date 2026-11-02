@@ -559,3 +559,19 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 | Apply, the final preview, conflicts and Undo work as before; Apply stays within reach in full screen | Pass | E2E `analysis.spec.ts`, `feedback.spec.ts`; `05-full-screen-1280-test-fixture.png` |
 | 1280 px: no horizontal scroll; keyboard review (title → Details → Reject → Accept) | Pass | `04-action-plan-1280-test-fixture.png`; E2E `analysis.spec.ts` |
 
+### Owner feedback round 1 (same branch): brief window, View brief only, Reassess
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **314 / 314 pass** (new: Reassess API, earlier-step changes API, earlier-step changes in the plan model; migration 7) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **76 / 76 pass** |
+
+| Check | Result | Evidence |
+|---|---|---|
+| A long brief scrolls inside its window; the title and Close stay on screen, including in a 1280×520 window | Pass | E2E `assist.spec.ts` |
+| With a current brief, View brief is the only button on the card | Pass | E2E `assist.spec.ts` |
+| The step itself changed: "Needs reassessment", only Reassess (plus View brief if one exists); Reassess re-checks that step, unblocks Clarify, uses no credit | Pass | E2E `assist.spec.ts`; API `assist.api.test.ts`; `docs/evidence/action-plan/06-needs-reassessment-1536-test-fixture.png` |
+| Only an earlier step changed: no block, a note with a Reassess link, the brief stays current | Pass | API `assist.api.test.ts`; unit `actionPlan.test.ts`; E2E `assist.spec.ts`, `automation.spec.ts` |
+| Reassess refuses unsaved changes, deleted steps and other people's analyses; nothing is saved if the workflow changed meanwhile | Pass | API `assist.api.test.ts` |
+

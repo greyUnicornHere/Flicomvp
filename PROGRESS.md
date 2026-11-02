@@ -136,6 +136,11 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - The executive summary is a compact card at the bottom: one line, the counts, and **Details** for the assumptions and your answers.
 - **Apply accepted changes** sits at the top, and also in full screen. **Accept all** only accepts; you apply when ready.
 - Still advice only: Flico never runs automations or connects to your systems. Step 2 (agent-ready blueprints that replace the brief at the end of the journey) comes after this is approved.
+- Owner feedback after testing (2026-11-02):
+  - The brief window no longer runs off the screen. Long content scrolls inside it, and the title and buttons always stay visible. This applies to every dialog.
+  - Once a brief is ready, **View brief** is the only button on the card. **Update brief** is inside the brief.
+  - **Reassess**: when a step itself changed since the analysis, its card offers **Reassess**. Flico re-checks just that step against the current workflow and keeps your earlier answers where they still apply. It uses no credit and counts toward the daily Ask Flico limit. When only an earlier step changed, the step stays usable: the card shows a note with a Reassess link, and its brief stays current.
+  - Clarify without the chat: two mockups are on the design canvas for the owner to choose from (A: inline in the card; B: one short form).
 
 ## Known issues / limitations
 

@@ -22,7 +22,7 @@ import { applyProposal, cancelProposal, createAiDraft, fetchAiStatus, quickAddSt
 import { AskFlico } from './AskFlico';
 import { AssumptionsPanel, DraftNotice, PreviewBar } from './AiPanels';
 import { useChat, type ChatRequest } from './useChat';
-import { assistAnswer, assistStart, cancelRun, fetchAnalyses, fetchCredits, fetchQuestions, fetchRun, startAnalysis } from '../lib/analysis';
+import { assistAnswer, assistStart, cancelRun, fetchAnalyses, fetchCredits, fetchQuestions, fetchRun, reassessStep, startAnalysis } from '../lib/analysis';
 import { AnalysisView } from './analysis/AnalysisView';
 import { AnalysisProgress, GuidedQuestions, type ProgressState } from './analysis/AnalysisDialogs';
 import { CanvasControls } from './CanvasControls';
@@ -625,6 +625,13 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     if (!current || !question) return;
     void runInterview((baseRevision) => assistAnswer(current.id, { messageId: question.id, baseRevision, ...reply }));
   };
+  /** Reassess one step of the current analysis against the workflow as it is now. Throws with a readable message. */
+  const reassessAssessment = async (stepId: string) => {
+    const current = currentAnalysisOf(analyses);
+    if (!current) return;
+    const updated = await reassessStep(current.id, stepId, await save.flushNow());
+    setAnalyses((list) => list.map((a) => (a.id === updated.id ? updated : a)));
+  };
   // Why Clarify and briefs can't be used right now (null: they can).
   const interviewBlocked = !ai?.available ? 'AI is not set up' : interviewBusy ? 'Flico is working on a question' : null;
 
@@ -792,6 +799,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               onBackToEditor={() => setView('editor')}
               interviewBlocked={interviewBlocked}
               onClarify={(stepId) => startInterview(stepId, 'clarify')}
+              onReassess={reassessAssessment}
               onBrief={(stepId) => startInterview(stepId, 'brief')}
             />
           </div>

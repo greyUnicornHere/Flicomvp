@@ -24,6 +24,8 @@ type Props = {
   interviewBlocked?: string | null;
   onClarify?: (stepId: string) => void;
   onBrief?: (stepId: string) => void;
+  /** Reassess one step against the workflow as it is now (no credit). */
+  onReassess?: (stepId: string) => Promise<void>;
   onAnalysisChange: (analysis: Analysis) => void;
   onApplied: (result: ApplyAnalysisResponse) => void;
   onBackToEditor: () => void;
@@ -34,7 +36,7 @@ type Props = {
  * plan that combines process changes and automation opportunities, each with its journey stages.
  * The executive summary is a compact card at the bottom.
  */
-export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief }: Props) {
+export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onApplied, onBackToEditor, interviewBlocked = null, onClarify, onBrief, onReassess }: Props) {
   const [slot, setSlot] = useState<'initial' | 'latest'>('latest');
   const analysis = analyses.find((a) => a.slot === slot) ?? analyses.at(-1)!;
   const [selected, setSelected] = useState<PlanSelection>(null);
@@ -254,6 +256,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
               actionsBlocked={analysis.slot === 'initial' && analyses.some((a) => a.slot === 'latest') ? 'Only the latest analysis can be clarified or planned' : interviewBlocked}
               onClarify={onClarify}
               onBrief={onBrief}
+              onReassess={onReassess}
             />
           </div>
         </div>

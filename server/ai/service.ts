@@ -21,6 +21,7 @@ import {
   DRAFT_SYSTEM,
   QUESTIONS_SYSTEM,
   QUICK_ADD_SYSTEM,
+  REASSESS_SYSTEM,
   analysisPrompt,
   chatPrompt,
   questionsPrompt,
@@ -33,6 +34,8 @@ import {
 } from './prompts.js';
 import {
   LIMITS,
+  assessmentJsonSchema,
+  assessmentOutput,
   assistQuestionJsonSchema,
   assistQuestionOutput,
   briefJsonSchema,
@@ -697,6 +700,34 @@ export async function clarifyUpdate(
   });
   if (!result.ok) throw new AiOutputError("Flico couldn't update the assessment from that answer. Nothing was changed; please try again.");
   return { ...result.value, usage };
+}
+
+/** Reassess one step against the workflow as it is now, keeping the person's answers where they still apply. Nothing is stored here. */
+export async function reassessStep(
+  provider: AiProvider,
+  input: { graph: WorkflowGraph; assessment: StepAssessment; turns: InterviewTurn[] },
+  timeoutMs: number,
+): Promise<{ updated: AssessmentDraft; usage: Usage }> {
+  const context = interviewContext(input.graph, input.assessment, input.turns);
+  const request: AiRequest = {
+    task: 'assist',
+    system: REASSESS_SYSTEM,
+    messages: [{ role: 'user', content: assistPrompt({ view: context.view, assessment: context.shown, interview: input.turns, stepRef: context.stepRef, task: 'reassess' }) }],
+    schema: assessmentJsonSchema,
+    maxTokens: 5000,
+    effort: 'medium',
+    timeoutMs,
+  };
+  const { result, usage } = await generateChecked(provider, request, (text) => {
+    const parsed = parseOutput(text, assessmentOutput);
+    if (!parsed.ok) return parsed;
+    if (parsed.value.step !== context.stepRef) return { ok: false, problems: [`Assess only the selected step ${context.stepRef}.`] };
+    const checked = checkAssessments([parsed.value], input.graph, context.refs, context.source);
+    if (checked.problems.length || !checked.valid[0]) return { ok: false, problems: checked.problems.length ? checked.problems : ['The assessment is incomplete.'] };
+    return { ok: true, value: checked.valid[0] };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't reassess this step. Nothing was changed; please try again.");
+  return { updated: result.value, usage };
 }
 
 /** Write a step's brief from the workflow, its assessment and the interview. Nothing is stored here. */

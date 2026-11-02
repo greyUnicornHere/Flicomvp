@@ -110,6 +110,8 @@ test('a brief: a short interview, then a saved brief with fixed sections, readab
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await openAutomation(page);
   await expect(card(page, 'Compare supplier quotations').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: All stages done');
+  // With the brief ready, View brief is the only action on the card.
+  await expect(card(page, 'Compare supplier quotations').getByRole('button', { name: /^Clarify/ })).toHaveCount(0);
   await card(page, 'Compare supplier quotations').getByRole('button', { name: 'View assist brief for “Compare supplier quotations”' }).click();
   const brief = page.getByRole('dialog', { name: /Assist brief · Compare supplier quotations/ });
   await expect(brief).toBeVisible();
@@ -119,16 +121,39 @@ test('a brief: a short interview, then a saved brief with fixed sections, readab
   await expect(brief).toContainText('Unanswered');
   await expect(brief).toContainText("Flico doesn't build, connect or test automations");
   await expect(brief.getByRole('button', { name: 'Copy as text' })).toBeVisible();
+  // A long brief scrolls inside the window: its title and buttons stay on screen.
+  const box = (await brief.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(960);
+  await expect(brief.getByRole('button', { name: 'Close' })).toBeInViewport();
+  await expect(brief.getByRole('heading', { level: 2 })).toBeInViewport();
   await page.screenshot({ path: `${SHOTS}/03-assist-brief-1536-test-fixture.png` });
+  // In a small window the brief scrolls inside the dialog; the title and the buttons stay on screen.
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await expect(brief.getByRole('button', { name: 'Close' })).toBeInViewport();
+  await expect(brief.getByRole('heading', { level: 2 })).toBeInViewport();
+  expect(await brief.getByTestId('modal-body').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await page.setViewportSize({ width: 1536, height: 960 });
   await brief.getByRole('button', { name: 'Close' }).click();
 
-  // A step that changed since the analysis can't be clarified or planned until it's reassessed.
+  // A step that changed since the analysis must be reassessed first (no credit); a step fed by it only gets a note.
   const current = (await (await page.request.get(`/api/workflows/${id}`)).json()).workflow as WorkflowDetail;
   const changed = { ...current.graph, nodes: current.graph.nodes.map((n) => (n.id === 'inspect' ? { ...n, notes: 'A photo is enough now.' } : n)) };
   expect((await page.request.put(`/api/workflows/${id}/graph`, { data: { graph: changed, baseRevision: current.revision } })).status()).toBe(200);
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await openAutomation(page);
-  await expect(card(page, 'Check delivery').getByRole('button', { name: 'Clarify “Check delivery”' })).toBeDisabled();
-  await expect(card(page, 'Check delivery')).toContainText('run a new analysis first');
+  const inspect = card(page, 'Check delivery');
+  await expect(inspect).toContainText('Needs reassessment');
+  await expect(inspect.getByTestId('freshness-note')).toContainText('Reassess it to continue');
+  await expect(inspect.getByRole('button', { name: 'Clarify “Check delivery”' })).toHaveCount(0);
+  await expect(card(page, 'Send quotation').getByTestId('freshness-note')).toContainText('An earlier step changed');
+  await expect(card(page, 'Send quotation').getByRole('button', { name: 'Clarify “Send quotation”' })).toBeEnabled();
+  await inspect.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'docs/evidence/action-plan/06-needs-reassessment-1536-test-fixture.png' });
+  await inspect.getByRole('button', { name: 'Reassess “Check delivery”' }).first().click();
+  await expect(inspect).not.toContainText('Needs reassessment');
+  await expect(inspect.getByTestId('freshness-note')).toHaveCount(0);
+  await expect(inspect.getByRole('button', { name: 'Clarify “Check delivery”' })).toBeEnabled();
+  expect((await (await page.request.get('/api/credits')).json()).balance).toBe(9);
 });

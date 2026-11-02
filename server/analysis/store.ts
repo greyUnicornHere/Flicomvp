@@ -180,6 +180,7 @@ type BriefRow = {
   summary: string;
   sections_json: string;
   basis: string;
+  step_basis: string | null;
   revision: number;
   created_at: number;
 };
@@ -196,6 +197,7 @@ function withBriefs(db: Db, analysis: Analysis): Analysis {
       summary: r.summary,
       sections: JSON.parse(r.sections_json) as AutomationBrief['sections'],
       basis: r.basis,
+      ...(r.step_basis ? { stepBasis: r.step_basis } : {}),
       revision: r.revision,
       createdAt: new Date(r.created_at).toISOString(),
     })),
@@ -210,11 +212,11 @@ export function saveAssessments(db: Db, ownerId: string, id: string, assessments
 /** Save a step's brief, replacing an earlier one for the same step of the same analysis. */
 export function saveBrief(db: Db, ownerId: string, brief: Omit<AutomationBrief, 'createdAt'>, now: number): void {
   db.prepare(
-    `INSERT INTO automation_briefs (analysis_id, owner_id, step_id, kind, classification, summary, sections_json, basis, revision, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO automation_briefs (analysis_id, owner_id, step_id, kind, classification, summary, sections_json, basis, step_basis, revision, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (analysis_id, step_id) DO UPDATE SET kind = excluded.kind, classification = excluded.classification, summary = excluded.summary,
-       sections_json = excluded.sections_json, basis = excluded.basis, revision = excluded.revision, created_at = excluded.created_at`,
-  ).run(brief.analysisId, ownerId, brief.stepId, brief.kind, brief.classification, brief.summary, JSON.stringify(brief.sections), brief.basis, brief.revision, now);
+       sections_json = excluded.sections_json, basis = excluded.basis, step_basis = excluded.step_basis, revision = excluded.revision, created_at = excluded.created_at`,
+  ).run(brief.analysisId, ownerId, brief.stepId, brief.kind, brief.classification, brief.summary, JSON.stringify(brief.sections), brief.basis, brief.stepBasis ?? null, brief.revision, now);
 }
 
 /** The analysis Ask Flico and the editor treat as current: the latest, or the only one. */

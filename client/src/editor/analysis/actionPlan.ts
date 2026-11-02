@@ -4,7 +4,7 @@
 // change updates the workflow in Flico; nothing is ever automated, connected or run.
 import type { Analysis, Recommendation } from '../../../../shared/api';
 import { orderRecommendations } from '../../../../shared/analysis';
-import { BRIEF_KIND, BRIEF_TITLE, briefOutdated, needsReassessment, topOpportunities, type AutomationBrief, type AutomationClass, type StepAssessment } from '../../../../shared/assessment';
+import { BRIEF_KIND, BRIEF_TITLE, briefOutdated, freshness, topOpportunities, type AutomationBrief, type AutomationClass, type Freshness, type StepAssessment } from '../../../../shared/assessment';
 import type { WorkflowGraph } from '../../../../shared/graph';
 
 export type StageState = 'done' | 'current' | 'todo';
@@ -18,8 +18,10 @@ export type AutomationItem = {
   /** The step's brief, if one was written (it may be out of date). */
   brief?: AutomationBrief;
   briefCurrent: boolean;
-  /** The step changed since it was assessed. */
+  /** The step itself changed (or was deleted) since it was assessed: reassess it before anything else. */
   outdated: boolean;
+  /** current, upstream (only an earlier step changed: still usable) or changed (same as `outdated`). */
+  freshness: Freshness;
   /** One of the top automation opportunities. */
   top: boolean;
   stages: Stage[];
@@ -70,18 +72,19 @@ export function buildActionPlan(analysis: Pick<Analysis, 'recommendations' | 'as
   const rejected = ordered.filter((r) => r.status === 'rejected').map(toItem);
 
   const assessments = analysis.assessments ?? [];
-  const outdated = (a: StepAssessment) => needsReassessment(currentGraph, a);
+  const outdated = (a: StepAssessment) => freshness(currentGraph, a) === 'changed';
   const top = topOpportunities(assessments, outdated);
   // Top opportunities first, then by classification (candidates, assisted, needs info, human-led).
   const order: AutomationClass[] = ['full', 'assisted', 'unknown', 'human'];
   const sorted = [...top, ...order.flatMap((c) => assessments.filter((a) => a.classification === c && !top.includes(a)))];
   const automation = sorted.map((a): AutomationItem => {
     const brief = analysis.briefs.find((b) => b.stepId === a.stepId);
-    const isOutdated = outdated(a);
+    const fresh = freshness(currentGraph, a);
+    const isOutdated = fresh === 'changed';
     const briefCurrent = !!brief && !briefOutdated(brief, a, currentGraph);
     const stages = automationStages(a, briefCurrent);
     const done = !isOutdated && (a.classification === 'human' || stages.every((s) => s.state === 'done'));
-    return { type: 'automation', id: a.stepId, assessment: a, brief, briefCurrent, outdated: isOutdated, top: top.includes(a), stages, done };
+    return { type: 'automation', id: a.stepId, assessment: a, brief, briefCurrent, outdated: isOutdated, freshness: fresh, top: top.includes(a), stages, done };
   });
 
   // Once the changes are applied, the ones that weren't accepted are settled too: they no longer count.

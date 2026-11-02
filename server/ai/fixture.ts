@@ -478,6 +478,8 @@ function assist(input: string, system: string) {
     };
   }
   if (input.includes('Task: write the brief.')) return writeFixtureBrief(system, label, interview);
+  // Reassess: the step as it is now, with the person's earlier answers.
+  if (input.includes('Task: reassess the selected step')) return assess(view, ref, turns());
 
   const kind = /automation brief/.test(system) ? 'automation' : /assist brief/.test(system) ? 'assist' : /support ideas/.test(system) ? 'support' : null;
   const candidates = !kind

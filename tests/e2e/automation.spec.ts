@@ -129,13 +129,15 @@ test('changing a step (or what feeds it) shows Needs reassessment; moving blocks
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await expect(row(page, 'Check delivery')).toContainText('Needs reassessment');
-  await expect(row(page, 'Send quotation')).toContainText('Needs reassessment'); // fed by the changed step
+  // Fed by the changed step: still usable, with a note.
+  await expect(row(page, 'Send quotation')).not.toContainText('Needs reassessment');
+  await expect(row(page, 'Send quotation').getByTestId('freshness-note')).toContainText('An earlier step changed');
   await expect(row(page, 'Match invoice to order')).not.toContainText('Needs reassessment'); // only moved
   // The labels on the diagram say so too.
   await expect(label(page, 'inspect')).toHaveAttribute('data-stale', 'true');
   await expect(label(page, 'match')).not.toHaveAttribute('data-stale', 'true');
   await row(page, 'Check delivery').getByRole('button').first().click();
-  await expect(row(page, 'Check delivery')).toContainText('run a new analysis first');
+  await expect(row(page, 'Check delivery')).toContainText('Reassess it to continue');
   await page.screenshot({ path: `${SHOTS}/02-needs-reassessment-1536-test-fixture.png` });
 });
 

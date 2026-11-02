@@ -56,6 +56,8 @@ export type StepAssessment = {
   basis: string;
   revision: number;
   updatedAt: string;
+  /** Set once an answer in a Clarify interview updated this assessment (absent on older assessments). */
+  clarified?: boolean;
 };
 
 /**

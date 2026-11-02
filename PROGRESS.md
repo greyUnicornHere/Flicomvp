@@ -129,6 +129,14 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - A connection that goes back to an earlier step without being a Repeat loop (for example "Retry limit reached? → No → Search") used to leave Auto-arrange, and AI drafts, with most steps stacked in one column and crossing lines. Now such paths are recognised: steps are laid out left to right as usual, and the way back is drawn under the steps like a Repeat loop, keeping its label (for example "No").
 - Existing workflows keep their positions until you click **Auto-arrange** (owner choice); new AI drafts come out tidy.
 
+## Assessment page revamp, step 1: one Action plan (owner request; awaiting owner review on branch `assessment-action-plan`)
+
+- The Analysis page now shows the proposed workflow beside one **Action plan** (owner chose option A from the mockups). It combines the process changes and the automation opportunities in one list with a progress bar ("1 of 6 done") and the filters **All**, **Process** and **Automation**.
+- Each item shows where it is in its journey. A process change goes **Suggested → Accepted → Applied**. An automation opportunity goes **Assessed → Clarified → brief** (automation or assist brief). A "needs information" step goes **Assessed → Clarified**, and a human-led step goes **Assessed → Support ideas (optional)**. The most useful next action is the filled button; the top opportunities carry a "Top opportunity" tag and come first.
+- The executive summary is a compact card at the bottom: one line, the counts, and **Details** for the assumptions and your answers.
+- **Apply accepted changes** sits at the top, and also in full screen. **Accept all** only accepts; you apply when ready.
+- Still advice only: Flico never runs automations or connects to your systems. Step 2 (agent-ready blueprints that replace the brief at the end of the journey) comes after this is approved.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -158,4 +166,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/` and `docs/evidence/clarify-briefs/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/` and `docs/evidence/action-plan/`.

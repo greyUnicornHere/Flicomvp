@@ -43,15 +43,15 @@ async function analysed(page: Page, viewport = { width: 1536, height: 960 }) {
 }
 
 
-const panel = (page: Page) => page.getByTestId('automation-panel');
+const panel = (page: Page) => page.getByTestId('action-plan');
 const card = (page: Page, name: string) => panel(page).locator('li[data-assessment]').filter({ has: page.getByRole('button', { name: new RegExp(`^${name}`) }) });
 const chat = (page: Page) => page.getByRole('dialog', { name: 'Ask Flico' });
-const openAutomation = (page: Page) => page.getByRole('tab', { name: /Automation/ }).click();
+const openAutomation = (page: Page) => panel(page).getByRole('button', { name: /^Automation \(\d+\)$/ }).click();
 
 test('Clarify: Flico asks one question at a time in Ask Flico; answers update the assessment; Skip keeps it open; survives a refresh', async ({ page }) => {
   const id = await analysed(page);
   await openAutomation(page);
-  await expect(card(page, 'Send quotation')).toContainText('Next step');
+  await expect(card(page, 'Send quotation')).toContainText('Next:');
   // A needs-information step can be clarified, but has no brief yet.
   await expect(card(page, 'Send quotation').getByRole('button', { name: /Create .* brief/ })).toHaveCount(0);
   await card(page, 'Send quotation').getByRole('button', { name: 'Clarify “Send quotation”' }).click();
@@ -67,8 +67,9 @@ test('Clarify: Flico asks one question at a time in Ask Flico; answers update th
   await chat(page).getByRole('button', { name: 'Send answer' }).click();
   await expect(chat(page).locator('[data-assist="update"]')).toContainText('Send quotation');
   // The assessment moved out of "More information needed".
-  await expect(panel(page).getByRole('region', { name: 'More information needed' })).toHaveCount(0);
-  await expect(card(page, 'Send quotation')).toContainText('Automate');
+  await expect(card(page, 'Send quotation')).not.toContainText('Needs info');
+  // The Action plan shows it as clarified, ready for its brief.
+  await expect(card(page, 'Send quotation').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: Clarified (step 2 of 3)');
 
   // Skip the next question, if one is open: it stays open in the assessment and is never asked again.
   const next = chat(page).locator('[data-assist="question"][data-assist-status="pending"]');
@@ -80,7 +81,7 @@ test('Clarify: Flico asks one question at a time in Ask Flico; answers update th
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await openAutomation(page);
-  await expect(panel(page).getByRole('region', { name: 'More information needed' })).toHaveCount(0);
+  await expect(card(page, 'Send quotation')).not.toContainText('Needs info');
   const saved = (await (await page.request.get(`/api/workflows/${id}/chat`)).json()).messages;
   expect(saved.some((m: { assist?: { kind: string } }) => m.assist?.kind === 'answer')).toBe(true);
   expect((await (await page.request.get('/api/credits')).json()).balance).toBe(9);
@@ -108,6 +109,7 @@ test('a brief: a short interview, then a saved brief with fixed sections, readab
   await page.reload();
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await openAutomation(page);
+  await expect(card(page, 'Compare supplier quotations').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: All stages done');
   await card(page, 'Compare supplier quotations').getByRole('button', { name: 'View assist brief for “Compare supplier quotations”' }).click();
   const brief = page.getByRole('dialog', { name: /Assist brief · Compare supplier quotations/ });
   await expect(brief).toBeVisible();

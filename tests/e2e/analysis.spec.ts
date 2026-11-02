@@ -38,7 +38,7 @@ async function openWorkflow(page: Page, directive = '', viewport = { width: 1536
 const stored = async (page: Page, id: string): Promise<WorkflowDetail> => (await (await page.request.get(`/api/workflows/${id}`)).json()).workflow;
 const analyses = async (page: Page, id: string): Promise<Analysis[]> => (await (await page.request.get(`/api/workflows/${id}/analyses`)).json()).analyses;
 const credits = async (page: Page): Promise<number> => (await (await page.request.get('/api/credits')).json()).balance;
-const recCard = (page: Page, title: RegExp | string) => page.locator('article[data-rec]').filter({ hasText: title });
+const recCard = (page: Page, title: RegExp | string) => page.locator('li[data-rec]').filter({ hasText: title });
 
 async function quickAnalysis(page: Page) {
   await page.getByRole('button', { name: 'Analyze' }).click();
@@ -58,17 +58,20 @@ test('R01/R03/R04/R05/R12: Quick analysis, one-diagram review, synchronized list
   // Opens the results automatically.
   await expect(page.getByRole('tab', { name: 'Analysis', selected: true })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'A clearer, leaner way to run this workflow.' })).toBeVisible();
-  await expect(page.getByText('No numerical savings assumed')).toBeVisible();
+  await expect(page.getByTestId('summary-card')).toContainText('No savings assumed');
   await expect(page.getByText(/Test fixture, not a live AI analysis/)).toBeVisible();
-  const cards = page.locator('article[data-rec]');
+  const cards = page.locator('li[data-rec]');
   await expect(cards).toHaveCount(3);
   // Highest impact first; categories and evidence labels shown.
   await expect(cards.first()).toContainText('Log every request when it arrives');
-  await expect(cards.first()).toContainText('Complex Change');
-  await expect(cards.first()).toContainText('Based on assumptions');
-  await expect(recCard(page, 'Combine')).toContainText('Quick Win');
-  await expect(recCard(page, 'Combine')).toContainText('Supported by your workflow');
+  await expect(cards.first()).toHaveAttribute('aria-label', /Complex Change/);
+  await expect(recCard(page, 'Combine')).toHaveAttribute('aria-label', /Quick Win/);
+  // Changes to verify say so on the card; the evidence of every change is under Details.
   await expect(recCard(page, 'criteria')).toContainText('Requires verification');
+  await expect(recCard(page, 'Combine')).not.toContainText('Requires verification');
+  await cards.first().getByRole('button', { name: 'Details' }).click();
+  await expect(cards.first()).toContainText('Based on assumptions');
+  await cards.first().getByRole('button', { name: 'Details' }).click();
 
   // One diagram with every proposal drawn.
   const diagram = page.locator('[aria-label="Workflow with proposed changes"]');
@@ -120,11 +123,11 @@ test('R06/R07/R08: reject, reconsider, combined preview of accepted only, Confir
   const id = await openWorkflow(page);
   const before = await stored(page, id);
   await quickAnalysis(page);
-  await expect(page.locator('article[data-rec]')).toHaveCount(3);
+  await expect(page.locator('li[data-rec]')).toHaveCount(3);
 
   await page.getByRole('button', { name: /^Reject: Write down the criteria/ }).click();
-  await expect(page.locator('article[data-rec]')).toHaveCount(2); // moved out of the list
-  const rejectedToggle = page.getByRole('button', { name: /Rejected recommendations/ });
+  await expect(page.locator('li[data-rec]')).toHaveCount(2); // moved out of the list
+  const rejectedToggle = page.getByRole('button', { name: /Rejected changes/ });
   await expect(rejectedToggle).toContainText('1');
   await expect(rejectedToggle).toHaveAttribute('aria-expanded', 'false');
   await rejectedToggle.click();
@@ -135,9 +138,9 @@ test('R06/R07/R08: reject, reconsider, combined preview of accepted only, Confir
 
   await page.getByRole('button', { name: /^Accept: Combine/ }).click();
   await page.getByRole('button', { name: /^Accept: Log every request/ }).click();
-  await expect(recCard(page, 'Combine')).toContainText('Accepted');
+  await expect(recCard(page, 'Combine').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: Accepted (step 2 of 3)');
 
-  await page.getByRole('button', { name: 'Review & confirm' }).click();
+  await page.getByRole('button', { name: 'Apply accepted changes' }).click();
   const dialog = page.getByRole('dialog', { name: 'Review accepted changes' });
   await expect(dialog).toContainText('Only the 2 accepted recommendations are shown');
   await expect(dialog.locator('.fl-node[data-diff="modified"]')).toHaveCount(0); // the rejected change is not in it
@@ -161,22 +164,26 @@ test('R06/R07/R08: reject, reconsider, combined preview of accepted only, Confir
   await expect.poll(async () => (await stored(page, id)).graph, { timeout: 8000 }).toEqual(before.graph);
   await page.getByRole('tab', { name: 'Analysis' }).click();
   await expect(page.getByText(/Accepted changes were applied on/)).toBeVisible();
+  // Applied changes are done in the Action plan.
+  await expect(recCard(page, 'Combine').getByTestId('stage-track')).toHaveAttribute('aria-label', 'Progress: All stages done');
 });
 
 test('R09: incompatible recommendations are reported and cannot be applied', async ({ page }) => {
   const id = await openWorkflow(page, '[fixture:conflict]');
   const before = await stored(page, id);
   await quickAnalysis(page);
-  await expect(page.locator('article[data-rec]')).toHaveCount(4);
+  await expect(page.locator('li[data-rec]')).toHaveCount(4);
   await page.getByRole('button', { name: 'Accept all' }).click();
+  await page.getByRole('button', { name: 'Apply accepted changes' }).click();
   const dialog = page.getByRole('dialog', { name: 'Review accepted changes' });
   await expect(dialog.getByRole('alert')).toContainText('both change “Check order”. Accept only one of them.');
   await expect(dialog.getByRole('button', { name: 'Confirm & apply' })).toBeDisabled();
   await page.screenshot({ path: `${SHOTS}/06-conflict-1536-test-fixture.png` });
   await dialog.getByRole('button', { name: 'Back to review' }).click();
-  await expect(page.getByRole('article', { name: /^Recommendation \d: Clarify/ }).getByRole('alert')).toContainText('Accept only one');
+  await expect(recCard(page, /^Clarify/).getByRole('alert')).toContainText('Accept only one');
+  await recCard(page, /^Clarify/).getByRole('button', { name: /^Undecide: Clarify/ }).click();
   await page.getByRole('button', { name: /^Reject: Clarify/ }).click();
-  await page.getByRole('button', { name: 'Review & confirm' }).click();
+  await page.getByRole('button', { name: 'Apply accepted changes' }).click();
   await expect(dialog.getByRole('button', { name: 'Confirm & apply' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Back to review' }).click();
   expect((await stored(page, id)).revision).toBe(before.revision);
@@ -243,7 +250,7 @@ test('R02: Guided analysis with optional questions; skipping still gives a full 
   await expect(dialog.getByText('What decides the outcome at “Manager approves”?')).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/08-guided-questions-1536-test-fixture.png` });
   await dialog.getByRole('button', { name: 'Skip questions' }).click();
-  await expect(page.locator('article[data-rec]')).toHaveCount(3);
+  await expect(page.locator('li[data-rec]')).toHaveCount(3);
   const [skipped] = await analyses(page, id);
   expect(skipped).toMatchObject({ mode: 'guided', answers: [] });
 
@@ -252,8 +259,8 @@ test('R02: Guided analysis with optional questions; skipping still gives a full 
   await page.getByRole('menuitem', { name: /Guided Analysis/ }).click();
   await dialog.getByLabel('Roughly how often does this process run?').fill('About 40 orders a week');
   await dialog.getByRole('button', { name: 'Analyze' }).click();
-  await expect(page.locator('article[data-rec]')).toHaveCount(3);
-  await expect(page.locator('article[data-rec]').first()).toBeVisible();
+  await expect(page.locator('li[data-rec]')).toHaveCount(3);
+  await expect(page.locator('li[data-rec]').first()).toBeVisible();
   const latest = (await analyses(page, id)).find((a) => a.slot === 'latest')!;
   expect(latest.answers).toEqual([{ question: 'Roughly how often does this process run?', answer: 'About 40 orders a week' }]);
   // Equally detailed either way.
@@ -265,7 +272,7 @@ test('R13: no invented figures', async ({ page }) => {
   await quickAnalysis(page);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   // Everything Flico wrote (the diagram's zoom percentage is not a claim).
-  const text = [await page.getByRole('heading', { level: 1 }).innerText(), await page.locator('[aria-labelledby="exec-summary"]').innerText(), await page.locator('[aria-labelledby="recs-heading"]').innerText()].join(' ');
+  const text = [await page.getByRole('heading', { level: 1 }).innerText(), await page.locator('[aria-labelledby="summary-heading"]').innerText(), await page.locator('[aria-labelledby="plan-heading"]').innerText()].join(' ');
   expect(text.match(/\d+\s?%|\$\s?\d|\bROI\b/g)).toBeNull();
 });
 
@@ -274,15 +281,15 @@ test('R14: a sound workflow gets no forced recommendations', async ({ page }) =>
   await quickAnalysis(page);
   await expect(page.getByRole('heading', { level: 1, name: 'This workflow is already in good shape.' })).toBeVisible();
   await expect(page.getByText('Flico found no changes worth recommending. Your workflow is shown unchanged.')).toBeVisible();
-  await expect(page.locator('article[data-rec]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Apply reviewed changes/ })).toHaveCount(0);
+  await expect(page.locator('li[data-rec]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Apply accepted changes/ })).toHaveCount(0);
   await page.screenshot({ path: `${SHOTS}/09-no-improvements-1536-test-fixture.png` });
 });
 
 test('1280px layout and keyboard: review without a mouse', async ({ page }) => {
   await openWorkflow(page, '', { width: 1280, height: 800 });
   await quickAnalysis(page);
-  await expect(page.locator('article[data-rec]')).toHaveCount(3);
+  await expect(page.locator('li[data-rec]')).toHaveCount(3);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/10-results-1280-test-fixture.png` });
 
@@ -292,10 +299,11 @@ test('1280px layout and keyboard: review without a mouse', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(title).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Tab'); // Details
+  await page.keyboard.press('Tab'); // Reject
   await page.keyboard.press('Tab'); // Accept
   await expect(page.getByRole('button', { name: /^Accept: Combine/ })).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(recCard(page, 'Combine')).toContainText('Accepted');
+  await expect(recCard(page, 'Combine').getByTestId('stage-track')).toHaveAttribute('aria-label', /Accepted/);
   // Tabs are keyboard reachable.
   await page.getByRole('tab', { name: 'Editor' }).focus();
   await page.keyboard.press('Enter');

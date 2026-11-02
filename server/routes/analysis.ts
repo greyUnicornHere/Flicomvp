@@ -382,7 +382,7 @@ export const analysisRoutes =
           usage = result.usage;
           replyText = result.reply;
           nextQuestion = runCount < cap ? result.nextQuestion : '';
-          updated = { ...result.updated, basis: assessmentBasis(workflow.graph, stepId)!, revision: workflow.revision, updatedAt: now() };
+          updated = { ...result.updated, basis: assessmentBasis(workflow.graph, stepId)!, revision: workflow.revision, updatedAt: now(), clarified: true };
         } else {
           if (mode === 'clarify') {
             // Skipping never adds certainty: the step stays provisional (or needs information) and the gap is recorded.

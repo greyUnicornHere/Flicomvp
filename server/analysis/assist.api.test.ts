@@ -77,6 +77,7 @@ describe('Clarify: one question at a time', () => {
     const { t, ai, alice, workflow, analysis } = await setup();
     const before = analysis.assessments!.find((a) => a.stepId === 'n-quote')!;
     expect(before.classification).toBe('unknown');
+    expect(before.clarified).toBeUndefined();
     const first = (await start(t, alice.cookie, analysis.id, { stepId: 'n-quote', mode: 'clarify', baseRevision: workflow.revision })).json();
     expect(first.messages).toHaveLength(1);
     const q = first.messages[0] as ChatMessage;
@@ -99,6 +100,8 @@ describe('Clarify: one question at a time', () => {
     const after = (body.analysis as Analysis).assessments!.find((a) => a.stepId === 'n-quote')!;
     expect(after.classification).not.toBe('unknown');
     expect(after.evidence.some((e) => e.source === 'user' && /price list/.test(e.text))).toBe(true);
+    // The Action plan shows the step as clarified.
+    expect(after.clarified).toBe(true);
     expect(await credits(t, alice.cookie)).toBe(9); // only the analysis used a credit
   });
 
@@ -112,6 +115,8 @@ describe('Clarify: one question at a time', () => {
       const match = (body.analysis as Analysis).assessments!.find((a) => a.stepId === 'n-match')!;
       expect(match.provisional).toBe(true);
       expect(match.classification).toBe('full');
+      // Skipping is not clarifying.
+      expect(match.clarified).toBeUndefined();
       q = body.messages.at(-1);
       if (q.assist?.kind === 'question') expect(asked.has(q.content)).toBe(false);
     }

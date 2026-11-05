@@ -636,3 +636,17 @@ Live AI isn't available in this environment, so the live model's behaviour here 
 |---|---|---|
 | Owner review of Describe a step, including the hand-off fix | Pass | Product owner checked and approved on 2026-11-05. Merged to `main`; the branch had passed unit + API 326 / 326, E2E 80 / 80, lint, typecheck, build |
 
+## Cards at the block; full-screen analysis — 2026-11-05 (branch `cards-and-fullscreen`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **326 / 326 pass** |
+| Browser E2E (all milestones) | `npm run test:e2e` | **82 / 82 pass** (new: Describe box drag test, full-screen floating card test; drag and full-screen tests updated) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Describe box: opens next to its step with a pointer; drags by mouse and arrow keys (pointer hidden while dragged); reopening puts it back next to the step | Pass | E2E `describe.spec.ts`; `docs/evidence/describe/05-describe-dragged-1536-test-fixture.png` |
+| Details card: after a drag and close, reopening another step puts it next to that step with a pointer | Pass | E2E `details-card.spec.ts` |
+| Full screen: no side list, diagram wider than 1400 px at 1536; a selected change or automation card floats beside its block with a pointer; Accept and Clarify work in it; it follows zoom; Escape / ✕ close it; the Action plan opens and hides as an overlay; Apply in reach | Pass | E2E `feedback.spec.ts`, `action-plan.spec.ts`; `docs/evidence/action-plan/06-full-screen-floating-card-1536-test-fixture.png`, `07-full-screen-process-card-1536-test-fixture.png` |
+

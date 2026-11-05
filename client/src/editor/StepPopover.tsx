@@ -1,12 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useStore } from '@xyflow/react';
 import { Check, ChevronRight, CircleAlert, GripVertical, Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
 import type { StepType, WorkflowGraph, WorkflowNode } from '../../../shared/graph';
-import { placePanel } from '../lib/placement';
 import { allowedTypeChanges, BRANCH_LABEL, connectTargets, decisionPaths, findNode, openBranches, outgoing, type StepPatch } from './ops';
 import { DURATION_UNITS, STEP_META } from './stepMeta';
 import type { FilledField } from './describe';
+import { PanelPointer } from './PanelPointer';
+import { useAttachedPanel } from './useAttachedPanel';
 
 type Props = {
   graph: WorkflowGraph;
@@ -24,9 +24,6 @@ type Props = {
   onRetry: () => void;
   /** Save these pending edits (if any) now; resolves true once persisted. */
   onDone: (patch: StepPatch | null) => Promise<boolean>;
-  /** Where the person dragged the card this session (null: next to the step). */
-  position: { left: number; top: number } | null;
-  onMove: (position: { left: number; top: number }) => void;
   /** Details just filled from the person's description: shown with a banner and marked as new. */
   filled?: { fields: FilledField[]; missing: string[]; fixture: boolean } | null;
   onUndoFill?: () => void;
@@ -34,8 +31,6 @@ type Props = {
   onDescribe?: () => void;
 };
 
-const HEADER = 76;
-const MARGIN = 8;
 /** The card's fixed width. */
 const WIDTH = 340;
 const MAX_TOOLS = 20;
@@ -48,9 +43,7 @@ const MAX_TOOLS = 20;
 export function StepPopover(props: Props) {
   const { graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection, onAsk } = props;
   const ref = useRef<HTMLDivElement>(null);
-  const [autoPosition, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [finishing, setFinishing] = useState(false);
-  const transform = useStore((s) => s.transform);
 
   const [fields, setFields] = useState(() => toFields(node));
   // The name wraps onto as many lines as it needs, so the whole name is always visible.
@@ -113,36 +106,14 @@ export function StepPopover(props: Props) {
     commit(next);
   };
 
-  // The card's height changes as sections open and close; it is placed again so it stays on screen.
-  const [height, setHeight] = useState(0);
-  useLayoutEffect(() => {
-    const place = () => {
-      const el = ref.current;
-      const target = anchor();
-      if (!el || !target) return;
-      setPosition(
-        placePanel(target.getBoundingClientRect(), { width: el.offsetWidth, height: el.offsetHeight }, { width: innerWidth, height: innerHeight }, 84),
-      );
-    };
-    place();
-    addEventListener('resize', place);
-    const el = ref.current;
-    const resized = typeof ResizeObserver === 'undefined' || !el ? null : new ResizeObserver(() => {
-      setHeight(el.offsetHeight);
-      place();
-    });
-    if (resized && el) resized.observe(el);
-    return () => {
-      removeEventListener('resize', place);
-      resized?.disconnect();
-    };
-  }, [anchor, transform, graph]);
+  // Opens next to its step with a pointer to it; can be dragged until it closes (owner feedback, 2026-11-05).
+  const { position, pointer, startDrag, moveWithKeys } = useAttachedPanel(ref, anchor, graph);
+  const placed = position !== null;
 
   useEffect(() => {
-    if (autoPosition) ref.current?.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+    if (placed) ref.current?.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
     // Focus once when first shown.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPosition === null]);
+  }, [placed]);
 
   const close = (returnFocus: boolean) => {
     commit();
@@ -155,43 +126,6 @@ export function StepPopover(props: Props) {
     const ok = await props.onDone(diff(node, latest.current));
     setFinishing(false);
     if (ok) onClose(true);
-  };
-
-  // The card can be dragged by its header; it always stays fully inside the window, below Flico's top bar.
-  const clamp = (p: { left: number; top: number }) => {
-    const height = Math.min(ref.current?.offsetHeight ?? 400, innerHeight - HEADER - 2 * MARGIN);
-    return {
-      left: Math.round(Math.min(Math.max(MARGIN, p.left), innerWidth - WIDTH - MARGIN)),
-      top: Math.round(Math.min(Math.max(HEADER + MARGIN, p.top), innerHeight - height - MARGIN)),
-    };
-  };
-  // A dragged position is kept, moved up only as far as needed for the whole card to stay on screen.
-  const visibleHeight = Math.min(height || 120, innerHeight - HEADER - 2 * MARGIN);
-  const position =
-    props.position && autoPosition
-      ? {
-          left: Math.min(props.position.left, innerWidth - WIDTH - MARGIN),
-          top: Math.max(HEADER + MARGIN, Math.min(props.position.top, innerHeight - visibleHeight - MARGIN)),
-        }
-      : autoPosition;
-  const startDrag = (event: React.PointerEvent) => {
-    if ((event.target as HTMLElement).closest('button, input, select, textarea') || !position) return;
-    event.preventDefault();
-    const start = { x: event.clientX, y: event.clientY, ...position };
-    const move = (e: PointerEvent) => props.onMove(clamp({ left: start.left + e.clientX - start.x, top: start.top + e.clientY - start.y }));
-    const up = () => {
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerup', up);
-    };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
-  };
-  const moveWithKeys = (event: React.KeyboardEvent) => {
-    const step = event.shiftKey ? 64 : 16;
-    const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
-    if (!delta || !position) return;
-    event.preventDefault();
-    props.onMove(clamp({ left: position.left + delta[0]!, top: position.top + delta[1]! }));
   };
 
   // Edits still being typed count as saving; otherwise the state of this step's last acknowledged save.
@@ -243,6 +177,7 @@ export function StepPopover(props: Props) {
   const chevron = (isOpen: boolean) => `flex-none text-fl-text-secondary transition-transform motion-reduce:transition-none ${isOpen ? 'rotate-90' : ''}`;
 
   return createPortal(
+    <>
     <div
       ref={ref}
       role="dialog"
@@ -556,7 +491,9 @@ export function StepPopover(props: Props) {
           {finishing ? 'Saving…' : 'Done'}
         </button>
       </div>
-    </div>,
+    </div>
+    <PanelPointer pointer={pointer} colour={pointer?.side === 'below' ? tone('fill') : 'white'} />
+    </>,
     document.body,
   );
 }

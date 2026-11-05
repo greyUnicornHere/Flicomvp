@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useStore } from '@xyflow/react';
-import { ArrowRight, Sparkles, X } from 'lucide-react';
+import { ArrowRight, GripVertical, Sparkles, X } from 'lucide-react';
 import { DESCRIBE_TEXT_MAX } from '../../../shared/api';
 import type { WorkflowNode } from '../../../shared/graph';
-import { placePanel } from '../lib/placement';
+import { PanelPointer } from './PanelPointer';
+import { useAttachedPanel } from './useAttachedPanel';
 
 const WIDTH = 420;
 const HINTS = ['Who does it', 'Which tool', 'How long it takes', 'What if it goes wrong'];
@@ -30,20 +30,8 @@ type Props = {
 export function DescribeBox({ node, anchor, busy, error, notice, available, onSubmit, onEditFields, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [text, setText] = useState('');
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
-  const transform = useStore((s) => s.transform);
-
-  useLayoutEffect(() => {
-    const place = () => {
-      const el = ref.current;
-      const target = anchor();
-      if (!el || !target) return;
-      setPosition(placePanel(target.getBoundingClientRect(), { width: el.offsetWidth, height: el.offsetHeight }, { width: innerWidth, height: innerHeight }, 84));
-    };
-    place();
-    addEventListener('resize', place);
-    return () => removeEventListener('resize', place);
-  }, [anchor, transform]);
+  // Opens next to its step with a pointer to it; can be dragged until it closes (owner feedback, 2026-11-05).
+  const { position, pointer, startDrag, moveWithKeys } = useAttachedPanel(ref, anchor);
 
   // Focus the text box once the window is placed (a hidden element can't take focus), and again
   // after Flico answers (the button that was pressed is replaced while it works).
@@ -57,6 +45,7 @@ export function DescribeBox({ node, anchor, busy, error, notice, available, onSu
   };
 
   return createPortal(
+    <>
     <div
       ref={ref}
       role="dialog"
@@ -73,7 +62,15 @@ export function DescribeBox({ node, anchor, busy, error, notice, available, onSu
         e.stopPropagation(); // keep typing out of canvas shortcuts
       }}
     >
-      <div className="flex items-start gap-2.5 px-4 pb-1.5 pt-3.5">
+      <div className="flex cursor-move select-none items-start gap-2 pb-1.5 pl-2 pr-4 pt-3.5" onPointerDown={startDrag} data-testid="describe-header">
+        <button
+          type="button"
+          className="grid h-8 w-6 flex-none cursor-move place-items-center rounded-[8px] text-fl-text-secondary hover:bg-fl-surface-subtle"
+          aria-label="Move describe window (arrow keys)"
+          onKeyDown={moveWithKeys}
+        >
+          <GripVertical size={15} aria-hidden="true" />
+        </button>
         <span className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-fl-brand-pale text-fl-brand" aria-hidden="true">
           <Sparkles size={16} />
         </span>
@@ -149,7 +146,9 @@ export function DescribeBox({ node, anchor, busy, error, notice, available, onSu
           )}
         </div>
       </form>
-    </div>,
+    </div>
+    <PanelPointer pointer={pointer} colour="white" />
+    </>,
     document.body,
   );
 }

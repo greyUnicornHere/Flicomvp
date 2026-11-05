@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronRight, Info, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, Info, ListChecks, Maximize2, Minimize2 } from 'lucide-react';
 import type { Analysis, ApplyAnalysisResponse, Recommendation, RecommendationCategory, ReviewStatus } from '../../../../shared/api';
 import { diffGraphs } from '../../../../shared/aiOps';
 import { findConflicts, orderRecommendations, overlayGraph, planApply, touched } from '../../../../shared/analysis';
@@ -14,6 +14,7 @@ import { needsReassessment } from '../../../../shared/assessment';
 import { buildActionPlan } from './actionPlan';
 import { ActionPlanPanel, type PlanFilter, type PlanSelection } from './ActionPlanPanel';
 import type { InterviewView } from './InterviewPanel';
+import { FloatingPlanCard } from './FloatingPlanCard';
 import { ReviewDiagram } from './ReviewDiagram';
 
 const CATEGORY_LABEL: Record<RecommendationCategory, string> = { quick_win: 'Quick Win', strategic: 'Strategic Improvement', complex: 'Complex Change' };
@@ -52,15 +53,23 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
   // Full screen (owner feedback 2026-10-31): the diagram and the action plan fill the screen together.
   const fullscreen = useFullscreen();
   const [fullView, setFullView] = useState(false);
+  // In full screen the Action plan list is an overlay, opened on request.
+  const [planOpen, setPlanOpen] = useState(false);
+  // Bumped while the diagram pans or zooms, so a floating card follows its block.
+  const [viewTick, setViewTick] = useState(0);
   const [wasFullscreen, setWasFullscreen] = useState(false);
   // Leaving browser full screen (Esc) also collapses the full view.
   if (fullscreen.active !== wasFullscreen) {
     setWasFullscreen(fullscreen.active);
-    if (!fullscreen.active && fullView) setFullView(false);
+    if (!fullscreen.active && fullView) {
+      setFullView(false);
+      setPlanOpen(false);
+    }
   }
   const toggleFullView = () => {
     if (fullView) {
       setFullView(false);
+      setPlanOpen(false);
       void fullscreen.exit();
     } else {
       setFullView(true);
@@ -147,6 +156,36 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
       Apply accepted changes <ArrowRight size={16} aria-hidden="true" />
     </button>
   );
+  const planPanel = (only: boolean) => (
+    <ActionPlanPanel
+          plan={plan}
+          hasAssessments={assessments === null ? null : assessments.length > 0}
+          noImprovements={noImprovements}
+          filter={filter}
+          onFilter={(f) => {
+            setFilter(f);
+            if (selected && f !== 'all' && f !== selected.type) setSelected(null);
+          }}
+          selected={selected}
+          onSelect={select}
+          name={name}
+          readOnly={applied || stale}
+          conflictsOf={(id) => conflicts.filter((c) => c.ids.includes(id)).map((c) => c.message)}
+          dependsOnOf={(r: Recommendation) => r.dependsOn.map((id) => recommendations.find((x) => x.id === id)?.title).filter((t): t is string => !!t)}
+          onStatus={(statuses) => void setStatuses(statuses)}
+          // Only the current analysis (the latest, or the only one) can be clarified or planned.
+          actionsBlocked={analysis.slot === 'initial' && analyses.some((a) => a.slot === 'latest') ? 'Only the latest analysis can be clarified or planned' : interviewBlocked}
+          onClarify={onClarify}
+          onBrief={onBrief}
+          onReassess={onReassess}
+          interview={interview}
+          briefToOpen={briefToOpen}
+      only={only}
+    />
+  );
+  const selectedItemExists =
+    selected?.type === 'process' ? [...plan.process, ...plan.rejected].some((i) => i.id === selected.id) : selected?.type === 'automation' ? plan.automation.some((i) => i.id === selected.id) : false;
+
   const stats = [
     noImprovements ? 'No changes proposed' : `${recommendations.length} change${recommendations.length === 1 ? '' : 's'}`,
     assessments === null ? 'No automation assessment' : `${assessments.length} step${assessments.length === 1 ? '' : 's'} assessed`,
@@ -200,11 +239,15 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
         >
           {fullView && (
             <div className="flex items-center justify-between gap-4">
-              <p className="min-w-0 truncate text-[15px] font-bold">{analysis.headline}</p>
+              <p className="min-w-0 flex-1 truncate text-[15px] font-bold">{analysis.headline}</p>
+              <button type="button" className="fl-btn flex-none gap-1.5 !min-h-11" aria-expanded={planOpen} onClick={() => setPlanOpen(!planOpen)}>
+                <ListChecks size={16} aria-hidden="true" /> {planOpen ? 'Hide action plan' : `Action plan · ${plan.done} of ${plan.total} done`}
+              </button>
               {applyButton}
             </div>
           )}
-          <div className={`grid grid-cols-[minmax(0,1fr)_minmax(400px,40%)] gap-5 ${fullView ? 'min-h-0 flex-1' : 'h-[600px]'}`}>
+          {/* Full screen enlarges the workflow only (owner feedback, 2026-11-05): cards float beside their block. */}
+          <div className={fullView ? 'relative min-h-0 flex-1' : 'grid h-[600px] grid-cols-[minmax(0,1fr)_minmax(400px,40%)] gap-5'}>
             <section className="fl-card relative h-full overflow-hidden !p-0" aria-labelledby="diagram-heading">
               <div className="pointer-events-none absolute left-5 right-4 top-3.5 z-10 flex items-center gap-3">
                 <h2 id="diagram-heading" className="text-[11px] font-bold uppercase tracking-[0.04em] text-fl-text-muted">
@@ -229,6 +272,7 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                 label={noImprovements ? 'Analysed workflow' : 'Workflow with proposed changes'}
                 assessments={filter !== 'process' ? automationLabels : undefined}
                 onOpenAssessment={(id) => select({ type: 'automation', id })}
+                onViewportChange={fullView && selected ? () => setViewTick((t) => t + 1) : undefined}
                 onSelectElement={(id) => {
                   const recs = filter !== 'automation' ? owners.get(id) : undefined;
                   if (recs?.length) {
@@ -240,32 +284,24 @@ export function AnalysisView({ analyses, currentGraph, onAnalysisChange, onAppli
                 }}
               />
             </section>
-
-            <ActionPlanPanel
-              plan={plan}
-              hasAssessments={assessments === null ? null : assessments.length > 0}
-              noImprovements={noImprovements}
-              filter={filter}
-              onFilter={(f) => {
-                setFilter(f);
-                if (selected && f !== 'all' && f !== selected.type) setSelected(null);
-              }}
-              selected={selected}
-              onSelect={select}
-              name={name}
-              readOnly={applied || stale}
-              conflictsOf={(id) => conflicts.filter((c) => c.ids.includes(id)).map((c) => c.message)}
-              dependsOnOf={(r: Recommendation) => r.dependsOn.map((id) => recommendations.find((x) => x.id === id)?.title).filter((t): t is string => !!t)}
-              onStatus={(statuses) => void setStatuses(statuses)}
-              // Only the current analysis (the latest, or the only one) can be clarified or planned.
-              actionsBlocked={analysis.slot === 'initial' && analyses.some((a) => a.slot === 'latest') ? 'Only the latest analysis can be clarified or planned' : interviewBlocked}
-              onClarify={onClarify}
-              onBrief={onBrief}
-              onReassess={onReassess}
-              interview={interview}
-              briefToOpen={briefToOpen}
-            />
+            {!fullView && planPanel(false)}
+            {fullView && planOpen && (
+              <div className="absolute inset-y-0 right-0 z-20 w-[440px] max-w-[45%] rounded-[16px] shadow-fl-float" data-testid="plan-drawer">
+                {planPanel(false)}
+              </div>
+            )}
           </div>
+          {fullView && !planOpen && selectedItemExists && (
+            <FloatingPlanCard
+              diagramLabel={noImprovements ? 'Analysed workflow' : 'Workflow with proposed changes'}
+              anchorIds={revealIds}
+              viewTick={viewTick}
+              title={selected?.type === 'process' ? 'Process change' : 'Automation'}
+              onClose={() => setSelected(null)}
+            >
+              {planPanel(true)}
+            </FloatingPlanCard>
+          )}
         </div>
 
         <section className="fl-card mt-5 !p-0" aria-labelledby="summary-heading" data-testid="summary-card">

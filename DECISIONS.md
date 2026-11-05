@@ -412,3 +412,15 @@ The owner asked for a way to clarify each assessment and then, based on its clas
   - Safeguard: a tool named in a new step's name or notes is dropped from the described step's tools.
   - New steps carry their owner and tool in their notes ("Owner: Supervisor. Tool: SAP."), because AI-proposed steps can't yet set those fields directly.
 
+## Cards at the block; full-screen analysis (owner feedback, 2026-11-05)
+- Owner choices: panels always open next to their block (not over it); in full screen a selected card pops up at its block; build all three now.
+- `useAttachedPanel` (client/src/editor/useAttachedPanel.ts) is shared by the details card and the Describe box.
+  - It places the panel with `placeAttached`: below the step, else above, else beside it, plus which side and where the pointer goes.
+  - It re-places the panel on resize, on content resize and on canvas pan or zoom.
+  - The dragged position is local to the open panel and is forgotten on close. This replaces the earlier "remember the dragged position for the session" rule (the owner reported cards opening at the page edge).
+  - `PanelPointer` draws the pointer as a separate fixed layer, so the panel's scroll area doesn't clip it.
+- Full-screen analysis:
+  - The Action plan renders in `only` mode inside `FloatingPlanCard`, which is placed beside the item's first changed or referenced block. A removed step anchors to the Removed list.
+  - The card re-places itself as the diagram pans or zooms (`ReviewDiagram.onViewportChange`). Escape anywhere closes it unless a dialog is open.
+  - The full list opens as an overlay drawer on request.
+

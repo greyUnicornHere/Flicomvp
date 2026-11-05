@@ -90,15 +90,21 @@ test.describe('block interactions', () => {
     await card.getByRole('button', { name: 'Close step details' }).click();
     expect((await stored(page, id)).graph).toEqual(before.graph);
     await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
-    // The dragged position is kept for the session.
+    // Owner feedback (2026-11-05): a card always opens next to its step, with a pointer to it; a drag lasts until it closes.
     await step(page, 'Pack order').dblclick();
     await editFieldsMyself(page);
-    expect(Math.abs((await card.boundingBox())!.x - box.x)).toBeLessThan(2);
-    // Keyboard alternative: the grip moves the card with arrow keys.
+    const blockBox = (await step(page, 'Pack order').boundingBox())!;
+    const reopened = (await card.boundingBox())!;
+    expect(reopened.x).toBeLessThan(blockBox.x + blockBox.width);
+    expect(reopened.x + reopened.width).toBeGreaterThan(blockBox.x);
+    expect(Math.min(Math.abs(reopened.y - (blockBox.y + blockBox.height)), Math.abs(reopened.y + reopened.height - blockBox.y))).toBeLessThan(24);
+    await expect(page.getByTestId('panel-pointer')).toBeVisible();
+    // Keyboard alternative: the grip moves the card with arrow keys (and the pointer goes).
     await card.getByRole('button', { name: 'Move step details (arrow keys)' }).focus();
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await expect.poll(async () => (await card.boundingBox())!.x).toBeGreaterThan(box.x + 5);
+    await expect.poll(async () => (await card.boundingBox())!.x).toBeGreaterThan(reopened.x + 5);
+    await expect(page.getByTestId('panel-pointer')).toHaveCount(0);
     expect((await stored(page, id)).graph).toEqual(before.graph);
   });
 });

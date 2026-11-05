@@ -160,6 +160,15 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Voice ("Talk me through it", Whisper in the browser) is parked, as agreed: a microphone can be added to this box later.
 - Owner feedback (2026-11-05): "Manager directs the supervisor to create a PR in SAP", written on "Manager approves request", now proposes a new step, "Supervisor creates PR in SAP", inserted right after the approval and shown as a preview first, as the owner chose. The manager's step keeps the instruction in its notes. SAP goes with the new step, not the manager's.
 
+## Cards at the block, and a full-screen analysis for the workflow (owner feedback; awaiting owner review on branch `cards-and-fullscreen`)
+
+- **The Describe box can be dragged**, by its header or with the arrow keys from its grip, like the details card.
+- **Both open at the block**: every time the Describe box or the details card opens, it sits right next to the step, with a small pointer to it, and follows the canvas as you pan or zoom. A drag lasts only until it closes. Before, a dragged card stayed where it was dragged for the whole session, so it could open at the edge of the page.
+- **Full screen on the analysis page enlarges the workflow only.**
+  - The Action plan list is hidden and the diagram takes the full width.
+  - Clicking a block, its automation label, or a removed step shows that item's card floating beside it, with a pointer. It has the same buttons (Accept / Reject, Clarify, Create brief…), and Clarify runs inside it. Escape or ✕ closes it, and it follows the block as you pan or zoom.
+  - An **Action plan · N of M done** button opens the whole list over the diagram; **Hide action plan** closes it. Apply accepted changes stays in the top bar.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.

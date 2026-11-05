@@ -596,3 +596,23 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 |---|---|---|
 | Owner review of the assessment page revamp, step 1 (Action plan, Reassess, Clarify inside the card) | Pass | Product owner approved on 2026-11-02 and asked to proceed with step 2 (blueprints). Merged to `main`; the branch had passed unit + API 317 / 317, E2E 76 / 76, lint, typecheck, build |
 
+## Describe a step — 2026-11-05 (branch `describe-step`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **324 / 324 pass** (new: `server/ai/describe.api.test.ts`, `client/src/editor/describe.test.ts`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **79 / 79 pass** (3 new in `tests/e2e/describe.spec.ts`; double-click tests now continue with "Edit fields myself") |
+
+All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=fixture`), never a live model.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Double-click opens Describe (focused text box); Edit fields myself, Edit details and Enter open the card; toolbar Describe step | Pass | E2E `describe.spec.ts`, `details-card.spec.ts`; `docs/evidence/describe/01-describe-box-1536-test-fixture.png` |
+| Owner, tools, duration and notes filled and marked New; banner with count, test-fixture label, "Still useful", Describe more, Undo | Pass | `03-details-filled-1536-test-fixture.png` |
+| New steps previewed (2 added) with the description's summary; Apply adds them and saves; Cancel keeps the details only | Pass | `02-new-steps-preview-1536-test-fixture.png` |
+| Undo (banner) restores the earlier values and keeps applied steps; Ctrl+Z undoes a fill in one step | Pass | E2E; unit `describe.test.ts` |
+| Merge keeps existing details: tools added, notes appended, unchanged values skipped | Pass | unit `describe.test.ts` |
+| Nothing new: the box stays open with a hint and nothing is saved; Escape returns focus to the step | Pass | E2E |
+| Server: changes nothing; drops an unstated duration; refuses operations that change the described step (after one retry); checks revision, step and owner | Pass | API `describe.api.test.ts` |
+

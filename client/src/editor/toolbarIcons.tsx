@@ -1,7 +1,8 @@
-import { AlertTriangle, Check, Clock, Diamond, GitFork, PencilLine, Repeat, Square, SquareStop } from 'lucide-react';
+import { AlertTriangle, Check, Clock, Diamond, GitFork, PencilLine, Repeat, Sparkles, Square, SquareStop } from 'lucide-react';
 
 export const TOOLBAR_ICONS = {
   details: <PencilLine size={18} aria-hidden="true" />,
+  describe: <Sparkles size={18} aria-hidden="true" />,
   action: <Square size={18} aria-hidden="true" />,
   decision: <Diamond size={18} aria-hidden="true" />,
   approval: <Check size={18} aria-hidden="true" />,

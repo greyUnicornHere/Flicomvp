@@ -53,6 +53,8 @@ export class FixtureProvider implements AiProvider {
         return respond(JSON.stringify(analysis(input, attempt)));
       case 'assist':
         return respond(JSON.stringify(assist(input, request.system)));
+      case 'describe':
+        return respond(JSON.stringify(describe(input)));
     }
   }
 }
@@ -137,6 +139,43 @@ const op = (fields: Record<string, string>) => ({
   connection_type: '',
   ...fields,
 });
+
+/** Describe a step (test fixture): pick out who, which tools, how long; a conditional approval becomes a decision and an approval after the step. */
+function describe(input: string) {
+  const view = decode<View>(tagged(input, 'workflow_data'), { steps: [], connections: [] });
+  const text = decode<string>(tagged(input, 'step_description'), '');
+  const ref = /The selected step is (s\d+)\./.exec(input)?.[1] ?? '';
+  const who = /\b([A-Z][a-z]+) (?:in|from) ([a-z]+)\b/.exec(text);
+  const known = ['SAP', 'Excel', 'shared sheet', 'ERP', 'Outlook', 'email', 'Teams', 'SharePoint', 'Salesforce'];
+  const tools = known.filter((t) => new RegExp(`\\b${t}\\b`, 'i').test(text)).map((t) => (t === 'shared sheet' ? 'Shared sheet' : t));
+  const time = /(\d+)\s*(minutes?|min|hours?|days?|weeks?)\b/i.exec(text);
+  const unit = time ? ({ m: 'minutes', h: 'hours', d: 'days', w: 'weeks' } as const)[time[2]!.toLowerCase()[0] as 'm' | 'h' | 'd' | 'w'] : '';
+  const sentences = text.split(/(?<=[.!?])\s+/).filter((x) => x.trim() && !/^(it )?takes about/i.test(x.trim()));
+  const operations: ReturnType<typeof op>[] = [];
+  const out = view.connections.filter((c) => c.from === ref);
+  if (/\bif\b[^.]*\bapprov/i.test(text) && out.length === 1) {
+    const next = out[0]!;
+    operations.push(
+      op({ op: 'add_step', new_ref: 'n1', type: 'decision', label: 'Over the limit?' }),
+      op({ op: 'add_step', new_ref: 'n2', type: 'approval', label: 'Manager approves' }),
+      op({ op: 'remove_connection', connection: next.ref }),
+      op({ op: 'add_connection', from: ref, to: 'n1', connection_type: 'normal' }),
+      op({ op: 'add_connection', from: 'n1', to: 'n2', connection_type: 'yes', label: 'Yes' }),
+      op({ op: 'add_connection', from: 'n1', to: next.to, connection_type: 'no', label: 'No' }),
+      op({ op: 'add_connection', from: 'n2', to: next.to, connection_type: 'normal' }),
+    );
+  }
+  return {
+    owner: who ? `${who[1]} (${who[2]![0]!.toUpperCase()}${who[2]!.slice(1)})` : '',
+    tools,
+    duration_value: time ? Number(time[1]) : 0,
+    duration_unit: unit,
+    notes: sentences.join(' ').trim(),
+    change_summary: operations.length ? 'Add “Over the limit?” and “Manager approves” after this step.' : '',
+    operations,
+    missing: [...(tools.length ? [] : ['Which tool is used for this step?']), ...(/fail|wrong|problem|error/i.test(text) ? [] : ['What happens when something goes wrong here?'])].slice(0, 2),
+  };
+}
 
 function chat(input: string) {
   const view = decode<View>(tagged(input, 'workflow_data'), { steps: [], connections: [] });

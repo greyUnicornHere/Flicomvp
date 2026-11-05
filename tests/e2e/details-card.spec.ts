@@ -5,6 +5,9 @@ import type { WorkflowDetail } from '../../shared/api';
 import type { WorkflowGraph } from '../../shared/graph';
 import { signIn, uniqueEmail } from './helpers';
 
+/** Double-clicking a step opens Describe; this opens the details card from there. */
+const editFieldsMyself = (page: Page) => page.getByRole('button', { name: 'Edit fields myself' }).click();
+
 const SHOTS = 'docs/evidence/details-card';
 
 const step = (page: Page, label: string) => page.locator('[aria-label="Workflow diagram"]').locator('.react-flow__node').filter({ has: page.locator('.fl-node-label', { hasText: new RegExp(`^${label}$`) }) });
@@ -39,7 +42,7 @@ const details = (page: Page) => page.getByRole('dialog', { name: 'Edit step' });
 const openMore = (page: Page) => details(page).getByRole('button', { name: /^More details/ }).click();
 
 test.describe('block interactions', () => {
-  test('single click selects, double-click / Edit details / Enter open the card', async ({ page }) => {
+  test('single click selects; double-click opens Describe (then Edit fields myself); Edit details / Enter open the card', async ({ page }) => {
     await open(page, simple);
     await step(page, 'Receive order').click();
     await expect(details(page)).toHaveCount(0);
@@ -52,6 +55,10 @@ test.describe('block interactions', () => {
     await details(page).getByRole('button', { name: 'Close step details' }).click();
 
     await step(page, 'Pack order').dblclick();
+    await expect(page.getByRole('dialog', { name: 'Describe Pack order' })).toBeVisible();
+    await expect(details(page)).toHaveCount(0);
+    await editFieldsMyself(page);
+    await expect(page.getByTestId('describe-box')).toHaveCount(0);
     await expect(details(page).getByLabel('Step name')).toHaveValue('Pack order');
     await page.keyboard.press('Escape');
     await expect(details(page)).toHaveCount(0);
@@ -64,6 +71,7 @@ test.describe('block interactions', () => {
     const id = await open(page, simple);
     const before = await stored(page, id);
     await step(page, 'Receive order').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     const header = page.getByTestId('details-header');
     const start = (await header.boundingBox())!;
@@ -84,6 +92,7 @@ test.describe('block interactions', () => {
     await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
     // The dragged position is kept for the session.
     await step(page, 'Pack order').dblclick();
+    await editFieldsMyself(page);
     expect(Math.abs((await card.boundingBox())!.x - box.x)).toBeLessThan(2);
     // Keyboard alternative: the grip moves the card with arrow keys.
     await card.getByRole('button', { name: 'Move step details (arrow keys)' }).focus();
@@ -98,6 +107,7 @@ test.describe('saving block details', () => {
   test('Saved only after persistence; Done closes once saved; edits survive a refresh', async ({ page }) => {
     const id = await open(page, simple);
     await step(page, 'Receive order').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     const status = page.getByTestId('details-save-status');
     await card.getByLabel('Owner / team').fill('Sales desk');
@@ -122,6 +132,7 @@ test.describe('saving block details', () => {
     await expect.poll(fields, { timeout: 8000 }).toEqual(['Sales desk', 'Check the PO number first']);
     await page.reload();
     await step(page, 'Receive order').dblclick();
+    await editFieldsMyself(page);
     await openMore(page);
     await expect(details(page).getByLabel('Notes')).toHaveValue('Check the PO number first');
     await expect(details(page).getByLabel('Owner / team')).toHaveValue('Sales desk');
@@ -134,6 +145,7 @@ test.describe('saving block details', () => {
       failing ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'server_error', message: 'Flico is not responding right now.' } }) }) : route.continue(),
     );
     await step(page, 'Pack order').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     await openMore(page);
     await card.getByLabel('Tools / software').fill('Shipping portal');
@@ -161,9 +173,11 @@ test.describe('saving block details', () => {
     });
     // (The card opens to the right of its step, so switch to the step on the left.)
     await step(page, 'Pack order').dblclick();
+    await editFieldsMyself(page);
     await openMore(page);
     await details(page).getByLabel('Notes').fill('Note for packing');
     await step(page, 'Receive order').dblclick(); // switch straight away
+    await editFieldsMyself(page);
     await expect(details(page).getByLabel('Step name')).toHaveValue('Receive order');
     await openMore(page);
     await details(page).getByLabel('Notes').fill('Note for receiving');
@@ -200,6 +214,7 @@ test.describe('compact card layout', () => {
   test('header shows type, name and save state; Type and Owner shown; the rest folds with a summary', async ({ page }) => {
     await open(page, detailed);
     await step(page, 'Receive order').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     const header = page.getByTestId('details-header');
     await expect(header.getByLabel('Step name')).toHaveValue('Receive order');
@@ -223,6 +238,7 @@ test.describe('compact card layout', () => {
 
     // More details always starts folded, even when the step has details; the summary shows what's inside.
     await step(page, 'Manager approves').dblclick();
+    await editFieldsMyself(page);
     await expect(card.getByRole('button', { name: /^More details/ })).toHaveAttribute('aria-expanded', 'false');
     await expect(card.getByRole('button', { name: /^More details/ })).toContainText('2 days · ERP · Notes');
     await openMore(page);
@@ -232,6 +248,7 @@ test.describe('compact card layout', () => {
 
     // A decision with a path still to set opens Connections by itself.
     await step(page, 'Check stock').dblclick();
+    await editFieldsMyself(page);
     await expect(card.getByRole('button', { name: /^Connections/ })).toHaveAttribute('aria-expanded', 'true');
     await expect(card).toContainText('No path: not set yet');
   });
@@ -239,6 +256,7 @@ test.describe('compact card layout', () => {
   test('tools are tags: Enter or a comma adds, × and Backspace remove, a half-typed tool is still saved', async ({ page }) => {
     const id = await open(page, detailed);
     await step(page, 'Receive order').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     await openMore(page);
     const tools = card.getByLabel('Tools / software');
@@ -261,6 +279,7 @@ test.describe('compact card layout', () => {
   test('1280px: the card fits and Done stays reachable with everything open', async ({ page }) => {
     await open(page, detailed, { width: 1280, height: 720 });
     await step(page, 'Manager approves').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     await openMore(page);
     await card.getByRole('button', { name: /^Connections/ }).click();
@@ -295,6 +314,7 @@ test.describe('changing a decision into another type', () => {
   test('asks which path to keep; Cancel changes nothing; the change saves and one Undo restores the decision', async ({ page }) => {
     const id = await open(page, decided);
     await step(page, 'Check stock').dblclick();
+    await editFieldsMyself(page);
     const card = details(page);
     await card.getByLabel('Type').selectOption('Action');
     const choice = card.getByRole('group', { name: /Which path should it keep/ });
@@ -331,6 +351,7 @@ test('a long step name wraps in the card header and is shown in full', async ({ 
   const long = 'Check the supplier invoice against the purchase order and the delivery note';
   const id = await open(page, simple);
   await step(page, 'Receive order').dblclick();
+  await editFieldsMyself(page);
   const name = details(page).getByLabel('Step name');
   await name.fill(long);
   await name.press('Enter'); // finishes the name, never adds a line break

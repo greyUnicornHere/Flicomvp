@@ -5,6 +5,9 @@ import { expect, test, type Page } from '@playwright/test';
 import type { WorkflowDetail } from '../../shared/api';
 import { signIn, uniqueEmail } from './helpers';
 
+/** Double-clicking a step opens Describe; this opens the details card from there. */
+const editFieldsMyself = (page: Page) => page.getByRole('button', { name: 'Edit fields myself' }).click();
+
 const SHOTS = 'docs/evidence/m3';
 const DESCRIPTION =
   'A supplier emails an invoice. Finance checks the invoice against the purchase order. If the amount is over 5000, the department head approves it. Finance pays the supplier.';
@@ -45,6 +48,7 @@ test.describe('AI Create', () => {
     await expect(assumptions.getByText('Confirmed', { exact: true })).toBeVisible();
     await expect(assumptions.getByText('all confirmed')).toBeVisible();
     await node(page, 'Process complete').dblclick();
+    await editFieldsMyself(page);
     await page.getByRole('button', { name: 'Confirm step' }).click();
     await expect(node(page, 'Process complete').locator('.fl-inferred')).toHaveCount(0);
     await expect.poll(async () => (await stored(page, id)).graph.nodes.find((n) => n.label === 'Process complete')?.assumptionStatus, { timeout: 8000 }).toBe('confirmed');
@@ -120,6 +124,7 @@ test.describe('Ask Flico', () => {
     const id = await createDraft(page);
     const before = await stored(page, id);
     await node(page, 'Finance checks the invoice against the').dblclick();
+    await editFieldsMyself(page);
     await page.getByRole('button', { name: 'Ask Flico about this step' }).click();
     await chat(page).getByLabel('Message Ask Flico').fill('Remove this step');
     await chat(page).getByLabel('Message Ask Flico').press('Enter');
@@ -233,6 +238,7 @@ test.describe('Ask Flico', () => {
     await expect(page.getByRole('button', { name: /2 issues/ })).toBeVisible();
 
     await node(page, 'Order complete?').dblclick();
+    await editFieldsMyself(page);
     await page.getByRole('button', { name: 'Ask Flico about this step' }).click();
     await expect(chat(page).getByText('About:')).toContainText('Order complete?');
     await chat(page).getByRole('button', { name: 'Explain this step' }).click();

@@ -1,11 +1,11 @@
 // AI use cases: generateWorkflow (draft), quickAdd and answerAssistant (chat, edit proposals, fixes).
 // Each validates the model's output before anything is returned; invalid output gets exactly one
 // correction attempt. Nothing here writes to the database.
-import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type QuickAddType, type Recommendation } from '../../shared/api.js';
+import { ASSUMPTION_TEXT_MAX, WORKFLOW_NAME_MAX, type Assumption, type DescribedFields, type DescribeStepResponse, type QuickAddType, type Recommendation } from '../../shared/api.js';
 import { unsupportedFigures } from '../../shared/analysis.js';
 import { BRIEF_SECTIONS, isAssessable, type AutomationBrief, type BriefKind, type StepAssessment } from '../../shared/assessment.js';
 import { applyOperations, structuralProblems, type ProposalOperation } from '../../shared/aiOps.js';
-import type { EdgeType, StepType, WorkflowEdge, WorkflowGraph, WorkflowNode } from '../../shared/graph.js';
+import { GRAPH_LIMITS, type EdgeType, type StepType, type WorkflowEdge, type WorkflowGraph, type WorkflowNode } from '../../shared/graph.js';
 import { autoLayout } from '../../shared/layout.js';
 import { validateWorkflow } from '../../shared/validation.js';
 import { newId } from '../auth/tokens.js';
@@ -21,6 +21,8 @@ import {
   DRAFT_SYSTEM,
   QUESTIONS_SYSTEM,
   QUICK_ADD_SYSTEM,
+  DESCRIBE_SYSTEM,
+  describePrompt,
   REASSESS_SYSTEM,
   analysisPrompt,
   chatPrompt,
@@ -35,6 +37,8 @@ import {
 import {
   LIMITS,
   assessmentJsonSchema,
+  describeJsonSchema,
+  describeOutput,
   assessmentOutput,
   assistQuestionJsonSchema,
   assistQuestionOutput,
@@ -348,6 +352,69 @@ export async function answerAssistant(
     rejectedProposal: true,
     usage,
   };
+}
+
+// ---------- Describe a step ----------
+
+export type DescribedStep = Omit<DescribeStepResponse, 'source'>;
+
+/**
+ * Turn a person's description of one step into its details (owner, tools, duration, notes) and,
+ * when the description changes what happens around the step, operations to preview. Nothing is
+ * stored or changed here. Only what the person said is kept: a duration whose number isn't in the
+ * description is dropped, and figures in the notes must come from the description or the workflow.
+ */
+export async function describeStep(provider: AiProvider, input: { graph: WorkflowGraph; stepId: string; text: string }, timeoutMs: number): Promise<{ described: DescribedStep; usage: Usage }> {
+  const { view, refs } = workflowView(input.graph);
+  const stepRef = refs.stepRefs.get(input.stepId)!;
+  const request: AiRequest = {
+    task: 'describe',
+    system: DESCRIBE_SYSTEM,
+    messages: [{ role: 'user', content: describePrompt({ view, stepRef, text: input.text }) }],
+    schema: describeJsonSchema,
+    maxTokens: 4000,
+    effort: 'low',
+    timeoutMs,
+  };
+  const source = `${input.text} ${JSON.stringify(view)}`;
+  const { result, usage } = await generateChecked<DescribedStep>(provider, request, (text) => {
+    const parsed = parseOutput(text, describeOutput);
+    if (!parsed.ok) return parsed;
+    const v = parsed.value;
+    const problems: string[] = [];
+    const figures = unsupportedFigures(v.notes, source);
+    if (figures.length) problems.push(`The notes state figures the person didn't give (${figures.join(', ')}).`);
+    let structure: DescribedStep['structure'] = null;
+    if (v.operations.length) {
+      const translated = translateOperations(v.operations, refs);
+      if (!translated.ok) return translated;
+      if (translated.value.some((o) => (o.op === 'updateStep' || o.op === 'removeStep') && o.stepId === input.stepId)) {
+        problems.push(`Don't change or remove the selected step ${stepRef} with operations: put its details in the fields.`);
+      } else {
+        const applied = applyOperations(input.graph, translated.value);
+        if (!applied.ok) problems.push(...applied.problems);
+        else structure = { summary: brief(v.change_summary.trim() || 'Add the steps you described.', 25), operations: translated.value };
+      }
+    }
+    if (problems.length) return { ok: false, problems };
+    const seen = new Set<string>();
+    const tools = v.tools
+      .map((t) => t.replace(/\s+/g, ' ').trim().slice(0, 60))
+      .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+      .slice(0, 8);
+    // A duration counts only when its number appears in what the person wrote.
+    const durationSaid = v.duration_value > 0 && v.duration_unit !== '' && new RegExp(`\\b${String(v.duration_value).replace('.', '\\.')}\\b`).test(input.text);
+    const fields: DescribedFields = {
+      ...(v.owner.trim() ? { owner: v.owner.trim().slice(0, 120) } : {}),
+      ...(tools.length ? { tools } : {}),
+      ...(durationSaid ? { duration: { value: v.duration_value, unit: v.duration_unit as NonNullable<DescribedFields['duration']>['unit'] } } : {}),
+      ...(v.notes.trim() ? { notes: v.notes.trim().slice(0, GRAPH_LIMITS.maxText) } : {}),
+    };
+    const missing = v.missing.map((q) => brief(q, 15, false)).filter(Boolean).slice(0, 2);
+    return { ok: true, value: { fields, structure, missing } };
+  });
+  if (!result.ok) throw new AiOutputError("Flico couldn't turn that description into step details. Nothing was changed; please try again or edit the fields yourself.");
+  return { described: result.value, usage };
 }
 
 // ---------- suggestQuestions (Guided Analysis) ----------

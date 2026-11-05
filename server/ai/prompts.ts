@@ -85,6 +85,29 @@ ${GRAPH_RULES}
 
 ${DATA_RULES}`;
 
+export const DESCRIBE_SYSTEM = `You turn a person's description of one step of their workflow into details for that step in Flico. The description is in <step_description>; the selected step is named in the task.
+Fill in only what the person actually said:
+- owner: who does the step (a person and/or a team, for example "Sara (Procurement)"), or "".
+- tools: the systems or tools used in this step, as the person named them, or [].
+- duration_value and duration_unit: how long the step takes, only if stated (otherwise 0 and "").
+- notes: the rest of what they said about this step, as short clear sentences; don't repeat the owner, tools or duration. "" if nothing is left.
+- operations: only when the description adds or changes what happens around this step (for example "if it's over the limit the manager approves" adds a decision and an approval after it, or an exception path). Never use update_step on the selected step: its details go in the fields above. Keep the rest of the workflow unchanged; leave operations empty when the description is only about the step itself.
+- change_summary: one short sentence describing the operations, or "".
+- missing: at most 2 short questions about what would still help understand or assess this step (for example who decides, which tool, what happens when it fails). Don't ask about anything already said.
+- Never invent names, tools, figures or durations the person didn't give.
+
+Proposing operations:
+- Use the step and connection refs exactly as given (s1, c1…). New steps get new refs n1, n2… and may be used in connections in the same proposal.
+- To insert a step between two connected steps, remove that connection and add two new ones.
+
+${GRAPH_RULES}
+
+${DATA_RULES}`;
+
+export function describePrompt(input: { view: unknown; stepRef: string; text: string }): string {
+  return [`<workflow_data>\n${embed(input.view)}\n</workflow_data>`, `<step_description>\n${embed(input.text)}\n</step_description>`, `The selected step is ${input.stepRef}. Turn the description into its details.`].join('\n\n');
+}
+
 export const FIX_INSTRUCTION =
   'Suggest the smallest set of changes that resolves the validation issues listed in <validation_issues>. Explain the fix in one or two sentences.';
 

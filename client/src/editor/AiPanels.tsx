@@ -166,7 +166,7 @@ export function DraftNotice({
 }
 
 /** Shown while an AI proposal is previewed: what changes, a legend, and Apply / Cancel. */
-export function PreviewBar({ changes, busy, onApply, onCancel }: { changes: GraphChanges; busy: boolean; onApply: () => void; onCancel: () => void }) {
+export function PreviewBar({ changes, busy, onApply, onCancel, title = "Previewing Flico's suggestion" }: { changes: GraphChanges; busy: boolean; onApply: () => void; onCancel: () => void; title?: string }) {
   const parts = [
     changes.addedNodes.length && `${changes.addedNodes.length} added`,
     changes.modifiedNodes.length && `${changes.modifiedNodes.length} updated`,
@@ -176,7 +176,7 @@ export function PreviewBar({ changes, busy, onApply, onCancel }: { changes: Grap
   return (
     <div role="region" aria-label="Suggested change preview" className="absolute left-1/2 top-12 z-20 flex -translate-x-1/2 items-center gap-4 rounded-[14px] border border-fl-border bg-white px-4 py-2.5 shadow-fl-float">
       <div className="text-[13px]">
-        <p className="font-semibold text-fl-text">Previewing Flico's suggestion</p>
+        <p className="font-semibold text-fl-text">{title}</p>
         <p className="text-[12px] text-fl-text-muted">
           {parts.length ? `Steps: ${parts.join(', ')}` : 'No step changes'}
           {connections ? ` · ${connections} connection change${connections === 1 ? '' : 's'}` : ''} · Editing is paused until you decide

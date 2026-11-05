@@ -18,7 +18,9 @@ import { useAuth } from '../lib/auth';
 import { useAutosave } from '../lib/useAutosave';
 import { useFullscreen } from '../lib/useFullscreen';
 import { renameWorkflow, saveWorkflowGraph } from '../lib/workflows';
-import { applyProposal, cancelProposal, createAiDraft, fetchAiStatus, quickAddStep, removeAssumption, updateAssumption } from '../lib/ai';
+import { applyProposal, cancelProposal, createAiDraft, describeStep, fetchAiStatus, quickAddStep, removeAssumption, updateAssumption } from '../lib/ai';
+import { DescribeBox } from './DescribeBox';
+import { describedPatch, type FilledField } from './describe';
 import { AskFlico } from './AskFlico';
 import { AssumptionsPanel, DraftNotice, PreviewBar } from './AiPanels';
 import { useChat, type ChatRequest } from './useChat';
@@ -86,7 +88,8 @@ type Dialog =
   | { kind: 'delete'; nodeId: string }
   | { kind: 'connect'; fromId: string };
 
-type Preview = { messageId: string; graph: WorkflowGraph; changes: GraphChanges };
+/** A change shown on the canvas before it is applied: Ask Flico's suggestion, or new steps from describing a step. */
+type Preview = { source: { kind: 'chat'; messageId: string } | { kind: 'describe'; stepId: string; summary: string }; graph: WorkflowGraph; changes: GraphChanges };
 export type AiDraftState = { aiDraft?: { partial: boolean; source: AiSource; description: string } };
 
 const PREVIEW_REASON = 'Apply or cancel the suggestion first.';
@@ -113,6 +116,16 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  // Describe a step (double-click): the box, and what the last description filled in.
+  const [describeId, setDescribeId] = useState<string | null>(null);
+  const [describeBusy, setDescribeBusy] = useState(false);
+  const [describeError, setDescribeError] = useState<string | null>(null);
+  const [describeNotice, setDescribeNotice] = useState<string | null>(null);
+  // What the last description filled in, for the details card's banner and its one-click Undo.
+  const [filled, setFilled] = useState<{ stepId: string; fields: FilledField[]; missing: string[]; fixture: boolean; before: StepPatch; after: WorkflowGraph } | null>(null);
+  // Bumped when the step's details change from outside the card, so the card shows them.
+  const [detailsVersion, setDetailsVersion] = useState(0);
+
   /** Where the block-details card was dragged (kept for this editor session only). */
   const [detailsPosition, setDetailsPosition] = useState<{ left: number; top: number } | null>(null);
   /** Details edits of one card session are a single undo step. */
@@ -207,6 +220,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   // Steps that disappeared (undo, delete) can't stay selected.
   const selected = selectedId && findNode(graph, selectedId) ? selectedId : null;
   const detailsNode = detailsId ? findNode(graph, detailsId) : undefined;
+  const describeNode = describeId ? findNode(graph, describeId) : undefined;
   const labelOf = useCallback((id: string) => findNode(graph, id)?.label || 'Untitled step', [graph]);
 
   /**
@@ -458,6 +472,13 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
         ...(node ? {} : { disabledReason: none }),
         onClick: () => node && openDetails(node.id),
       },
+      {
+        id: 'describe',
+        label: 'Describe step',
+        icon: TOOLBAR_ICONS.describe,
+        ...(node ? {} : { disabledReason: none }),
+        onClick: () => node && openDescribe(node.id),
+      },
       stepAction('action', 'Add action'),
       stepAction('decision', 'Add decision'),
       stepAction('approval', 'Add approval'),
@@ -472,6 +493,8 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
 
   const openDetails = (id: string) => {
     setSelectedId(id);
+    setDescribeId(null);
+    if (filled && filled.stepId !== id) setFilled(null);
     setDetailsId(id);
     setDetailsSession({ nodeId: id, committed: false });
   };
@@ -501,6 +524,87 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
     const same = now && persisted && JSON.stringify({ ...now, position: null }) === JSON.stringify({ ...persisted, position: null });
     if (same) return 'saved';
     return save.status === 'error' || save.status === 'conflict' ? 'error' : 'saving';
+  };
+
+  // ---------- Describe a step (double-click): the person's words become its details ----------
+
+  const openDescribe = (id: string) => {
+    setSelectedId(id);
+    setDetailsId(null);
+    setDescribeError(null);
+    setDescribeNotice(null);
+    setDescribeId(id);
+  };
+
+  const submitDescribe = async (id: string, text: string) => {
+    setDescribeBusy(true);
+    setDescribeError(null);
+    setDescribeNotice(null);
+    try {
+      const baseRevision = await save.flushNow();
+      const result = await describeStep(workflow.id, id, { text, baseRevision });
+      const current = graphRef.current;
+      const node = findNode(current, id);
+      if (!node) {
+        setDescribeId(null);
+        return;
+      }
+      const { patch, before, filled: fields } = describedPatch(node, result.fields);
+      if (!fields.length && !result.structure) {
+        setDescribeNotice("Flico didn't find anything new to add. Try saying who does it, which tool they use, how long it takes, or what happens next.");
+        return;
+      }
+      let after = current;
+      if (fields.length) {
+        after = updateStep(current, id, patch).graph;
+        commit(after);
+      }
+      setDescribeId(null);
+      setFilled(fields.length ? { stepId: id, fields, missing: result.missing, fixture: result.source === 'fixture', before, after } : null);
+      setDetailsVersion((v) => v + 1);
+      const structure = result.structure;
+      if (structure) {
+        // New or rewired steps are only previewed; nothing changes until Apply.
+        const applied = applyOperations(after, structure.operations);
+        if (applied.ok) {
+          const placed = placeNewSteps(after, applied.graph);
+          const changes = diffGraphs(after, placed);
+          setDetailsId(null);
+          setPreview({ source: { kind: 'describe', stepId: id, summary: structure.summary }, graph: placed, changes });
+          reveal([...changes.addedNodes, ...changes.modifiedNodes, ...changes.removedNodes]);
+          return;
+        }
+        setNotice('The new steps from your description no longer fit the workflow, so only the details were filled.');
+      }
+      if (fields.length) openDetailsAfterFill(id);
+    } catch (error) {
+      setDescribeError((error as Error).message);
+    } finally {
+      setDescribeBusy(false);
+    }
+  };
+
+  /** Open the card for a step whose details were just filled (keeps the banner). */
+  const openDetailsAfterFill = (id: string) => {
+    setSelectedId(id);
+    setDetailsId(id);
+    setDetailsSession({ nodeId: id, committed: false });
+  };
+
+  /** Undo what the description filled in: one undo step back, or the exact earlier values if more happened since. */
+  const undoFill = () => {
+    if (!filled) return;
+    if (graphRef.current === filled.after) history.undo();
+    else {
+      try {
+        commit(updateStep(graphRef.current, filled.stepId, filled.before).graph);
+      } catch (error) {
+        if (error instanceof GraphOpError) setNotice(error.message);
+        else throw error;
+      }
+    }
+    setFilled(null);
+    setDetailsVersion((v) => v + 1);
   };
 
   const showIssue = (issue: Issue) => {
@@ -538,7 +642,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
       setEditing(null);
       setSelectedId(null);
       setNotice(null);
-      setPreview({ messageId: message.id, graph: placed, changes });
+      setPreview({ source: { kind: 'chat', messageId: message.id }, graph: placed, changes });
       reveal([...changes.addedNodes, ...changes.modifiedNodes, ...changes.removedNodes]);
     } catch (error) {
       setNotice((error as Error).message);
@@ -550,10 +654,21 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   /** Apply the previewed proposal: one server-checked, all-or-nothing change and one undoable step. */
   const applyPreview = async () => {
     if (!preview || proposalBusy) return;
+    if (preview.source.kind === 'describe') {
+      // New steps from a description: applied here as one undoable step; autosave stores them.
+      const { stepId } = preview.source;
+      const added = preview.changes.addedNodes;
+      commit(preview.graph);
+      setPreview(null);
+      if (added.length) reveal(added);
+      if (filled?.stepId === stepId) openDetails(stepId);
+      return;
+    }
+    const messageId = preview.source.messageId;
     setProposalBusy(true);
     try {
       await save.flushNow();
-      const result = await applyProposal(workflow.id, preview.messageId);
+      const result = await applyProposal(workflow.id, messageId);
       save.rebase(result.graph, result.revision);
       commit(result.graph);
       chat.replace(result.message);
@@ -570,7 +685,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   };
 
   const cancelSuggestion = async (message: ChatMessage) => {
-    if (preview?.messageId === message.id) setPreview(null);
+    if (preview?.source.kind === 'chat' && preview.source.messageId === message.id) setPreview(null);
     try {
       chat.replace(await cancelProposal(workflow.id, message.id));
     } catch (error) {
@@ -835,7 +950,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
-            // One click selects (the step toolbar acts on it); a double-click opens the details card.
+            // One click selects (the step toolbar acts on it); a double-click opens Describe this step.
             onNodeClick={(_, node) => {
               if (preview) return;
               setSelectedId(node.id);
@@ -843,11 +958,12 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
             }}
             onNodeDoubleClick={(_, node) => {
               if (preview) return;
-              openDetails(node.id);
+              openDescribe(node.id);
             }}
             onPaneClick={() => {
               setSelectedId(null);
               setDetailsId(null);
+              if (!describeBusy) setDescribeId(null);
             }}
             onEdgeMouseEnter={(_, edge: Edge) => ui.hoverEdge(edge.id)}
             onEdgeMouseLeave={() => ui.hoverEdge(null)}
@@ -914,11 +1030,25 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               onDismiss={() => setDraftNotice(null)}
             />
           )}
-          {preview && <PreviewBar changes={preview.changes} busy={proposalBusy} onApply={() => void applyPreview()} onCancel={() => {
-            const message = chat.messages?.find((m) => m.id === preview.messageId);
-            if (message) void cancelSuggestion(message);
-            else setPreview(null);
-          }} />}
+          {preview && (
+            <PreviewBar
+              changes={preview.changes}
+              busy={proposalBusy}
+              title={preview.source.kind === 'describe' ? preview.source.summary : undefined}
+              onApply={() => void applyPreview()}
+              onCancel={() => {
+                const source = preview.source;
+                if (source.kind === 'describe') {
+                  setPreview(null);
+                  if (filled?.stepId === source.stepId) openDetails(source.stepId);
+                  return;
+                }
+                const message = chat.messages?.find((m) => m.id === source.messageId);
+                if (message) void cancelSuggestion(message);
+                else setPreview(null);
+              }}
+            />
+          )}
           {toast && !notice && (
             <div role="status" className="absolute bottom-6 left-1/2 z-20 flex max-w-[560px] -translate-x-1/2 items-center gap-3 rounded-[12px] border border-fl-border bg-white px-4 py-2.5 text-[13px] text-fl-text shadow-fl-float">
               {toast.text}
@@ -958,9 +1088,30 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
         />
       )}
 
+      {describeNode && !dialog && !preview && (
+        <DescribeBox
+          key={describeNode.id}
+          node={describeNode}
+          anchor={() => nodeElement(describeNode.id)}
+          busy={describeBusy}
+          error={describeError}
+          notice={describeNotice}
+          available={!!ai?.available}
+          onSubmit={(text) => void submitDescribe(describeNode.id, text)}
+          onEditFields={() => openDetails(describeNode.id)}
+          onClose={(returnFocus) => {
+            setDescribeId(null);
+            if (returnFocus) nodeElement(describeNode.id)?.focus({ preventScroll: true });
+          }}
+        />
+      )}
+
       {detailsNode && !dialog && (
         <StepPopover
-          key={detailsNode.id}
+          key={`${detailsNode.id}:${detailsVersion}`}
+          filled={filled?.stepId === detailsNode.id ? filled : null}
+          onUndoFill={undoFill}
+          onDescribe={() => openDescribe(detailsNode.id)}
           graph={graph}
           node={detailsNode}
           anchor={() => nodeElement(detailsNode.id)}
@@ -981,6 +1132,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           onMove={setDetailsPosition}
           onClose={(returnFocus) => {
             setDetailsId(null);
+            setFilled(null);
             if (returnFocus) nodeElement(detailsNode.id)?.focus({ preventScroll: true });
           }}
           onDelete={() => setDialog({ kind: 'delete', nodeId: detailsNode.id })}
@@ -1013,7 +1165,7 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
           failed={chat.failed}
           context={chatContext}
           hasIssues={issues.length > 0}
-          previewId={preview?.messageId ?? null}
+          previewId={preview?.source.kind === 'chat' ? preview.source.messageId : null}
           busyProposal={proposalBusy}
           onSend={(content: string, mode: ChatMode) => void askFlico({ content, mode, ...(chatContext ? { stepId: chatContext.stepId } : {}) })}
           onRetry={() => chat.failed && void askFlico(chat.failed.request)}

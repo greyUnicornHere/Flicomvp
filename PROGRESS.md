@@ -158,6 +158,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Flico only uses what you said: a duration whose number you didn't write is dropped, and it can't change or remove the step itself through new steps. No analysis credit is used; it counts toward the daily Ask Flico limit.
 - **Ask Flico** stays in the card for questions. Describe is for changing the step.
 - Voice ("Talk me through it", Whisper in the browser) is parked, as agreed: a microphone can be added to this box later.
+- Owner feedback (2026-11-05): "Manager directs the supervisor to create a PR in SAP", written on "Manager approves request", now proposes a new step, "Supervisor creates PR in SAP", inserted right after the approval and shown as a preview first, as the owner chose. The manager's step keeps the instruction in its notes. SAP goes with the new step, not the manager's.
 
 ## Known issues / limitations
 

@@ -398,9 +398,12 @@ export async function describeStep(provider: AiProvider, input: { graph: Workflo
     }
     if (problems.length) return { ok: false, problems };
     const seen = new Set<string>();
+    // A tool named for a new step (for example "Supervisor creates PR in SAP") belongs to that step, not this one.
+    const newSteps = (structure?.operations ?? []).flatMap((o) => (o.op === 'addStep' ? [`${o.label} ${o.notes ?? ''}`.toLowerCase()] : []));
     const tools = v.tools
       .map((t) => t.replace(/\s+/g, ' ').trim().slice(0, 60))
       .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+      .filter((t) => !newSteps.some((text) => new RegExp(`\\b${t.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text)))
       .slice(0, 8);
     // A duration counts only when its number appears in what the person wrote.
     const durationSaid = v.duration_value > 0 && v.duration_unit !== '' && new RegExp(`\\b${String(v.duration_value).replace('.', '\\.')}\\b`).test(input.text);

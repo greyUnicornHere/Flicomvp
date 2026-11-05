@@ -57,6 +57,41 @@ describe('describe a step', () => {
     expect(now.graph).toEqual(workflow.graph);
   });
 
+  it('a hand-off to someone else becomes a new step after this one (previewed), and its tool stays with that step', async () => {
+    const { t, alice, workflow } = await setup(new FixtureProvider());
+    const body = (await send(t, alice.cookie, workflow.id, 'n-log', { text: 'Manager directs the supervisor to create a PR in SAP.', baseRevision: workflow.revision })).json() as DescribeStepResponse;
+    expect(body.structure!.summary).toBe('Add “Supervisor creates PR in SAP” after this step.');
+    const added = body.structure!.operations.find((o) => o.op === 'addStep');
+    expect(added).toMatchObject({ type: 'action', label: 'Supervisor creates PR in SAP', notes: 'Owner: Supervisor. Tool: SAP.' });
+    // Inserted between this step and the next, so the flow stays connected.
+    const applied = applyOperations(workflow.graph, body.structure!.operations);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    const id = (added as { id: string }).id;
+    expect(applied.graph.edges.filter((e) => e.sourceId === 'n-log').map((e) => e.targetId)).toEqual([id]);
+    expect(applied.graph.edges.filter((e) => e.sourceId === id).map((e) => e.targetId)).toEqual(['n-quote']);
+    expect(body.fields.tools).toBeUndefined();
+    expect(body.fields.notes).toMatch(/directs the supervisor/);
+  });
+
+  it('drops a tool from the described step when the model puts it on a new step too', async () => {
+    const output = scripted({
+      tools: ['SAP', 'Email'],
+      notes: 'Directs the supervisor to raise the PR.',
+      change_summary: 'Add "Supervisor creates PR in SAP" after this step.',
+      operations: [
+        op({ op: 'add_step', new_ref: 'n1', type: 'action', label: 'Supervisor creates PR in SAP', notes: 'Owner: Supervisor. Tool: SAP.' }),
+        op({ op: 'remove_connection', connection: 'c2' }),
+        op({ op: 'add_connection', from: 's2', to: 'n1', connection_type: 'normal' }),
+        op({ op: 'add_connection', from: 'n1', to: 's3', connection_type: 'normal' }),
+      ],
+    });
+    const { t, alice, workflow } = await setup(new Scripted([output]));
+    const body = (await send(t, alice.cookie, workflow.id, 'n-log', { text: 'Manager emails the supervisor to create a PR in SAP.', baseRevision: workflow.revision })).json() as DescribeStepResponse;
+    expect(body.fields.tools).toEqual(['Email']);
+    expect(body.structure!.operations).toHaveLength(4);
+  });
+
   it('keeps only what was said: a duration not in the text is dropped; no structure for a plain description', async () => {
     const ai = new Scripted([scripted({ owner: 'Finance', duration_value: 30, duration_unit: 'minutes', notes: 'Checks the totals.' })]);
     const { t, alice, workflow } = await setup(ai);

@@ -406,4 +406,9 @@ The owner asked for a way to clarify each assessment and then, based on its clas
   - The fill is committed as one undo step, and the banner's Undo restores the exact earlier values.
   - New steps reuse the canvas preview. A previewed description is applied in the browser as one undoable change, saved by autosave; the server validates the graph as for any edit.
 - Ask Flico about this step stays in the details card for questions; the original plan to replace it changed, because Describe only edits the step.
+- Hand-offs (owner feedback, 2026-11-05):
+  - Work that someone else then does ("X directs Y to do Z") is a new step after the described one, inserted before the step that follows. It is still previewed first, by owner choice.
+  - The described step's fields cover only what happens in it, done by its own owner.
+  - Safeguard: a tool named in a new step's name or notes is dropped from the described step's tools.
+  - New steps carry their owner and tool in their notes ("Owner: Supervisor. Tool: SAP."), because AI-proposed steps can't yet set those fields directly.
 

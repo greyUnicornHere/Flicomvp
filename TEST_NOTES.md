@@ -616,3 +616,18 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 | Nothing new: the box stays open with a hint and nothing is saved; Escape returns focus to the step | Pass | E2E |
 | Server: changes nothing; drops an unstated duration; refuses operations that change the described step (after one retry); checks revision, step and owner | Pass | API `describe.api.test.ts` |
 
+### Owner feedback round 1 (same branch): hand-offs become the next step
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **326 / 326 pass** (2 new hand-off tests in `describe.api.test.ts`) |
+| Browser E2E | `npm run test:e2e` | **80 / 80 pass** (1 new in `describe.spec.ts`) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| "Manager directs the supervisor to create a PR in SAP" previews "Supervisor creates PR in SAP" after the step, connected to the next step; applying saves it; the described step gets no SAP tool | Pass | E2E; API; `docs/evidence/describe/04-handoff-new-step-preview-1536-test-fixture.png` |
+| A tool the model also puts on a new step is dropped from the described step | Pass | API `describe.api.test.ts` |
+
+Live AI isn't available in this environment, so the live model's behaviour here relies on the updated instructions and still needs the owner's test on their PC.
+

@@ -137,3 +137,23 @@ test('nothing new to add keeps the box open with a hint; Escape closes it and re
   await box(page).getByRole('button', { name: 'Edit fields myself' }).click();
   await expect(card(page).getByRole('button', { name: 'Ask Flico about this step' })).toBeVisible();
 });
+
+test('a hand-off ("directs the supervisor to create a PR in SAP") adds the next step after this one, previewed first', async ({ page }) => {
+  const id = await open(page);
+  await step(page, 'Log the request').dblclick();
+  await box(page).getByLabel('Describe this step in your own words').fill('Manager directs the supervisor to create a PR in SAP.');
+  await box(page).getByRole('button', { name: /Update step/ }).click();
+  const bar = page.getByRole('region', { name: 'Suggested change preview' });
+  await expect(bar).toContainText('Add “Supervisor creates PR in SAP” after this step.');
+  await expect(page.locator('[aria-label="Workflow diagram"] .fl-node[data-diff="added"]')).toHaveCount(1);
+  await page.screenshot({ path: `${SHOTS}/04-handoff-new-step-preview-1536-test-fixture.png` });
+  await bar.getByRole('button', { name: 'Apply' }).click();
+  await expect
+    .poll(async () => {
+      const w = await stored(page, id);
+      const added = node(w, 'Supervisor creates PR in SAP');
+      const log = node(w, 'Log the request')!;
+      return [!!added, w.graph.edges.some((e) => e.sourceId === log.id && e.targetId === added?.id), log.tools ?? []];
+    }, { timeout: 8000 })
+    .toEqual([true, true, []]);
+});

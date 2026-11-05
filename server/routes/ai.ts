@@ -4,6 +4,7 @@ import {
   AI_CHAT_MESSAGE_MAX,
   AI_DESCRIPTION_MAX,
   AI_QUICK_ADD_MAX,
+  DESCRIBE_TEXT_MAX,
   ASSUMPTION_TEXT_MAX,
   type AiDraftResponse,
   type AiStatusResponse,
@@ -13,6 +14,7 @@ import {
   type ChatHistoryResponse,
   type ChatMessage,
   type ChatReplyResponse,
+  type DescribeStepResponse,
   type QuickAddResponse,
 } from '../../shared/api.js';
 import { applyOperations } from '../../shared/aiOps.js';
@@ -21,7 +23,7 @@ import { placeNewSteps } from '../../shared/layout.js';
 import { transaction } from '../db/database.js';
 import { requireAuth, sendError, type AppContext } from '../http.js';
 import { AI_ERROR_MESSAGES, AiError, type AiProvider } from '../ai/provider.js';
-import { AiOutputError, answerAssistant, generateWorkflow, quickAdd, type HistoryTurn } from '../ai/service.js';
+import { AiOutputError, answerAssistant, describeStep, generateWorkflow, quickAdd, type HistoryTurn } from '../ai/service.js';
 import { appendExchange, clearChat, getMessage, listMessages, recordUsage, setProposalStatus, usedToday } from '../ai/store.js';
 import { validateGraph } from '../workflows/graph.js';
 import { currentAnalysis } from '../analysis/store.js';
@@ -48,7 +50,13 @@ const assumptionBody = z
   })
   .refine((b) => b.text !== undefined || b.status !== undefined, 'Nothing to change.');
 
+const describeBody = z.strictObject({
+  text: text(DESCRIBE_TEXT_MAX, 'Describe the step first.', `Descriptions can be up to ${DESCRIBE_TEXT_MAX} characters.`),
+  baseRevision: z.number().int().positive(),
+});
+
 type IdParams = { Params: { id: string } };
+type StepParams = { Params: { id: string; stepId: string } };
 type MessageParams = { Params: { id: string; messageId: string } };
 type AssumptionParams = { Params: { id: string; assumptionId: string } };
 
@@ -177,6 +185,30 @@ export const aiRoutes =
         const step = await quickAdd(provider!, parsed.data, timeouts.quick_add);
         recordUsage(db, userId, 'quick_add', provider!.source, step.usage, ctx.now());
         const body: QuickAddResponse = { step: { type: step.type, label: step.label }, source: provider!.source };
+        return body;
+      } catch (error) {
+        return fail(request, reply, error);
+      }
+    });
+
+    // ---------- Describe a step: details from the person's own words (nothing is changed here) ----------
+
+    app.post<StepParams>('/workflows/:id/steps/:stepId/describe', rateLimit, async (request, reply) => {
+      const parsed = describeBody.safeParse(request.body);
+      if (!parsed.success) return sendError(reply, 400, 'bad_request', parsed.error.issues[0]?.message ?? 'Invalid description.');
+      const userId = request.user!.id;
+      const workflow = getWorkflow(db, userId, request.params.id);
+      if (!workflow) return sendError(reply, 404, 'not_found', NOT_FOUND);
+      const step = workflow.graph.nodes.find((n) => n.id === request.params.stepId);
+      if (!step) return sendError(reply, 404, 'not_found', 'That step no longer exists.');
+      if (!gate(request, reply, 'chat')) return reply;
+      if (workflow.revision !== parsed.data.baseRevision) {
+        return sendError(reply, 409, 'conflict', "Your latest changes haven't finished saving. Please try again in a moment.");
+      }
+      try {
+        const { described, usage } = await describeStep(provider!, { graph: workflow.graph, stepId: step.id, text: parsed.data.text }, timeouts.chat);
+        recordUsage(db, userId, 'chat', provider!.source, usage, ctx.now());
+        const body: DescribeStepResponse = { ...described, source: provider!.source };
         return body;
       } catch (error) {
         return fail(request, reply, error);

@@ -145,6 +145,21 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
   - When Clarify finishes, the card shows what changed, with **Done** and **Create brief →**. The questions before a brief work the same way; when they're done, the brief is written and opens by itself.
   - Ask Flico no longer shows these questions and answers. They stay saved with the analysis, and the answers appear under "Why" (as "You said").
 
+## Describe a step (owner request; awaiting owner review on branch `describe-step`)
+
+- **Double-clicking a step opens "Describe this step"**, a small window next to the step with the cursor ready in the text box. You type in your own words who does it, which tool, how long it takes, and what happens next or when it goes wrong. **Update step** (or Ctrl/⌘+Enter) sends it. **Edit fields myself** opens the normal details card instead, as do **Edit details** and Enter. The toolbar has a new **Describe step** button.
+- **The details card fills in.**
+  - Owner / team, Tools, Duration and Notes are filled from what you wrote, each marked "✦ New".
+  - Nothing already there is lost: tools are added to, notes are appended to, and owner and duration change only if you said something different.
+  - A banner says "N details filled from your description", with **Describe more** and **Undo**. Undo takes back exactly what was filled; Ctrl+Z works too, since the fill is one undo step.
+  - The banner also suggests up to two things still worth adding.
+- **New steps are previewed first.** If the description changes what happens around the step (for example "if it's over the limit the manager approves"), the new steps appear on the canvas as a preview with **Apply** or **Cancel**. The details are kept either way.
+- If Flico finds nothing new, the window stays open with a hint, and nothing is saved.
+- Flico only uses what you said: a duration whose number you didn't write is dropped, and it can't change or remove the step itself through new steps. No analysis credit is used; it counts toward the daily Ask Flico limit.
+- **Ask Flico** stays in the card for questions. Describe is for changing the step.
+- Voice ("Talk me through it", Whisper in the browser) is parked, as agreed: a microphone can be added to this box later.
+- Owner feedback (2026-11-05): "Manager directs the supervisor to create a PR in SAP", written on "Manager approves request", now proposes a new step, "Supervisor creates PR in SAP", inserted right after the approval and shown as a preview first, as the owner chose. The manager's step keeps the instruction in its notes. SAP goes with the new step, not the manager's.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -174,4 +189,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/` and `docs/evidence/action-plan/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/`, `docs/evidence/action-plan/` and `docs/evidence/describe/`.

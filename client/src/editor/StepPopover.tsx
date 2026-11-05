@@ -6,6 +6,7 @@ import type { StepType, WorkflowGraph, WorkflowNode } from '../../../shared/grap
 import { placePanel } from '../lib/placement';
 import { allowedTypeChanges, BRANCH_LABEL, connectTargets, decisionPaths, findNode, openBranches, outgoing, type StepPatch } from './ops';
 import { DURATION_UNITS, STEP_META } from './stepMeta';
+import type { FilledField } from './describe';
 
 type Props = {
   graph: WorkflowGraph;
@@ -26,6 +27,11 @@ type Props = {
   /** Where the person dragged the card this session (null: next to the step). */
   position: { left: number; top: number } | null;
   onMove: (position: { left: number; top: number }) => void;
+  /** Details just filled from the person's description: shown with a banner and marked as new. */
+  filled?: { fields: FilledField[]; missing: string[]; fixture: boolean } | null;
+  onUndoFill?: () => void;
+  /** Open the Describe box for this step. */
+  onDescribe?: () => void;
 };
 
 const HEADER = 76;
@@ -88,7 +94,9 @@ export function StepPopover(props: Props) {
     `${e.type === 'loop' ? 'Repeats ' : e.type === 'exception' ? 'Exception: ' : e.label ? `${e.label} → ` : '→ '}${label(e.targetId)}`;
 
   // Duration, tools and notes always start folded; the summary line shows what's inside (owner choice).
-  const [moreOpen, setMoreOpen] = useState(false);
+  // Closed by default (owner feedback); open when a description just filled one of its fields.
+  const [moreOpen, setMoreOpen] = useState(() => !!props.filled?.fields.some((f) => f !== 'owner'));
+  const isNew = (field: FilledField) => !!props.filled?.fields.includes(field);
   // Connections fold away too, unless a Yes/No path still needs setting.
   const [connectionsOpen, setConnectionsOpen] = useState(() => open.length > 0);
   const moreId = useId();
@@ -329,6 +337,26 @@ export function StepPopover(props: Props) {
         </div>
       )}
 
+      {props.filled && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-fl-border bg-fl-brand-pale/50 px-4 py-2 text-[12.5px]" role="status" data-testid="filled-banner">
+          <Sparkles size={14} aria-hidden="true" className="flex-none text-fl-brand" />
+          <span className="min-w-0 flex-1 text-[var(--fl-action-ink)]">
+            {props.filled.fields.length} detail{props.filled.fields.length === 1 ? '' : 's'} filled from your description{props.filled.fixture ? ' (test fixture)' : ''}
+          </span>
+          {props.onDescribe && (
+            <button type="button" className="fl-link text-[12.5px]" onClick={props.onDescribe}>
+              Describe more
+            </button>
+          )}
+          {props.onUndoFill && (
+            <button type="button" className="fl-link text-[12.5px]" onClick={props.onUndoFill}>
+              Undo
+            </button>
+          )}
+          {props.filled.missing.length > 0 && <p className="w-full text-[12px] text-fl-text-secondary">Still useful: {props.filled.missing.join(' ')}</p>}
+        </div>
+      )}
+
       <div onBlur={() => commit()} onKeyDown={commitOnEnter}>
         <div className="space-y-3 px-4 pb-1.5 pt-3.5">
           <Field label="Type" className={row} labelClass={fieldLabel}>
@@ -389,7 +417,7 @@ export function StepPopover(props: Props) {
               </div>
             </div>
           )}
-          <Field label="Owner / team" className={row} labelClass={fieldLabel}>
+          <Field label="Owner / team" className={row} labelClass={fieldLabel} isNew={isNew('owner')}>
             {(id) => <input id={id} className="fl-input !min-h-[38px]" value={fields.owner} maxLength={200} placeholder="Who does this?" onChange={set('owner')} />}
           </Field>
         </div>
@@ -402,7 +430,7 @@ export function StepPopover(props: Props) {
           </button>
           {moreOpen && (
             <div id={moreId} className="space-y-2.5 px-2 pb-2 pt-1">
-              <Field label="Duration" className={row} labelClass={fieldLabel}>
+              <Field label="Duration" className={row} labelClass={fieldLabel} isNew={isNew('duration')}>
                 {(id) => (
                   <div className="flex gap-2">
                     <input id={id} className="fl-input !min-h-[38px] w-[84px]" type="number" min={0} step="any" inputMode="decimal" value={fields.durationValue} onChange={set('durationValue')} />
@@ -414,7 +442,7 @@ export function StepPopover(props: Props) {
                   </div>
                 )}
               </Field>
-              <Field label="Tools" className={row} labelClass={fieldLabel}>
+              <Field label="Tools" className={row} labelClass={fieldLabel} isNew={isNew('tools')}>
                 {(id) => (
                   <div className="fl-input flex !min-h-[38px] flex-wrap items-center gap-1.5 !py-1 !pl-1.5 focus-within:outline focus-within:outline-2 focus-within:outline-[var(--fl-focus)]">
                     {fields.tools.map((t) => (
@@ -446,7 +474,7 @@ export function StepPopover(props: Props) {
                   </div>
                 )}
               </Field>
-              <Field label="Notes" className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-2.5" labelClass={`${fieldLabel} pt-[9px]`}>
+              <Field label="Notes" className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-2.5" labelClass={`${fieldLabel} pt-[9px]`} isNew={isNew('notes')}>
                 {(id) => (
                   <textarea
                     id={id}
@@ -583,12 +611,18 @@ function diff(n: WorkflowNode, f: Fields): StepPatch | null {
   return Object.keys(patch).length ? patch : null;
 }
 
-function Field({ label, className, labelClass, children }: { label: string; className: string; labelClass: string; children: (id: string) => React.ReactNode }) {
+function Field({ label, className, labelClass, children, isNew = false }: { label: string; className: string; labelClass: string; children: (id: string) => React.ReactNode; isNew?: boolean }) {
   const id = useId();
   return (
-    <div className={className}>
+    <div className={`${className} ${isNew ? '-mx-1.5 rounded-[10px] bg-fl-brand-pale/40 px-1.5 py-1' : ''}`} data-filled={isNew || undefined}>
       <label htmlFor={id} className={labelClass}>
         {label}
+        {isNew && (
+          <span className="ml-1 text-[10px] font-bold text-fl-brand">
+            <span aria-hidden="true">✦ New</span>
+            <span className="fl-sr-only">, filled from your description</span>
+          </span>
+        )}
       </label>
       {children(id)}
     </div>

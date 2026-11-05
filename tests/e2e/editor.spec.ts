@@ -2,6 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import type { WorkflowGraph } from '../../shared/graph';
 import { signIn, uniqueEmail } from './helpers';
 
+/** Double-clicking a step opens Describe; this opens the details card from there. */
+const editFieldsMyself = (page: Page) => page.getByRole('button', { name: 'Edit fields myself' }).click();
+
 const SHOTS = 'docs/evidence/m2';
 
 // ---------- helpers ----------
@@ -138,6 +141,7 @@ test('E03/E04: decision with two independent outcomes, then the paths merge at F
 
   await addAfter(page, 'Confirm order', 'Finish');
   await step(page, 'Request restock').dblclick();
+  await editFieldsMyself(page);
   await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: /^Connections/ }).click();
   await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: 'Connect to a step…' }).click();
   const connect = page.getByRole('dialog', { name: 'Connect to a step' });
@@ -244,6 +248,7 @@ test('E09: step details popover — all fields, persists, Escape returns focus',
     edges: [{ id: 'e1', sourceId: 's', targetId: 'a', type: 'normal' }],
   });
   await step(page, 'Receive order').dblclick();
+  await editFieldsMyself(page);
   const pop = page.getByRole('dialog', { name: 'Edit step' });
   await expect(pop.getByLabel('Step name')).toBeFocused();
   await pop.getByLabel('Type').selectOption('Approval');
@@ -263,6 +268,7 @@ test('E09: step details popover — all fields, persists, Escape returns focus',
     .toMatchObject({ type: 'approval', owner: 'Sales team', duration: { value: 5, unit: 'hours' }, tools: ['Order system', 'Email'], notes: 'Check the PO number' });
   await page.reload();
   await step(page, 'Receive order').dblclick();
+  await editFieldsMyself(page);
   await expect(page.getByRole('dialog', { name: 'Edit step' }).getByLabel('Owner / team')).toHaveValue('Sales team');
 });
 
@@ -278,6 +284,7 @@ test('E10/E11/E12: delete shows affected connections; cancel, confirm with recon
   const original = await stored(page, id);
 
   await step(page, 'Verify stock').dblclick();
+  await editFieldsMyself(page);
   await page.getByRole('dialog', { name: 'Edit step' }).getByRole('button', { name: 'Delete' }).click();
   let dialog = page.getByRole('dialog', { name: 'Delete this step?' });
   await expect(dialog.getByRole('listitem')).toHaveText(['Receive order → Verify stock', 'Verify stock → Finish']);
@@ -470,6 +477,7 @@ test('long names: the block grows so the whole name shows (owner feedback 2026-1
   expect(await label.evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && getComputedStyle(el).webkitLineClamp !== '2')).toBe(true);
   await expect(block).toHaveAttribute('aria-label', `Action step: ${long}`);
   await block.dblclick();
+  await editFieldsMyself(page);
   await expect(page.getByRole('dialog', { name: 'Edit step' }).getByLabel('Step name')).toHaveValue(long);
   await page.screenshot({ path: 'docs/evidence/feedback-m4/01-long-name-grows-1536.png' });
 });

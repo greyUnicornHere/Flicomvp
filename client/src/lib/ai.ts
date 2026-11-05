@@ -8,6 +8,8 @@ import type {
   ChatMessage,
   ChatMode,
   ChatReplyResponse,
+  DescribeStepRequest,
+  DescribeStepResponse,
   QuickAddRequest,
   QuickAddResponse,
 } from '../../../shared/api';
@@ -52,3 +54,8 @@ export async function removeAssumption(workflowId: string, id: string): Promise<
   const path = `${workflowPath(workflowId)}/assumptions/${encodeURIComponent(id)}`;
   return (await api<AssumptionsResponse>(path, { method: 'DELETE' })).assumptions;
 }
+
+/** Turn a description of one step into its details (and any new steps around it, to preview). Changes nothing. */
+export const describeStep = (workflowId: string, stepId: string, request: DescribeStepRequest) =>
+  api<DescribeStepResponse>(`${workflowPath(workflowId)}/steps/${encodeURIComponent(stepId)}/describe`, { method: 'POST', body: request });
+

@@ -65,12 +65,27 @@ test('analysis: diagram and recommendations together in full screen, then the fi
   await expect(section).toHaveAttribute('data-expanded', 'true');
   const box = (await section.boundingBox())!;
   expect(box.height).toBeGreaterThan(800); // fills the screen below the header
-  // Reviewing still works in full screen.
-  await page.getByRole('button', { name: /^Accept: Combine/ }).click();
-  await expect(page.locator('li[data-rec]').filter({ hasText: 'Combine' }).getByTestId('stage-track')).toHaveAttribute('aria-label', /Accepted/);
+  // Full screen enlarges the workflow only (owner feedback, 2026-11-05): no side list; the diagram takes the width.
+  await expect(page.getByTestId('action-plan')).toHaveCount(0);
+  const diagram = page.locator('[aria-label="Workflow with proposed changes"]');
+  expect((await diagram.boundingBox())!.width).toBeGreaterThan(1400);
+  // Selecting a change shows its card floating beside it (here from the Removed list); reviewing works there.
+  await page.getByTestId('removed-steps').getByRole('button').first().click();
+  const floating = page.getByTestId('floating-plan-card');
+  await expect(floating).toBeVisible();
+  await expect(page.getByTestId('panel-pointer')).toBeVisible();
+  await floating.getByRole('button', { name: /^Accept: Combine/ }).click();
+  await expect(floating.getByTestId('stage-track')).toHaveAttribute('aria-label', /Accepted/);
+  await page.screenshot({ path: `${SHOTS}/03-analysis-full-screen-test-fixture.png` });
+  await page.keyboard.press('Escape');
+  await expect(floating).toHaveCount(0);
+  // The whole list is one click away, over the diagram.
+  await section.getByRole('button', { name: /^Action plan/ }).click();
+  await expect(page.getByTestId('plan-drawer').locator('li[data-rec]')).toHaveCount(3);
+  await section.getByRole('button', { name: 'Hide action plan' }).click();
+  await expect(page.getByTestId('plan-drawer')).toHaveCount(0);
   // Applying stays within reach in full screen.
   await expect(section.getByRole('button', { name: 'Apply accepted changes' })).toBeEnabled();
-  await page.screenshot({ path: `${SHOTS}/03-analysis-full-screen-test-fixture.png` });
   await page.getByRole('button', { name: 'Exit full screen' }).click();
   await expect.poll(() => isFullscreen(page)).toBe(false);
   await expect(section).not.toHaveAttribute('data-expanded', 'true');

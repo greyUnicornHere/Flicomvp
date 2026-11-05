@@ -618,3 +618,76 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 | Out of date only when the step itself or its classification changes | Pass | unit `blueprintExport.test.ts` |
 | 1280 px: no horizontal scroll | Pass | `05-blueprint-page-1280-test-fixture.png` |
 
+### Updated with main — 2026-11-05 (branch `agent-blueprints`)
+
+Main was merged into this branch (Describe a step, cards at the block, full-screen analysis). Conflicts were resolved:
+- The plan panel's shared card helper now carries the blueprint actions.
+- The full-screen floating card and the overlay list open blueprints.
+- The analysis view keeps the blueprint page.
+- The notes files were combined in date order.
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **337 / 337 pass** |
+| Browser E2E (all milestones) | `npm run test:e2e` | **85 / 85 pass** |
+
+## Describe a step — 2026-11-05 (branch `describe-step`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **324 / 324 pass** (new: `server/ai/describe.api.test.ts`, `client/src/editor/describe.test.ts`) |
+| Browser E2E (all milestones) | `npm run test:e2e` | **79 / 79 pass** (3 new in `tests/e2e/describe.spec.ts`; double-click tests now continue with "Edit fields myself") |
+
+All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=fixture`), never a live model.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Double-click opens Describe (focused text box); Edit fields myself, Edit details and Enter open the card; toolbar Describe step | Pass | E2E `describe.spec.ts`, `details-card.spec.ts`; `docs/evidence/describe/01-describe-box-1536-test-fixture.png` |
+| Owner, tools, duration and notes filled and marked New; banner with count, test-fixture label, "Still useful", Describe more, Undo | Pass | `03-details-filled-1536-test-fixture.png` |
+| New steps previewed (2 added) with the description's summary; Apply adds them and saves; Cancel keeps the details only | Pass | `02-new-steps-preview-1536-test-fixture.png` |
+| Undo (banner) restores the earlier values and keeps applied steps; Ctrl+Z undoes a fill in one step | Pass | E2E; unit `describe.test.ts` |
+| Merge keeps existing details: tools added, notes appended, unchanged values skipped | Pass | unit `describe.test.ts` |
+| Nothing new: the box stays open with a hint and nothing is saved; Escape returns focus to the step | Pass | E2E |
+| Server: changes nothing; drops an unstated duration; refuses operations that change the described step (after one retry); checks revision, step and owner | Pass | API `describe.api.test.ts` |
+
+### Owner feedback round 1 (same branch): hand-offs become the next step
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **326 / 326 pass** (2 new hand-off tests in `describe.api.test.ts`) |
+| Browser E2E | `npm run test:e2e` | **80 / 80 pass** (1 new in `describe.spec.ts`) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| "Manager directs the supervisor to create a PR in SAP" previews "Supervisor creates PR in SAP" after the step, connected to the next step; applying saves it; the described step gets no SAP tool | Pass | E2E; API; `docs/evidence/describe/04-handoff-new-step-preview-1536-test-fixture.png` |
+| A tool the model also puts on a new step is dropped from the described step | Pass | API `describe.api.test.ts` |
+
+Live AI isn't available in this environment, so the live model's behaviour here relies on the updated instructions and still needs the owner's test on their PC.
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of Describe a step, including the hand-off fix | Pass | Product owner checked and approved on 2026-11-05. Merged to `main`; the branch had passed unit + API 326 / 326, E2E 80 / 80, lint, typecheck, build |
+
+## Cards at the block; full-screen analysis — 2026-11-05 (branch `cards-and-fullscreen`)
+
+| Suite | Command | Result |
+|---|---|---|
+| Lint, typecheck, build | `npm run check` | Pass |
+| Unit + API | `npm test` | **326 / 326 pass** |
+| Browser E2E (all milestones) | `npm run test:e2e` | **82 / 82 pass** (new: Describe box drag test, full-screen floating card test; drag and full-screen tests updated) |
+
+| Check | Result | Evidence |
+|---|---|---|
+| Describe box: opens next to its step with a pointer; drags by mouse and arrow keys (pointer hidden while dragged); reopening puts it back next to the step | Pass | E2E `describe.spec.ts`; `docs/evidence/describe/05-describe-dragged-1536-test-fixture.png` |
+| Details card: after a drag and close, reopening another step puts it next to that step with a pointer | Pass | E2E `details-card.spec.ts` |
+| Full screen: no side list, diagram wider than 1400 px at 1536; a selected change or automation card floats beside its block with a pointer; Accept and Clarify work in it; it follows zoom; Escape / ✕ close it; the Action plan opens and hides as an overlay; Apply in reach | Pass | E2E `feedback.spec.ts`, `action-plan.spec.ts`; `docs/evidence/action-plan/06-full-screen-floating-card-1536-test-fixture.png`, `07-full-screen-process-card-1536-test-fixture.png` |
+
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of cards at the block, the draggable Describe box and the full-screen analysis | Pass | Product owner checked and approved on 2026-11-05. Merged to `main`; the branch had passed unit + API 326 / 326, E2E 82 / 82, lint, typecheck, build |
+

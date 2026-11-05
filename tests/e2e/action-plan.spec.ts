@@ -127,3 +127,30 @@ test('1280px and full screen: the plan stays readable and Apply stays within rea
   await page.getByRole('button', { name: 'Exit full screen' }).click();
   await expect(section).not.toHaveAttribute('data-expanded', 'true');
 });
+
+test('full screen: an automation card floats beside its block, Clarify works there, and it follows pan and zoom', async ({ page }) => {
+  await analysed(page);
+  await page.getByRole('button', { name: 'Full screen' }).click();
+  await expect(page.getByTestId('action-plan')).toHaveCount(0);
+  const diagram = page.locator('[aria-label="Workflow with proposed changes"]');
+  await diagram.locator('.react-flow__node[data-id="match"] .fl-auto-badge').click();
+  const floating = page.getByTestId('floating-plan-card');
+  await expect(floating).toContainText('Match invoice to order');
+  await expect(floating.locator('li[data-assessment="match"]')).toBeVisible();
+  // Beside its block.
+  const block = (await diagram.locator('.react-flow__node[data-id="match"]').boundingBox())!;
+  const card = (await floating.boundingBox())!;
+  expect(card.x).toBeLessThan(block.x + block.width);
+  expect(card.x + card.width).toBeGreaterThan(block.x);
+  await page.screenshot({ path: `${SHOTS}/06-full-screen-floating-card-1536-test-fixture.png` });
+  // It follows the block when the diagram zooms.
+  const zoomIn = page.getByRole('group', { name: 'Canvas controls' }).getByRole('button', { name: 'Zoom in' });
+  await zoomIn.click();
+  await expect.poll(async () => Math.round((await floating.boundingBox())!.y)).not.toBe(Math.round(card.y));
+  // Clarify runs inside the floating card.
+  await floating.getByRole('button', { name: 'Clarify “Match invoice to order”' }).click();
+  await expect(floating.getByTestId('interview-panel')).toBeVisible();
+  await floating.getByRole('button', { name: 'Close card' }).click();
+  await expect(floating).toHaveCount(0);
+});
+

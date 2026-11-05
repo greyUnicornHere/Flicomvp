@@ -131,6 +131,29 @@ export const chatOutput = z.object({
 });
 export type ChatOutput = z.infer<typeof chatOutput>;
 
+// ---------- Describe a step ----------
+
+export const describeJsonSchema = object({
+  owner: str('Who does the step (person and/or team), only if said; otherwise "".'),
+  tools: { type: 'array', items: { type: 'string' }, description: 'Systems or tools named for this step, or [].' },
+  duration_value: { type: 'number', description: 'How long the step takes, only if stated; otherwise 0.' },
+  duration_unit: { type: 'string', enum: ['minutes', 'hours', 'days', 'weeks', ''], description: 'Unit of duration_value, or "".' },
+  notes: str('The rest of what was said about this step, or "".'),
+  change_summary: str('One short sentence describing the operations, or "".'),
+  operations: { type: 'array', description: 'Changes around the step (never update_step on the selected step), or [].', items: operationJsonSchema },
+  missing: { type: 'array', items: { type: 'string' }, description: 'At most 2 short questions about what would still help, or [].' },
+});
+export const describeOutput = z.object({
+  owner: shortText(400),
+  tools: z.array(shortText(200)).max(20),
+  duration_value: z.number().min(0).max(100000),
+  duration_unit: z.enum(['minutes', 'hours', 'days', 'weeks', '']),
+  notes: shortText(GRAPH_LIMITS.maxText),
+  change_summary: shortText(400),
+  operations: z.array(operationOutput).max(60),
+  missing: z.array(shortText(400)).max(6),
+});
+
 // ---------- analysis ----------
 
 const MAX_RECOMMENDATIONS = 8;

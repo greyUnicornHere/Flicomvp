@@ -37,3 +37,21 @@ export function placePanel(anchor: Rect, panel: Size, viewport: Size, minTop = M
   const left = right + panel.width <= viewport.width - MARGIN ? right : anchor.left - GAP - panel.width;
   return { top: clampTop(anchor.top), left: clampLeft(left) };
 }
+
+export type Side = 'below' | 'above' | 'right' | 'left';
+
+/**
+ * Like `placePanel`, and also says on which side of the anchor the panel sits and where along that
+ * edge a small pointer should point at the anchor's centre (kept clear of the panel's corners).
+ */
+export function placeAttached(anchor: Rect, panel: Size, viewport: Size, minTop = MARGIN): { top: number; left: number; side: Side; pointer: number } {
+  const { top, left } = placePanel(anchor, panel, viewport, minTop);
+  const side: Side = top >= anchor.bottom ? 'below' : top + panel.height <= anchor.top ? 'above' : left >= anchor.right ? 'right' : 'left';
+  const clamp = (value: number, from: number, to: number) => Math.min(Math.max(value, from + 16), to - 16);
+  const pointer =
+    side === 'below' || side === 'above'
+      ? clamp((anchor.left + anchor.right) / 2, left, left + panel.width)
+      : clamp((anchor.top + anchor.bottom) / 2, top, top + panel.height);
+  return { top, left, side, pointer };
+}
+

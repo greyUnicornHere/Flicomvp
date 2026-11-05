@@ -1,11 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useStore } from '@xyflow/react';
 import { Check, ChevronRight, CircleAlert, GripVertical, Link2, Repeat, Sparkles, Trash2, X } from 'lucide-react';
 import type { StepType, WorkflowGraph, WorkflowNode } from '../../../shared/graph';
-import { placePanel } from '../lib/placement';
 import { allowedTypeChanges, BRANCH_LABEL, connectTargets, decisionPaths, findNode, openBranches, outgoing, type StepPatch } from './ops';
 import { DURATION_UNITS, STEP_META } from './stepMeta';
+import type { FilledField } from './describe';
+import { PanelPointer } from './PanelPointer';
+import { useAttachedPanel } from './useAttachedPanel';
 
 type Props = {
   graph: WorkflowGraph;
@@ -23,13 +24,13 @@ type Props = {
   onRetry: () => void;
   /** Save these pending edits (if any) now; resolves true once persisted. */
   onDone: (patch: StepPatch | null) => Promise<boolean>;
-  /** Where the person dragged the card this session (null: next to the step). */
-  position: { left: number; top: number } | null;
-  onMove: (position: { left: number; top: number }) => void;
+  /** Details just filled from the person's description: shown with a banner and marked as new. */
+  filled?: { fields: FilledField[]; missing: string[]; fixture: boolean } | null;
+  onUndoFill?: () => void;
+  /** Open the Describe box for this step. */
+  onDescribe?: () => void;
 };
 
-const HEADER = 76;
-const MARGIN = 8;
 /** The card's fixed width. */
 const WIDTH = 340;
 const MAX_TOOLS = 20;
@@ -42,9 +43,7 @@ const MAX_TOOLS = 20;
 export function StepPopover(props: Props) {
   const { graph, node, anchor, onChange, onClose, onDelete, onConnect, onRemoveConnection, onAsk } = props;
   const ref = useRef<HTMLDivElement>(null);
-  const [autoPosition, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [finishing, setFinishing] = useState(false);
-  const transform = useStore((s) => s.transform);
 
   const [fields, setFields] = useState(() => toFields(node));
   // The name wraps onto as many lines as it needs, so the whole name is always visible.
@@ -88,7 +87,9 @@ export function StepPopover(props: Props) {
     `${e.type === 'loop' ? 'Repeats ' : e.type === 'exception' ? 'Exception: ' : e.label ? `${e.label} → ` : '→ '}${label(e.targetId)}`;
 
   // Duration, tools and notes always start folded; the summary line shows what's inside (owner choice).
-  const [moreOpen, setMoreOpen] = useState(false);
+  // Closed by default (owner feedback); open when a description just filled one of its fields.
+  const [moreOpen, setMoreOpen] = useState(() => !!props.filled?.fields.some((f) => f !== 'owner'));
+  const isNew = (field: FilledField) => !!props.filled?.fields.includes(field);
   // Connections fold away too, unless a Yes/No path still needs setting.
   const [connectionsOpen, setConnectionsOpen] = useState(() => open.length > 0);
   const moreId = useId();
@@ -105,36 +106,14 @@ export function StepPopover(props: Props) {
     commit(next);
   };
 
-  // The card's height changes as sections open and close; it is placed again so it stays on screen.
-  const [height, setHeight] = useState(0);
-  useLayoutEffect(() => {
-    const place = () => {
-      const el = ref.current;
-      const target = anchor();
-      if (!el || !target) return;
-      setPosition(
-        placePanel(target.getBoundingClientRect(), { width: el.offsetWidth, height: el.offsetHeight }, { width: innerWidth, height: innerHeight }, 84),
-      );
-    };
-    place();
-    addEventListener('resize', place);
-    const el = ref.current;
-    const resized = typeof ResizeObserver === 'undefined' || !el ? null : new ResizeObserver(() => {
-      setHeight(el.offsetHeight);
-      place();
-    });
-    if (resized && el) resized.observe(el);
-    return () => {
-      removeEventListener('resize', place);
-      resized?.disconnect();
-    };
-  }, [anchor, transform, graph]);
+  // Opens next to its step with a pointer to it; can be dragged until it closes (owner feedback, 2026-11-05).
+  const { position, pointer, startDrag, moveWithKeys } = useAttachedPanel(ref, anchor, graph);
+  const placed = position !== null;
 
   useEffect(() => {
-    if (autoPosition) ref.current?.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+    if (placed) ref.current?.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
     // Focus once when first shown.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPosition === null]);
+  }, [placed]);
 
   const close = (returnFocus: boolean) => {
     commit();
@@ -147,43 +126,6 @@ export function StepPopover(props: Props) {
     const ok = await props.onDone(diff(node, latest.current));
     setFinishing(false);
     if (ok) onClose(true);
-  };
-
-  // The card can be dragged by its header; it always stays fully inside the window, below Flico's top bar.
-  const clamp = (p: { left: number; top: number }) => {
-    const height = Math.min(ref.current?.offsetHeight ?? 400, innerHeight - HEADER - 2 * MARGIN);
-    return {
-      left: Math.round(Math.min(Math.max(MARGIN, p.left), innerWidth - WIDTH - MARGIN)),
-      top: Math.round(Math.min(Math.max(HEADER + MARGIN, p.top), innerHeight - height - MARGIN)),
-    };
-  };
-  // A dragged position is kept, moved up only as far as needed for the whole card to stay on screen.
-  const visibleHeight = Math.min(height || 120, innerHeight - HEADER - 2 * MARGIN);
-  const position =
-    props.position && autoPosition
-      ? {
-          left: Math.min(props.position.left, innerWidth - WIDTH - MARGIN),
-          top: Math.max(HEADER + MARGIN, Math.min(props.position.top, innerHeight - visibleHeight - MARGIN)),
-        }
-      : autoPosition;
-  const startDrag = (event: React.PointerEvent) => {
-    if ((event.target as HTMLElement).closest('button, input, select, textarea') || !position) return;
-    event.preventDefault();
-    const start = { x: event.clientX, y: event.clientY, ...position };
-    const move = (e: PointerEvent) => props.onMove(clamp({ left: start.left + e.clientX - start.x, top: start.top + e.clientY - start.y }));
-    const up = () => {
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerup', up);
-    };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
-  };
-  const moveWithKeys = (event: React.KeyboardEvent) => {
-    const step = event.shiftKey ? 64 : 16;
-    const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
-    if (!delta || !position) return;
-    event.preventDefault();
-    props.onMove(clamp({ left: position.left + delta[0]!, top: position.top + delta[1]! }));
   };
 
   // Edits still being typed count as saving; otherwise the state of this step's last acknowledged save.
@@ -235,6 +177,7 @@ export function StepPopover(props: Props) {
   const chevron = (isOpen: boolean) => `flex-none text-fl-text-secondary transition-transform motion-reduce:transition-none ${isOpen ? 'rotate-90' : ''}`;
 
   return createPortal(
+    <>
     <div
       ref={ref}
       role="dialog"
@@ -329,6 +272,26 @@ export function StepPopover(props: Props) {
         </div>
       )}
 
+      {props.filled && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-fl-border bg-fl-brand-pale/50 px-4 py-2 text-[12.5px]" role="status" data-testid="filled-banner">
+          <Sparkles size={14} aria-hidden="true" className="flex-none text-fl-brand" />
+          <span className="min-w-0 flex-1 text-[var(--fl-action-ink)]">
+            {props.filled.fields.length} detail{props.filled.fields.length === 1 ? '' : 's'} filled from your description{props.filled.fixture ? ' (test fixture)' : ''}
+          </span>
+          {props.onDescribe && (
+            <button type="button" className="fl-link text-[12.5px]" onClick={props.onDescribe}>
+              Describe more
+            </button>
+          )}
+          {props.onUndoFill && (
+            <button type="button" className="fl-link text-[12.5px]" onClick={props.onUndoFill}>
+              Undo
+            </button>
+          )}
+          {props.filled.missing.length > 0 && <p className="w-full text-[12px] text-fl-text-secondary">Still useful: {props.filled.missing.join(' ')}</p>}
+        </div>
+      )}
+
       <div onBlur={() => commit()} onKeyDown={commitOnEnter}>
         <div className="space-y-3 px-4 pb-1.5 pt-3.5">
           <Field label="Type" className={row} labelClass={fieldLabel}>
@@ -389,7 +352,7 @@ export function StepPopover(props: Props) {
               </div>
             </div>
           )}
-          <Field label="Owner / team" className={row} labelClass={fieldLabel}>
+          <Field label="Owner / team" className={row} labelClass={fieldLabel} isNew={isNew('owner')}>
             {(id) => <input id={id} className="fl-input !min-h-[38px]" value={fields.owner} maxLength={200} placeholder="Who does this?" onChange={set('owner')} />}
           </Field>
         </div>
@@ -402,7 +365,7 @@ export function StepPopover(props: Props) {
           </button>
           {moreOpen && (
             <div id={moreId} className="space-y-2.5 px-2 pb-2 pt-1">
-              <Field label="Duration" className={row} labelClass={fieldLabel}>
+              <Field label="Duration" className={row} labelClass={fieldLabel} isNew={isNew('duration')}>
                 {(id) => (
                   <div className="flex gap-2">
                     <input id={id} className="fl-input !min-h-[38px] w-[84px]" type="number" min={0} step="any" inputMode="decimal" value={fields.durationValue} onChange={set('durationValue')} />
@@ -414,7 +377,7 @@ export function StepPopover(props: Props) {
                   </div>
                 )}
               </Field>
-              <Field label="Tools" className={row} labelClass={fieldLabel}>
+              <Field label="Tools" className={row} labelClass={fieldLabel} isNew={isNew('tools')}>
                 {(id) => (
                   <div className="fl-input flex !min-h-[38px] flex-wrap items-center gap-1.5 !py-1 !pl-1.5 focus-within:outline focus-within:outline-2 focus-within:outline-[var(--fl-focus)]">
                     {fields.tools.map((t) => (
@@ -446,7 +409,7 @@ export function StepPopover(props: Props) {
                   </div>
                 )}
               </Field>
-              <Field label="Notes" className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-2.5" labelClass={`${fieldLabel} pt-[9px]`}>
+              <Field label="Notes" className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-2.5" labelClass={`${fieldLabel} pt-[9px]`} isNew={isNew('notes')}>
                 {(id) => (
                   <textarea
                     id={id}
@@ -528,7 +491,9 @@ export function StepPopover(props: Props) {
           {finishing ? 'Saving…' : 'Done'}
         </button>
       </div>
-    </div>,
+    </div>
+    <PanelPointer pointer={pointer} colour={pointer?.side === 'below' ? tone('fill') : 'white'} />
+    </>,
     document.body,
   );
 }
@@ -583,12 +548,18 @@ function diff(n: WorkflowNode, f: Fields): StepPatch | null {
   return Object.keys(patch).length ? patch : null;
 }
 
-function Field({ label, className, labelClass, children }: { label: string; className: string; labelClass: string; children: (id: string) => React.ReactNode }) {
+function Field({ label, className, labelClass, children, isNew = false }: { label: string; className: string; labelClass: string; children: (id: string) => React.ReactNode; isNew?: boolean }) {
   const id = useId();
   return (
-    <div className={className}>
+    <div className={`${className} ${isNew ? '-mx-1.5 rounded-[10px] bg-fl-brand-pale/40 px-1.5 py-1' : ''}`} data-filled={isNew || undefined}>
       <label htmlFor={id} className={labelClass}>
         {label}
+        {isNew && (
+          <span className="ml-1 text-[10px] font-bold text-fl-brand">
+            <span aria-hidden="true">✦ New</span>
+            <span className="fl-sr-only">, filled from your description</span>
+          </span>
+        )}
       </label>
       {children(id)}
     </div>

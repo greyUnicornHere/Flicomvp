@@ -157,6 +157,30 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Existing briefs stay readable (**View brief**) next to **Create blueprint**. Human-led steps keep the shorter **Support ideas**. No credit is used; the questions count toward the daily Ask Flico limit.
 - Still advice only: Flico never connects to systems or runs anything.
 
+## Describe a step (owner request; approved by owner 2026-11-05; merged to `main`)
+
+- **Double-clicking a step opens "Describe this step"**, a small window next to the step with the cursor ready in the text box. You type in your own words who does it, which tool, how long it takes, and what happens next or when it goes wrong. **Update step** (or Ctrl/⌘+Enter) sends it. **Edit fields myself** opens the normal details card instead, as do **Edit details** and Enter. The toolbar has a new **Describe step** button.
+- **The details card fills in.**
+  - Owner / team, Tools, Duration and Notes are filled from what you wrote, each marked "✦ New".
+  - Nothing already there is lost: tools are added to, notes are appended to, and owner and duration change only if you said something different.
+  - A banner says "N details filled from your description", with **Describe more** and **Undo**. Undo takes back exactly what was filled; Ctrl+Z works too, since the fill is one undo step.
+  - The banner also suggests up to two things still worth adding.
+- **New steps are previewed first.** If the description changes what happens around the step (for example "if it's over the limit the manager approves"), the new steps appear on the canvas as a preview with **Apply** or **Cancel**. The details are kept either way.
+- If Flico finds nothing new, the window stays open with a hint, and nothing is saved.
+- Flico only uses what you said: a duration whose number you didn't write is dropped, and it can't change or remove the step itself through new steps. No analysis credit is used; it counts toward the daily Ask Flico limit.
+- **Ask Flico** stays in the card for questions. Describe is for changing the step.
+- Voice ("Talk me through it", Whisper in the browser) is parked, as agreed: a microphone can be added to this box later.
+- Owner feedback (2026-11-05): "Manager directs the supervisor to create a PR in SAP", written on "Manager approves request", now proposes a new step, "Supervisor creates PR in SAP", inserted right after the approval and shown as a preview first, as the owner chose. The manager's step keeps the instruction in its notes. SAP goes with the new step, not the manager's.
+
+## Cards at the block, and a full-screen analysis for the workflow (owner feedback; approved by owner 2026-11-05; merged to `main`)
+
+- **The Describe box can be dragged**, by its header or with the arrow keys from its grip, like the details card.
+- **Both open at the block**: every time the Describe box or the details card opens, it sits right next to the step, with a small pointer to it, and follows the canvas as you pan or zoom. A drag lasts only until it closes. Before, a dragged card stayed where it was dragged for the whole session, so it could open at the edge of the page.
+- **Full screen on the analysis page enlarges the workflow only.**
+  - The Action plan list is hidden and the diagram takes the full width.
+  - Clicking a block, its automation label, or a removed step shows that item's card floating beside it, with a pointer. It has the same buttons (Accept / Reject, Clarify, Create brief…), and Clarify runs inside it. Escape or ✕ closes it, and it follows the block as you pan or zoom.
+  - An **Action plan · N of M done** button opens the whole list over the diagram; **Hide action plan** closes it. Apply accepted changes stays in the top bar.
+
 ## Known issues / limitations
 
 - **Logo background:** the supplied raster's off-white background shows as a faint box on the white header. Owner chose to keep it as-is until they supply a transparent logo (see DECISIONS.md). No favicon yet, for the same reason.
@@ -186,4 +210,4 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 
 ## Evidence
 
-See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/`, `docs/evidence/action-plan/` and `docs/evidence/blueprints/`.
+See `TEST_NOTES.md` and screenshots in `docs/evidence/m0/`, `docs/evidence/m1/`, `docs/evidence/m2/`, `docs/evidence/m3/`, `docs/evidence/m4/`, `docs/evidence/feedback-m4/` and `docs/evidence/details-card/`, `docs/evidence/step-card/`, `docs/evidence/automation/`, `docs/evidence/review-layout/`, `docs/evidence/concise-assessment/`, `docs/evidence/clarify-briefs/`, `docs/evidence/action-plan/`, `docs/evidence/blueprints/` and `docs/evidence/describe/`.

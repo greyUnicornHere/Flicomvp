@@ -235,3 +235,25 @@ export type DevOutboxMessage = {
   link: string | null;
   sentAt: string;
 };
+
+// ---------- Describe a step (double-click a step, describe it in your own words) ----------
+
+export const DESCRIBE_TEXT_MAX = 2000;
+export const DESCRIBE_DURATION_UNITS = ['minutes', 'hours', 'days', 'weeks'] as const;
+export type DescribeStepRequest = { text: string; baseRevision: number };
+/** Details for the described step; only what the person actually said is present. */
+export type DescribedFields = {
+  owner?: string;
+  tools?: string[];
+  duration?: { value: number; unit: (typeof DESCRIBE_DURATION_UNITS)[number] };
+  notes?: string;
+};
+export type DescribeStepResponse = {
+  fields: DescribedFields;
+  /** New, removed or rewired steps around this one: previewed on the canvas before anything changes. */
+  structure: { summary: string; operations: ProposalOperation[] } | null;
+  /** At most two short questions about what would still help. */
+  missing: string[];
+  source: AiSource;
+};
+

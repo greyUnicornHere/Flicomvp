@@ -57,6 +57,8 @@ type Props = {
   interview?: InterviewView | null;
   /** A brief that was just written: it opens by itself. */
   briefToOpen?: { stepId: string; key: number } | null;
+  /** Show only the selected item's card (full screen: the card floats beside its block). */
+  only?: boolean;
 };
 
 /**
@@ -114,6 +116,72 @@ export function ActionPlanPanel(props: Props) {
   ];
   const viewingItem = plan.automation.find((a) => a.id === viewing);
 
+  const processCard = (item: ProcessItem) => (
+    <ProcessCard
+      key={item.id}
+      item={item}
+      selected={selected?.type === 'process' && selected.id === item.id}
+      readOnly={props.readOnly}
+      conflicts={props.conflictsOf(item.id)}
+      dependsOn={props.dependsOnOf(item.rec)}
+      onSelect={() => toggle('process', item.id)}
+      onStatus={(status) => props.onStatus({ [item.id]: status })}
+    />
+  );
+
+  const automationCard = (item: AutomationItem) => (
+    <AutomationCard
+      key={item.id}
+      item={item}
+      name={name(item.id)}
+      selected={selected?.type === 'automation' && selected.id === item.id}
+      onSelect={() => toggle('automation', item.id)}
+      blocked={reassessing ? 'Flico is reassessing a step' : props.actionsBlocked}
+      onClarify={props.onClarify && (() => props.onClarify!(item.id))}
+      onBrief={props.onBrief && (() => props.onBrief!(item.id))}
+      onReassess={props.onReassess && (() => void reassess(item.id))}
+      reassessing={reassessing === item.id}
+      reassessError={reassessError?.id === item.id ? reassessError.message : null}
+      interview={props.interview?.stepId === item.id ? props.interview : null}
+      onViewBrief={() => setViewing(item.id)}
+      onBlueprint={props.onBlueprint && (() => props.onBlueprint!(item.id))}
+      onOpenBlueprint={() => props.onOpenBlueprint(item.id)}
+    />
+  );
+
+  const briefDialog = viewingItem?.brief && (
+    <BriefDialog
+      brief={viewingItem.brief}
+      stepName={name(viewingItem.id)}
+      outdated={!viewingItem.briefCurrent}
+      blocked={viewingItem.outdated ? 'This step changed since it was assessed: reassess it first' : props.actionsBlocked}
+      onUpdate={
+        props.onBrief && BRIEF_KIND[viewingItem.assessment.classification]
+          ? () => {
+              setViewing(null);
+              props.onBrief!(viewingItem.id);
+            }
+          : undefined
+      }
+      onClose={() => setViewing(null)}
+    />
+  );
+
+  // Full screen: just the selected item's card, floating beside its block.
+  if (props.only) {
+    const proc = selected?.type === 'process' ? [...plan.process, ...plan.rejected].find((i) => i.id === selected.id) : undefined;
+    const auto = selected?.type === 'automation' ? plan.automation.find((i) => i.id === selected.id) : undefined;
+    return (
+      <div ref={listRef} data-testid="plan-card">
+        <ol>
+          {proc && processCard(proc)}
+          {auto && automationCard(auto)}
+        </ol>
+        {briefDialog}
+      </div>
+    );
+  }
+
   return (
     <section className="fl-card flex h-full min-h-0 flex-col !p-0" aria-labelledby="plan-heading" data-testid="action-plan">
       <div className="border-b border-fl-border px-4 pb-3 pt-3.5">
@@ -167,18 +235,7 @@ export function ActionPlanPanel(props: Props) {
               )}
             </div>
             <ol className="space-y-2">
-              {plan.process.map((item) => (
-                <ProcessCard
-                  key={item.id}
-                  item={item}
-                  selected={selected?.type === 'process' && selected.id === item.id}
-                  readOnly={props.readOnly}
-                  conflicts={props.conflictsOf(item.id)}
-                  dependsOn={props.dependsOnOf(item.rec)}
-                  onSelect={() => toggle('process', item.id)}
-                  onStatus={(status) => props.onStatus({ [item.id]: status })}
-                />
-              ))}
+              {plan.process.map((item) => processCard(item))}
             </ol>
             <div className="mt-2 rounded-[12px] border border-fl-border bg-fl-surface-subtle">
               <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-[12.5px] text-fl-text-secondary" aria-expanded={showRejected} onClick={() => setShowRejected(!showRejected)}>
@@ -219,25 +276,7 @@ export function ActionPlanPanel(props: Props) {
               <p className="text-[13px] leading-5 text-fl-text-secondary">No work steps could be assessed for automation in this analysis.</p>
             ) : (
               <ol className="space-y-2">
-                {plan.automation.map((item) => (
-                  <AutomationCard
-                    key={item.id}
-                    item={item}
-                    name={name(item.id)}
-                    selected={selected?.type === 'automation' && selected.id === item.id}
-                    onSelect={() => toggle('automation', item.id)}
-                    blocked={reassessing ? 'Flico is reassessing a step' : props.actionsBlocked}
-                    onClarify={props.onClarify && (() => props.onClarify!(item.id))}
-                    onBrief={props.onBrief && (() => props.onBrief!(item.id))}
-                    onReassess={props.onReassess && (() => void reassess(item.id))}
-                    reassessing={reassessing === item.id}
-                    reassessError={reassessError?.id === item.id ? reassessError.message : null}
-                    interview={props.interview?.stepId === item.id ? props.interview : null}
-                    onViewBrief={() => setViewing(item.id)}
-                    onBlueprint={props.onBlueprint && (() => props.onBlueprint!(item.id))}
-                    onOpenBlueprint={() => props.onOpenBlueprint(item.id)}
-                  />
-                ))}
+                {plan.automation.map(automationCard)}
               </ol>
             )}
           </section>
@@ -245,23 +284,7 @@ export function ActionPlanPanel(props: Props) {
       </div>
       <p className="border-t border-fl-border px-4 py-2 text-[11.5px] leading-4 text-fl-text-muted">Advice only. Flico never runs automations or connects to your systems.</p>
 
-      {viewingItem?.brief && (
-        <BriefDialog
-          brief={viewingItem.brief}
-          stepName={name(viewingItem.id)}
-          outdated={!viewingItem.briefCurrent}
-          blocked={viewingItem.outdated ? 'This step changed since it was assessed: reassess it first' : props.actionsBlocked}
-          onUpdate={
-            props.onBrief && BRIEF_KIND[viewingItem.assessment.classification]
-              ? () => {
-                  setViewing(null);
-                  props.onBrief!(viewingItem.id);
-                }
-              : undefined
-          }
-          onClose={() => setViewing(null)}
-        />
-      )}
+      {briefDialog}
     </section>
   );
 }

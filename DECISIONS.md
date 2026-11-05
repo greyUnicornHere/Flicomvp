@@ -403,3 +403,40 @@ The owner asked for a way to clarify each assessment and then, based on its clas
   - Markdown, and JSON (`format: flico-blueprint`, version 1, without internal fingerprints).
   - Each starts with the notice that nothing has been built, connected or tested.
 
+## Describe a step (owner request, 2026-11-05)
+- Owner choices:
+  - Double-click opens the Describe box, and what was typed lands in the details card.
+  - The step's own details apply directly (one undo step); new, removed or rewired steps are previewed first.
+  - "Talk me through it" is parked, with a mic to be added to this box later (Whisper in the browser, chosen earlier).
+  - Mockup approved, then built.
+- Server: `POST /api/workflows/:id/steps/:stepId/describe` returns details and an optional proposal; it changes nothing and stores nothing. It needs the saved revision, counts toward the daily Ask Flico limit and records usage only.
+  - Checks:
+    - A duration is kept only if its number appears in the description.
+    - Notes may not state figures absent from the description or workflow.
+    - Operations may not update or remove the described step.
+    - Operations must apply cleanly.
+    - Tools are de-duplicated.
+    - At most two "still useful" questions.
+- Client:
+  - The browser merges the details (`describedPatch`), keeping what the step already had: tools are added, notes appended, owner and duration replaced only when different.
+  - The fill is committed as one undo step, and the banner's Undo restores the exact earlier values.
+  - New steps reuse the canvas preview. A previewed description is applied in the browser as one undoable change, saved by autosave; the server validates the graph as for any edit.
+- Ask Flico about this step stays in the details card for questions; the original plan to replace it changed, because Describe only edits the step.
+- Hand-offs (owner feedback, 2026-11-05):
+  - Work that someone else then does ("X directs Y to do Z") is a new step after the described one, inserted before the step that follows. It is still previewed first, by owner choice.
+  - The described step's fields cover only what happens in it, done by its own owner.
+  - Safeguard: a tool named in a new step's name or notes is dropped from the described step's tools.
+  - New steps carry their owner and tool in their notes ("Owner: Supervisor. Tool: SAP."), because AI-proposed steps can't yet set those fields directly.
+
+## Cards at the block; full-screen analysis (owner feedback, 2026-11-05)
+- Owner choices: panels always open next to their block (not over it); in full screen a selected card pops up at its block; build all three now.
+- `useAttachedPanel` (client/src/editor/useAttachedPanel.ts) is shared by the details card and the Describe box.
+  - It places the panel with `placeAttached`: below the step, else above, else beside it, plus which side and where the pointer goes.
+  - It re-places the panel on resize, on content resize and on canvas pan or zoom.
+  - The dragged position is local to the open panel and is forgotten on close. This replaces the earlier "remember the dragged position for the session" rule (the owner reported cards opening at the page edge).
+  - `PanelPointer` draws the pointer as a separate fixed layer, so the panel's scroll area doesn't clip it.
+- Full-screen analysis:
+  - The Action plan renders in `only` mode inside `FloatingPlanCard`, which is placed beside the item's first changed or referenced block. A removed step anchors to the Removed list.
+  - The card re-places itself as the diagram pans or zooms (`ReviewDiagram.onViewportChange`). Escape anywhere closes it unless a dialog is open.
+  - The full list opens as an overlay drawer on request.
+

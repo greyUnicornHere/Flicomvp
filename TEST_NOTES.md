@@ -631,3 +631,8 @@ All AI output in these tests comes from the labelled test fixture (`AI_PROVIDER=
 
 Live AI isn't available in this environment, so the live model's behaviour here relies on the updated instructions and still needs the owner's test on their PC.
 
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of Describe a step, including the hand-off fix | Pass | Product owner checked and approved on 2026-11-05. Merged to `main`; the branch had passed unit + API 326 / 326, E2E 80 / 80, lint, typecheck, build |
+

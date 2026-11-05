@@ -145,7 +145,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
   - When Clarify finishes, the card shows what changed, with **Done** and **Create brief →**. The questions before a brief work the same way; when they're done, the brief is written and opens by itself.
   - Ask Flico no longer shows these questions and answers. They stay saved with the analysis, and the answers appear under "Why" (as "You said").
 
-## Describe a step (owner request; awaiting owner review on branch `describe-step`)
+## Describe a step (owner request; approved by owner 2026-11-05; merged to `main`)
 
 - **Double-clicking a step opens "Describe this step"**, a small window next to the step with the cursor ready in the text box. You type in your own words who does it, which tool, how long it takes, and what happens next or when it goes wrong. **Update step** (or Ctrl/⌘+Enter) sends it. **Edit fields myself** opens the normal details card instead, as do **Edit details** and Enter. The toolbar has a new **Describe step** button.
 - **The details card fills in.**

@@ -160,7 +160,7 @@ Each milestone gets its own branch, tests, screenshots, manual checks, a Git che
 - Voice ("Talk me through it", Whisper in the browser) is parked, as agreed: a microphone can be added to this box later.
 - Owner feedback (2026-11-05): "Manager directs the supervisor to create a PR in SAP", written on "Manager approves request", now proposes a new step, "Supervisor creates PR in SAP", inserted right after the approval and shown as a preview first, as the owner chose. The manager's step keeps the instruction in its notes. SAP goes with the new step, not the manager's.
 
-## Cards at the block, and a full-screen analysis for the workflow (owner feedback; awaiting owner review on branch `cards-and-fullscreen`)
+## Cards at the block, and a full-screen analysis for the workflow (owner feedback; approved by owner 2026-11-05; merged to `main`)
 
 - **The Describe box can be dragged**, by its header or with the arrow keys from its grip, like the details card.
 - **Both open at the block**: every time the Describe box or the details card opens, it sits right next to the step, with a small pointer to it, and follows the canvas as you pan or zoom. A drag lasts only until it closes. Before, a dragged card stayed where it was dragged for the whole session, so it could open at the edge of the page.

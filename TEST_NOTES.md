@@ -650,3 +650,8 @@ Live AI isn't available in this environment, so the live model's behaviour here 
 | Details card: after a drag and close, reopening another step puts it next to that step with a pointer | Pass | E2E `details-card.spec.ts` |
 | Full screen: no side list, diagram wider than 1400 px at 1536; a selected change or automation card floats beside its block with a pointer; Accept and Clarify work in it; it follows zoom; Escape / ✕ close it; the Action plan opens and hides as an overlay; Apply in reach | Pass | E2E `feedback.spec.ts`, `action-plan.spec.ts`; `docs/evidence/action-plan/06-full-screen-floating-card-1536-test-fixture.png`, `07-full-screen-process-card-1536-test-fixture.png` |
 
+### Owner sign-off
+| Check | Result | Notes |
+|---|---|---|
+| Owner review of cards at the block, the draggable Describe box and the full-screen analysis | Pass | Product owner checked and approved on 2026-11-05. Merged to `main`; the branch had passed unit + API 326 / 326, E2E 82 / 82, lint, typecheck, build |
+

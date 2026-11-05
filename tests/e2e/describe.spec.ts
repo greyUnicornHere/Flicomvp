@@ -157,3 +157,33 @@ test('a hand-off ("directs the supervisor to create a PR in SAP") adds the next 
     }, { timeout: 8000 })
     .toEqual([true, true, []]);
 });
+
+test('the Describe box opens next to its step with a pointer, and can be dragged (mouse or arrow keys) until it closes', async ({ page }) => {
+  await open(page);
+  await step(page, 'Ask for quotations').dblclick();
+  const block = (await step(page, 'Ask for quotations').boundingBox())!;
+  const first = (await box(page).boundingBox())!;
+  expect(first.x).toBeLessThan(block.x + block.width);
+  expect(first.x + first.width).toBeGreaterThan(block.x);
+  await expect(page.getByTestId('panel-pointer')).toHaveAttribute('data-side', /below|above/);
+  const header = page.getByTestId('describe-header');
+  const h = (await header.boundingBox())!;
+  await page.mouse.move(h.x + 120, h.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(h.x + 420, h.y + 212, { steps: 6 });
+  await page.mouse.up();
+  const moved = (await box(page).boundingBox())!;
+  expect(moved.x).toBeGreaterThan(first.x + 200);
+  await expect(page.getByTestId('panel-pointer')).toHaveCount(0);
+  // Typing still works after dragging; keyboard users move it from the grip.
+  await box(page).getByLabel('Describe this step in your own words').fill('Finance sends it by email.');
+  await box(page).getByRole('button', { name: 'Move describe window (arrow keys)' }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(async () => (await box(page).boundingBox())!.x).toBeLessThan(moved.x - 5);
+  await page.screenshot({ path: `${SHOTS}/05-describe-dragged-1536-test-fixture.png` });
+  // Closing and reopening puts it back next to the step.
+  await page.keyboard.press('Escape');
+  await step(page, 'Ask for quotations').dblclick();
+  expect(Math.abs((await box(page).boundingBox())!.x - first.x)).toBeLessThan(2);
+});
+

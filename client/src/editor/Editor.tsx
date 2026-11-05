@@ -126,8 +126,6 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
   // Bumped when the step's details change from outside the card, so the card shows them.
   const [detailsVersion, setDetailsVersion] = useState(0);
 
-  /** Where the block-details card was dragged (kept for this editor session only). */
-  const [detailsPosition, setDetailsPosition] = useState<{ left: number; top: number } | null>(null);
   /** Details edits of one card session are a single undo step. */
   const [detailsSession, setDetailsSession] = useState<{ nodeId: string; committed: boolean } | null>(null);
   const [editing, setEditing] = useState<{ id: string; merge: boolean } | null>(null);
@@ -1128,8 +1126,6 @@ export function Editor({ workflow, onRenamed }: { workflow: WorkflowDetail; onRe
               return false;
             }
           }}
-          position={detailsPosition}
-          onMove={setDetailsPosition}
           onClose={(returnFocus) => {
             setDetailsId(null);
             setFilled(null);

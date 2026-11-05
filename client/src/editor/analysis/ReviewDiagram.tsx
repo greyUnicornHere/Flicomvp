@@ -24,6 +24,8 @@ type Props = {
   /** Automation labels to draw on the blocks (only while the Automation view is open). */
   assessments?: EditorUi['assessments'];
   onOpenAssessment?: (stepId: string) => void;
+  /** Called while the diagram pans or zooms (floating cards follow their block). */
+  onViewportChange?: () => void;
 };
 
 /**
@@ -38,7 +40,7 @@ export function ReviewDiagram(props: Props) {
   );
 }
 
-function Diagram({ display: shown, focus, onSelectElement, revealIds, label, assessments, onOpenAssessment }: Props) {
+function Diagram({ display: shown, focus, onSelectElement, revealIds, label, assessments, onOpenAssessment, onViewportChange }: Props) {
   const rf = useReactFlow<StepFlowNode, FlowEdgeType>();
   const [dims, setDims] = useState<Record<string, { width: number; height: number }>>({});
   // The proposed workflow, tidily auto-arranged (view only: the saved layout is untouched).
@@ -131,6 +133,7 @@ function Diagram({ display: shown, focus, onSelectElement, revealIds, label, ass
           if (Object.keys(sized).length) setDims((d) => ({ ...d, ...sized }));
         }}
         onNodeClick={(_, node) => onSelectElement(node.id)}
+        onMove={onViewportChange ? () => onViewportChange() : undefined}
         onEdgeClick={(_, edge) => onSelectElement(edge.id)}
         onKeyDown={(e) => {
           const nodeEl = (e.target as HTMLElement).closest<HTMLElement>('.react-flow__node');
